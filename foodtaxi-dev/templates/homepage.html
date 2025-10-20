@@ -1,19 +1,14 @@
 {% extends "navin.html" %}
 {% block title %}Home - Food Taxi{% endblock %}
+{% block preload %}
+<!-- Hidden image to load the profile picture once when homepage loads -->
+{% if session.profile_image %}
+<img src="{{ url_for('get_encrypted_image', filename=session.profile_image) }}" alt="Profile" style="display: none;">
+{% endif %}
+{% endblock %}
 {% block content %}
 
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-
-<!-- ===== NAVBAR WITH START SELLING BUTTON ===== -->
-<nav>
-  <a href="{{ url_for('homepage') }}" class="title-btn">Food Taxi</a>
-
-  <div class="nav-buttons">
-    <a href="{{ url_for('become_seller') }}" class="start-selling-btn">Start Selling</a>
-    <!-- keep your login/signup buttons if needed -->
-  </div>
-</nav>
-<!-- ========================================== -->
 
 <h2>New Arrivals</h2>
 <div class="product-scroll">

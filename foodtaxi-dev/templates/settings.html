@@ -40,8 +40,15 @@
     <label>Zip Code</label>
     <input type="text" name="zip_code" value="{{ user.zip_code or '' }}">
 
-    <label>User Type</label>
-    <input type="text" name="user_type" value="{{ user.user_type or '' }}">
+    {% if user.email_status != 'verified' %}
+    <div class="verify-email-section">
+      <p>Your email is not verified. <a href="{{ url_for('resend_verification') }}">Click here to resend verification email</a>.</p>
+    </div>
+    {% else %}
+    <div class="verify-email-section">
+      <p>Your email is verified.</p>
+    </div>
+    {% endif %}
 
     <button type="submit" class="save-btn">Save Changes</button>
   </form>

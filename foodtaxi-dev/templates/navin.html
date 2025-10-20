@@ -48,11 +48,19 @@
   <span class="user-greeting">Hello, <strong>{{ session['first_name'] }}</strong>!</span>
   <div class="dropdown">
     <button class="dropdown-btn" id="dropdownToggle">
-      <i class="fas fa-cog"></i>
+      <img src="{{ url_for('get_encrypted_image', filename=session.profile_image) if session.profile_image else url_for('static', filename='images/default-profile.png') }}" alt="Profile" style="width: 30px; height: 30px; border-radius: 50%; object-fit: cover;">
     </button>
     <ul class="dropdown-content" id="dropdownMenu">
       <li><a href="{{ url_for('profile') }}">Profile</a></li>
       <li><a href="{{ url_for('settings') }}">Settings</a></li>
+      {% if user_type == 'buyer' %}
+      <li><a href="{{ url_for('become_seller') }}">Become Seller</a></li>
+      <li><a href="{{ url_for('become_rider') }}">Become Rider</a></li>
+      {% elif user_type == 'seller' %}
+      <li><a href="{{ url_for('seller_dashboard') }}">Seller Dashboard</a></li>
+      {% elif user_type == 'rider' %}
+      <li><a href="{{ url_for('rider_dashboard') }}">Rider Dashboard</a></li>
+      {% endif %}
       <li><a href="{{ url_for('logout') }}">Logout</a></li>
     </ul>
   </div>
@@ -61,6 +69,8 @@
         </ul>
       </nav>
     </header>
+
+    {% block preload %}{% endblock %}
 
     <main>{% block content %}{% endblock %}</main>
 
