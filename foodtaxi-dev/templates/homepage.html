@@ -1,0 +1,55 @@
+{% extends "navin.html" %}
+{% block title %}Home - Food Taxi{% endblock %}
+{% block content %}
+
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+<!-- ===== NAVBAR WITH START SELLING BUTTON ===== -->
+<nav>
+  <a href="{{ url_for('homepage') }}" class="title-btn">Food Taxi</a>
+
+  <div class="nav-buttons">
+    <a href="{{ url_for('become_seller') }}" class="start-selling-btn">Start Selling</a>
+    <!-- keep your login/signup buttons if needed -->
+  </div>
+</nav>
+<!-- ========================================== -->
+
+<h2>New Arrivals</h2>
+<div class="product-scroll">
+  {% if products %} 
+    {% for product in products[:10] %} {# only show first 10 #}
+      <div class="product" data-id="{{ product.product_id }}">
+        <img src="{{ url_for('static', filename='images/' + product.image) }}" alt="{{ product.product_name }}" />
+        <h3 class="product-name">{{ product.maker }} ({{ product.product_name }})</h3>
+        <p class="product-category">Category: {{ product.category }}</p>
+        <div class="product-rating">★★★★☆</div>
+        <p class="product-price">${{ "%.2f"|format(product.price) }}</p>
+      </div>
+    {% endfor %}
+  {% else %}
+    <p>No products found.</p>
+  {% endif %}
+</div>
+
+<h2>Recommended for You</h2>
+<div class="recommended-products">
+  {% if recommended %}
+    {% for product in recommended %}
+      <div class="product" data-id="{{ product.product_id }}">
+        <img src="{{ url_for('static', filename='images/' + product.image) }}" alt="{{ product.product_name }}" />
+        <h3 class="product-name">{{ product.product_name }}</h3>
+        <p class="product-category">Category: {{ product.category }}</p>
+        <div class="product-rating">★★★★☆</div>
+        <p class="product-price">${{ "%.2f"|format(product.price) }}</p>
+      </div>
+    {% endfor %}
+  {% else %}
+    <p>No recommended products yet.</p>
+  {% endif %}
+</div>
+
+{% include "product_detail_in.html" %}
+<script src="{{ url_for('static', filename='js/product_detail.js') }}"></script>
+
+{% endblock %}

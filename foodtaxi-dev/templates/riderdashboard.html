@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Raider Dashboard | Food and Gourmet</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <link rel="stylesheet" href="/static/css/raider.css" />
+  </head>
+  <body>
+    <header>
+      <div class="logo">Food and Gourmet</div>
+      <div class="user-section">
+        <span>Hello, Raider!</span>
+        <div class="dropdown">
+          <i class="fa-solid fa-gear" id="raiderSettingsIcon"></i>
+          <div class="dropdown-content">
+            <a href="#">Profile</a>
+            <a href="#">My Tasks</a>
+            <a href="#">Logout</a>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="container">
+      <aside class="sidebar">
+        <h3>Menu</h3>
+        <ul>
+          <li>
+            <a href="#"><i class="fa-solid fa-house"></i> Dashboard</a>
+          </li>
+          <li>
+            <a href="#"><i class="fa-solid fa-box"></i> Assigned Orders</a>
+          </li>
+          <li>
+            <a href="#"><i class="fa-solid fa-truck"></i> Delivery Status</a>
+          </li>
+          <li>
+            <a href="#"><i class="fa-solid fa-user"></i> Profile</a>
+          </li>
+          <li>
+            <a href="#"
+              ><i class="fa-solid fa-right-from-bracket"></i> Logout</a
+            >
+          </li>
+        </ul>
+      </aside>
+
+      <main class="main-content">
+        <h2>Raider Dashboard</h2>
+
+        <div class="card">
+          <h3>Assigned Orders</h3>
+          <p>You have 3 active orders to deliver.</p>
+        </div>
+
+        <div class="card">
+          <h3>Completed Orders</h3>
+          <p>You've successfully completed 12 deliveries this week.</p>
+        </div>
+
+        <div class="card">
+          <h3>Account Info</h3>
+          <p>Name: Raider John</p>
+          <p>Email: raider@email.com</p>
+          <p>Member since: 2025</p>
+        </div>
+      </main>
+    </div>
+    <script src="static/js/raider.js"></script>
+  </body>
+</html>

@@ -1,0 +1,157 @@
+{% extends "nav.html" %}
+{% block title %}{{ product.product_name }} — Food and Gourmet{% endblock %}
+
+{% block content %}
+<!-- Product page (template variables: product, related_products, reviews) -->
+
+<!-- Breadcrumbs -->
+<nav aria-label="breadcrumb">
+  <ol>
+    <li><a href="{{ url_for('index') }}">Home</a></li>
+    <li><a href="{{ url_for('index') }}#category-{{ product.category|replace(' ', '-') }}">{{ product.category }}</a></li>
+    <li aria-current="page">{{ product.product_name }}</li>
+  </ol>
+</nav>
+
+<main>
+  <section id="product-detail">
+    <div class="product-media">
+      <!-- Main image / gallery -->
+      {% if product.image %}
+        <div class="main-image">
+          <img src="{{ url_for('static', filename='uploads/' ~ product.image) }}" alt="{{ product.product_name }}" />
+        </div>
+      {% else %}
+        <div class="main-image">
+          <img src="{{ url_for('static', filename='images/placeholder.png') }}" alt="No image" />
+        </div>
+      {% endif %}
+
+      {% if product.gallery %}
+        <div class="gallery">
+          {% for img in product.gallery %}
+            <img src="{{ url_for('static', filename='uploads/' ~ img) }}" alt="{{ product.product_name }} - {{ loop.index }}" />
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="product-info">
+      <h1>{{ product.product_name }}</h1>
+      <p><strong>Maker:</strong> {{ product.maker or 'Unknown' }}</p>
+      <p><strong>Category:</strong> {{ product.category }}</p>
+      <p><strong>Price:</strong> ₱{{ "%.2f"|format(product.price) }}</p>
+
+      <div class="stock">
+        <strong>Stock:</strong>
+        {% if product.stock_quantity is not none %}
+          {{ product.stock_quantity }}
+        {% else %}
+          N/A
+        {% endif %}
+      </div>
+
+      <!-- Size selector (if sizes list provided) -->
+      {% if product.sizes %}
+        <div class="size">
+          <label for="size">Size</label>
+          <select id="size" name="size" form="add-to-cart-form" required>
+            {% for s in product.sizes %}
+              <option value="{{ s.value }}" {% if s.value == product.size %}selected{% endif %}>{{ s.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      {% elif product.size is not none %}
+        <div class="size">
+          <label>Size code</label>
+          <div>{{ product.size }}</div>
+        </div>
+      {% endif %}
+
+      <!-- Description -->
+      <article class="description">
+        <h2>Description</h2>
+        <p>{{ product.description or "No description available." }}</p>
+      </article>
+
+      <!-- Add to cart form -->
+      <form id="add-to-cart-form" method="POST" action="{{ url_for('add_to_cart') }}">
+        <input type="hidden" name="product_id" value="{{ product.product_id }}" />
+        <label for="quantity">Quantity</label>
+        <input type="number" id="quantity" name="quantity" value="1" min="1" max="{{ product.stock_quantity or 999 }}" />
+
+        <button type="submit">Add to Cart</button>
+      </form>
+
+      <!-- Seller contact / maker info -->
+      {% if product.maker %}
+        <div class="maker-info">
+          <h3>About the maker</h3>
+          <p>{{ product.maker }}</p>
+        </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- Reviews -->
+  <section id="reviews">
+    <h2>Reviews</h2>
+    {% if reviews %}
+      <ul>
+        {% for r in reviews %}
+          <li>
+            <strong>{{ r.author_name or "Anonymous" }}</strong> — <small>{{ r.created_at }}</small>
+            <div>Rating: {{ r.rating or "N/A" }}/5</div>
+            <p>{{ r.comment }}</p>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>No reviews yet. Be the first to review this product.</p>
+    {% endif %}
+
+    <!-- Review form (only show for logged-in users) -->
+    {% if session.get('user_id') %}
+      <form method="POST" action="{{ url_for('submit_review', product_id=product.product_id) }}">
+        <label for="rating">Rating</label>
+        <select id="rating" name="rating" required>
+          <option value="">Select</option>
+          <option value="5">5 - Excellent</option>
+          <option value="4">4 - Very Good</option>
+          <option value="3">3 - Good</option>
+          <option value="2">2 - Fair</option>
+          <option value="1">1 - Poor</option>
+        </select>
+
+        <label for="comment">Comment</label>
+        <textarea id="comment" name="comment" rows="4" required></textarea>
+
+        <button type="submit">Submit Review</button>
+      </form>
+    {% else %}
+      <p><a href="{{ url_for('login') }}">Log in</a> to leave a review.</p>
+    {% endif %}
+  </section>
+
+  <!-- Related products -->
+  <section id="related-products">
+    <h2>Related products</h2>
+    {% if related_products %}
+      <div class="related-grid">
+        {% for p in related_products %}
+          <article class="related-product">
+            <a href="{{ url_for('product_page', product_id=p.product_id) }}">
+              <img src="{{ url_for('static', filename='uploads/' ~ (p.image or 'placeholder.png')) }}" alt="{{ p.product_name }}" />
+              <h3>{{ p.product_name }}</h3>
+              <p>₱{{ "%.2f"|format(p.price) }}</p>
+            </a>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p>No related products found.</p>
+    {% endif %}
+  </section>
+</main>
+
+{% endblock %}

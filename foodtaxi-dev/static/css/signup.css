@@ -1,0 +1,187 @@
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Segoe UI', sans-serif;
+  background: url("../images/signup_pic.jpg") no-repeat center center/cover;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  background-color: #000; /* fallback */
+  position: relative;
+}
+
+/* Container and layout */
+.container {
+  width: 90%;
+  max-width: 900px;
+  background-color: #1e1e1e;
+  display: flex;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 0 30px rgba(255, 165, 0, 0.2);
+}
+
+.login-box {
+  display: flex;
+  width: 100%;
+}
+
+.image-section {
+  width: 50%;
+  background-color: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.image-section img {
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+/* Form section */
+.form-section {
+  width: 50%;
+  background-color: #121212;
+  color: #fff;
+  padding: 40px 30px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.form-section h2 {
+  margin-bottom: 25px;
+  font-size: 26px;
+  color: #fff;
+  text-align: center;
+  font-weight: 600;
+}
+
+/* Name field grouping */
+.name-fields {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.name-fields input {
+  flex: 1;
+}
+
+/* Inputs */
+form input {
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 15px;
+  border: none;
+  border-radius: 6px;
+  font-size: 16px;
+  background-color: #2a2a2a;
+  color: #fff;
+  transition: background 0.3s, box-shadow 0.3s;
+}
+
+form input:focus {
+  outline: none;
+  background-color: #333;
+  box-shadow: 0 0 0 2px #f39c12;
+}
+
+/* Password field icons */
+.password-field {
+  position: relative;
+}
+
+.password-field i {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #aaa;
+  cursor: pointer;
+  transition: color 0.3s;
+}
+
+.password-field i:hover {
+  color: #f39c12;
+}
+
+/* Button */
+form button {
+  width: 100%;
+  padding: 12px;
+  background-color: #f39c12;
+  color: white;
+  font-size: 16px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.3s ease, transform 0.1s ease;
+}
+
+form button:hover {
+  background-color: #e67e22;
+}
+
+form button:active {
+  transform: scale(0.98);
+}
+
+/* Footer text */
+.register-text {
+  text-align: center;
+  margin-top: 20px;
+  font-size: 14px;
+}
+
+.register-text a {
+  color: #f39c12;
+  text-decoration: none;
+  transition: text-decoration 0.2s;
+}
+
+.register-text a:hover {
+  text-decoration: underline;
+}
+
+/* Flash messages (optional) */
+.flash-message {
+  padding: 10px;
+  border-radius: 6px;
+  text-align: center;
+  margin-bottom: 15px;
+  font-size: 14px;
+}
+
+.flash-message.success {
+  background-color: #2ecc71;
+}
+
+.flash-message.error {
+  background-color: #e74c3c;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .login-box {
+    flex-direction: column;
+  }
+
+  .image-section,
+  .form-section {
+    width: 100%;
+  }
+
+  .form-section {
+    padding: 30px 20px;
+  }
+
+  .name-fields {
+    flex-direction: column;
+  }
+}

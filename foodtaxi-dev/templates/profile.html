@@ -1,0 +1,25 @@
+{% extends "navin.html" %}
+{% block title %}Profile{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/profile.css') }}">
+
+<section class="profile-container">
+  <h2>My Profile</h2>
+
+  <div class="profile-card">
+    <p><strong>First Name:</strong> {{ user.first_name or 'Not set' }}</p>
+    <p><strong>Last Name:</strong> {{ user.last_name or 'Not set' }}</p>
+    <p><strong>Email:</strong> {{ user.email or 'Not set' }}</p>
+    <p><strong>Mobile Number:</strong> {{ user.mobile_number or 'Not set' }}</p>
+    <p><strong>Home Number:</strong> {{ user.home_number or 'Not set' }}</p>
+    <p><strong>Street:</strong> {{ user.street or 'Not set' }}</p>
+    <p><strong>Barangay:</strong> {{ user.barangay or 'Not set' }}</p>
+    <p><strong>Municipality:</strong> {{ user.municipality or 'Not set' }}</p>
+    <p><strong>City:</strong> {{ user.city or 'Not set' }}</p>
+    <p><strong>Province:</strong> {{ user.province or 'Not set' }}</p>
+    <p><strong>Zip Code:</strong> {{ user.zip_code or 'Not set' }}</p>
+    <p><strong>User Type:</strong> {{ user.user_type or 'Not set' }}</p>
+  </div>
+
+</section>
+{% endblock %}
