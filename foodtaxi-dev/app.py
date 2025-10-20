@@ -1,10 +1,46 @@
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
+from cryptography.fernet import Fernet
+import base64
 import mysql.connector
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import secrets
+import os
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key_here'
+
+# Email configuration
+SENDER_EMAIL = "your_email@gmail.com"
+SENDER_PASSWORD = "mdrd raly rsgq orsk"
+
+@app.context_processor
+def inject_user_type():
+    if 'account_id' in session:
+        db = get_db_connection()
+        cursor = db.cursor(dictionary=True)
+        cursor.execute("SELECT user_type FROM accounts WHERE account_id = %s", (session['account_id'],))
+        user = cursor.fetchone()
+        cursor.close()
+        db.close()
+        return {'user_type': user['user_type'] if user else 'buyer'}
+    return {'user_type': None}
+
+# Configure upload folder
+UPLOAD_FOLDER = 'foodtaxi-dev/static/images/profile'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+
+# Encryption key for profile images
+ENCRYPTION_KEY = Fernet.generate_key()
+cipher = Fernet(ENCRYPTION_KEY)
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # ===============================
 # DATABASE CONNECTION
@@ -48,7 +84,17 @@ def guest_only(f):
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'user_type' not in session or session['user_type'] != 'admin':
+        account_id = session.get('account_id')
+        if not account_id:
+            flash("Please log in to continue.", "warning")
+            return redirect(url_for('login'))
+        db = get_db_connection()
+        cursor = db.cursor(dictionary=True)
+        cursor.execute("SELECT user_type FROM accounts WHERE account_id = %s", (account_id,))
+        user = cursor.fetchone()
+        cursor.close()
+        db.close()
+        if not user or user['user_type'] != 'admin':
             flash("Access denied: Admins only.", "danger")
             return redirect(url_for('homepage'))
         return f(*args, **kwargs)
@@ -143,6 +189,7 @@ def login():
                 session['last_name'] = user['last_name']
                 session['email'] = user['email']
                 session['user_type'] = user['user_type']
+                session['profile_image'] = user['profile_image'] if user['profile_image'] else None
 
                 print("✅ DEBUG: account_id stored in session =", session.get("account_id"))
 
@@ -498,14 +545,13 @@ def settings():
             request.form.get('city'),
             request.form.get('province'),
             request.form.get('zip_code'),
-            request.form.get('user_type'),
             session['account_id']
         )
 
         update_query = """
-            UPDATE accounts 
+            UPDATE accounts
             SET first_name=%s, last_name=%s, email=%s, mobile_number=%s, home_number=%s,
-                street=%s, barangay=%s, municipality=%s, city=%s, province=%s, zip_code=%s, user_type=%s
+                street=%s, barangay=%s, municipality=%s, city=%s, province=%s, zip_code=%s
             WHERE account_id=%s
         """
         cursor.execute(update_query, data)
@@ -515,7 +561,6 @@ def settings():
         session['first_name'] = request.form.get('first_name')
         session['last_name'] = request.form.get('last_name')
         session['email'] = request.form.get('email')
-        session['user_type'] = request.form.get('user_type')
 
         flash("Your account settings have been updated successfully!", "success")
         return redirect(url_for('profile'))
@@ -528,45 +573,306 @@ def settings():
 @app.route('/become_seller')
 @login_required
 def become_seller():
-    db = get_db_connection()
-    cursor = db.cursor()
-    cursor.execute("UPDATE accounts SET user_type = 'seller' WHERE account_id = %s", (session['account_id'],))
-    db.commit()
-    cursor.close()
+    account_id = session.get('account_id')
 
-    # Update session
-    session['user_type'] = 'seller'
-
-    flash("You are now a seller! Redirecting to your dashboard...", "success")
-    return redirect(url_for('seller_dashboard'))
-
-@app.route('/seller_dashboard')
-@login_required
-def seller_dashboard():
-    if session.get('user_type') != 'seller':
-        flash("Access denied: Only sellers can view this page.", "error")
-        return redirect(url_for('profile'))
+    # Generate verification token
+    verification_token = secrets.token_urlsafe(32)
 
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
 
-    # Show same data logic as homepage
-    cursor.execute("SELECT * FROM products ORDER BY product_id DESC LIMIT 10")
+    # Update user to seller and set email_status to unverified, store token
+    cursor.execute("""
+        UPDATE accounts
+        SET user_type = 'seller', email_status = 'unverified', verification_token = %s
+        WHERE account_id = %s
+    """, (verification_token, account_id))
+    db.commit()
+
+    # Get user email
+    cursor.execute("SELECT email, first_name FROM accounts WHERE account_id = %s", (account_id,))
+    user = cursor.fetchone()
+    cursor.close()
+    db.close()
+
+    if user:
+        # Send verification email
+        send_verification_email(user['email'], user['first_name'], verification_token)
+
+    # Update session
+    session['user_type'] = 'seller'
+
+    flash("A verification email has been sent to your email address. Please verify your email to become a seller.", "info")
+    return redirect(url_for('profile'))
+
+@app.route('/become_rider')
+@login_required
+def become_rider():
+    account_id = session.get('account_id')
+
+    # Generate verification token
+    verification_token = secrets.token_urlsafe(32)
+
+    db = get_db_connection()
+    cursor = db.cursor(dictionary=True)
+
+    # Update user to rider and set email_status to unverified, store token
+    cursor.execute("""
+        UPDATE accounts
+        SET user_type = 'rider', email_status = 'unverified', verification_token = %s
+        WHERE account_id = %s
+    """, (verification_token, account_id))
+    db.commit()
+
+    # Get user email
+    cursor.execute("SELECT email, first_name FROM accounts WHERE account_id = %s", (account_id,))
+    user = cursor.fetchone()
+    cursor.close()
+    db.close()
+
+    if user:
+        # Send verification email
+        send_verification_email(user['email'], user['first_name'], verification_token)
+
+    # Update session
+    session['user_type'] = 'rider'
+
+    flash("A verification email has been sent to your email address. Please verify your email to become a rider.", "info")
+    return redirect(url_for('profile'))
+
+@app.route('/rider_dashboard')
+@login_required
+def rider_dashboard():
+    account_id = session.get('account_id')
+
+    db = get_db_connection()
+    cursor = db.cursor(dictionary=True)
+
+    # Fetch user_type from database
+    cursor.execute("SELECT user_type FROM accounts WHERE account_id = %s", (account_id,))
+    user = cursor.fetchone()
+
+    if not user or user['user_type'] != 'rider':
+        cursor.close()
+        db.close()
+        flash("Access denied: Only riders can view this page.", "error")
+        return redirect(url_for('profile'))
+
+    # Fetch orders for delivery (assuming riders can see pending orders)
+    cursor.execute("SELECT * FROM orders WHERE order_status = 'processing' ORDER BY order_date DESC LIMIT 10", ())
+    orders = cursor.fetchall()
+
+    cursor.close()
+    db.close()
+
+    return render_template(
+        'riderdashboard.html',
+        user=session,
+        orders=orders
+    )
+
+def send_verification_email(email, first_name, token):
+    sender_email = SENDER_EMAIL
+    sender_password = SENDER_PASSWORD
+    receiver_email = email
+
+    message = MIMEMultipart("alternative")
+    message["Subject"] = "Verify Your Email to Become a Seller"
+    message["From"] = sender_email
+    message["To"] = receiver_email
+
+    # Create the plain-text and HTML version of your message
+    text = f"""\
+    Hi {first_name},
+
+    Thank you for applying to become a seller on our platform.
+
+    Please verify your email by clicking the link below:
+    http://localhost:5000/verify_email/{token}
+
+    If you did not request this, please ignore this email.
+
+    Best regards,
+    FoodTaxi Team
+    """
+
+    html = f"""\
+    <html>
+    <body>
+        <p>Hi {first_name},</p>
+        <p>Thank you for applying to become a seller on our platform.</p>
+        <p>Please verify your email by clicking the link below:</p>
+        <p><a href="http://localhost:5000/verify_email/{token}">Verify Email</a></p>
+        <p>If you did not request this, please ignore this email.</p>
+        <p>Best regards,<br>FoodTaxi Team</p>
+    </body>
+    </html>
+    """
+
+    # Turn these into plain/html MIMEText objects
+    part1 = MIMEText(text, "plain")
+    part2 = MIMEText(html, "html")
+
+    # Add HTML/plain-text parts to MIMEMultipart message
+    message.attach(part1)
+    message.attach(part2)
+
+    try:
+        server = smtplib.SMTP_SSL("smtp.gmail.com", 465)
+        server.login(sender_email, sender_password)
+        server.sendmail(sender_email, receiver_email, message.as_string())
+        server.quit()
+        print("Verification email sent successfully")
+    except Exception as e:
+        print(f"Error sending email: {e}")
+
+@app.route('/verify_email/<token>')
+def verify_email(token):
+    db = get_db_connection()
+    cursor = db.cursor(dictionary=True)
+
+    # Find user with this token
+    cursor.execute("SELECT account_id FROM accounts WHERE verification_token = %s", (token,))
+    user = cursor.fetchone()
+
+    if user:
+        # Update email_status to verified and clear token
+        cursor.execute("""
+            UPDATE accounts
+            SET email_status = 'verified', verification_token = NULL
+            WHERE account_id = %s
+        """, (user['account_id'],))
+        db.commit()
+        cursor.close()
+        db.close()
+
+        flash("Your email has been verified! You are now a seller.", "success")
+        return redirect(url_for('seller_dashboard'))
+    else:
+        cursor.close()
+        db.close()
+        flash("Invalid verification token.", "error")
+        return redirect(url_for('profile'))
+
+@app.route('/resend_verification')
+@login_required
+def resend_verification():
+    account_id = session.get('account_id')
+
+    # Generate new verification token
+    verification_token = secrets.token_urlsafe(32)
+
+    db = get_db_connection()
+    cursor = db.cursor(dictionary=True)
+
+    # Update verification token
+    cursor.execute("""
+        UPDATE accounts
+        SET verification_token = %s
+        WHERE account_id = %s
+    """, (verification_token, account_id))
+    db.commit()
+
+    # Get user email and first name
+    cursor.execute("SELECT email, first_name FROM accounts WHERE account_id = %s", (account_id,))
+    user = cursor.fetchone()
+    cursor.close()
+    db.close()
+
+    if user:
+        # Send verification email
+        send_verification_email(user['email'], user['first_name'], verification_token)
+        flash("A new verification email has been sent to your email address.", "info")
+    else:
+        flash("An error occurred. Please try again.", "error")
+
+    return redirect(url_for('settings'))
+
+@app.route('/seller_dashboard')
+@login_required
+def seller_dashboard():
+    account_id = session.get('account_id')
+
+    db = get_db_connection()
+    cursor = db.cursor(dictionary=True)
+
+    # Fetch user_type from database
+    cursor.execute("SELECT user_type FROM accounts WHERE account_id = %s", (account_id,))
+    user = cursor.fetchone()
+
+    if not user or user['user_type'] != 'seller':
+        cursor.close()
+        db.close()
+        flash("Access denied: Only sellers can view this page.", "error")
+        return redirect(url_for('profile'))
+
+    # Fetch only products belonging to this seller
+    cursor.execute("SELECT * FROM products WHERE seller_id = %s ORDER BY product_id DESC LIMIT 10", (account_id,))
     products = cursor.fetchall()
 
-    cursor.execute("SELECT * FROM products ORDER BY product_id DESC")
+    cursor.execute("SELECT * FROM products WHERE seller_id = %s ORDER BY product_id DESC", (account_id,))
     recommended = cursor.fetchall()
 
     cursor.close()
     db.close()
 
-    # Use same display structure as homepage for now
     return render_template(
         'seller_dashboard.html',
         user=session,
         products=products,
         recommended=recommended
     )
+
+@app.route('/update_profile_picture', methods=['POST'])
+@login_required
+def update_profile_picture():
+    if 'profile_image' not in request.files:
+        flash('No file part', 'error')
+        return redirect(request.url)
+    file = request.files['profile_image']
+    if file.filename == '':
+        flash('No selected file', 'error')
+        return redirect(request.url)
+    if file and allowed_file(file.filename):
+        # Scramble the filename and add custom extension
+        scrambled_name = secrets.token_hex(16) + '.ixia'
+        encrypted_data = cipher.encrypt(file.read())
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], scrambled_name)
+        with open(file_path, 'wb') as f:
+            f.write(encrypted_data)
+
+        # Update database
+        db = get_db_connection()
+        cursor = db.cursor()
+        cursor.execute("UPDATE accounts SET profile_image = %s WHERE account_id = %s", (scrambled_name, session['account_id']))
+        db.commit()
+        cursor.close()
+        db.close()
+
+        # Update session
+        session['profile_image'] = scrambled_name
+
+        flash('Profile picture updated successfully!', 'success')
+        return redirect(url_for('profile'))
+    else:
+        flash('Invalid file type', 'error')
+        return redirect(request.url)
+
+@app.route('/get_encrypted_image/<filename>')
+@login_required
+def get_encrypted_image(filename):
+    # Ensure the filename belongs to the current user for security
+    if filename != session.get('profile_image'):
+        return 'Access denied', 403
+
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    if os.path.exists(file_path):
+        with open(file_path, 'rb') as f:
+            encrypted_data = f.read()
+        decrypted_data = cipher.decrypt(encrypted_data)
+        return decrypted_data, 200, {'Content-Type': 'image/jpeg'}  # Adjust content type as needed
+    else:
+        return 'File not found', 404
 
 # ===============================
 # RUN APP
