@@ -23,14 +23,15 @@ products.forEach((product) => {
     modalCategory.textContent = product.querySelector(".product-category").textContent;
     modalPrice.textContent = product.querySelector(".product-price").textContent;
     modalRating.textContent = product.querySelector(".product-rating").textContent;
-
+    modalStock.textContent = "In Stock: " + (product.dataset.stock_quantity || "N/A"); 
+  
+  
     // Use dataset for hidden info
     modalDescription.textContent = product.dataset.description || "No description available";
     modalProductId.value = product.dataset.id;
 
-    modalStock.textContent = product.dataset.stock
-  ? `Stock: ${product.dataset.stock}`
-  : "Stock: N/A";
+    
+  
 
 
     // Reset quantity if exists
