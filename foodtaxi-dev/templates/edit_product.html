@@ -1,0 +1,66 @@
+{% extends "navin.html" %}
+{% block title %}Edit Product - Food Taxi{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/add_product.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="add-product-container">
+  <h2 class="page-title">Edit Product</h2>
+
+  <form method="POST" enctype="multipart/form-data" class="add-product-form">
+    <div class="form-group">
+      <label>Product Name</label>
+      <input type="text" name="product_name" value="{{ product.product_name }}" required>
+    </div>
+
+    <div class="form-group">
+      <label>Maker / Brand</label>
+      <input type="text" name="maker" value="{{ product.maker }}">
+    </div>
+
+    <div class="form-group">
+      <label>Description</label>
+      <textarea name="description" rows="3">{{ product.description }}</textarea>
+    </div>
+
+    <div class="form-group">
+      <label>Price (₱)</label>
+      <input type="number" name="price" step="0.01" value="{{ product.price }}" required>
+    </div>
+
+    <div class="form-group">
+      <label>Category</label>
+      <select name="category" required>
+        <option disabled>Select Category</option>
+        <option value="Baking Supplies & Ingredients" {% if product.category == 'Baking Supplies & Ingredients' %}selected{% endif %}>Baking Supplies & Ingredients</option>
+        <option value="Coffee, Tea & Beverages" {% if product.category == 'Coffee, Tea & Beverages' %}selected{% endif %}>Coffee, Tea & Beverages</option>
+        <option value="Snacks & Candy" {% if product.category == 'Snacks & Candy' %}selected{% endif %}>Snacks & Candy</option>
+        <option value="Specialty Foods & International Cuisine" {% if product.category == 'Specialty Foods & International Cuisine' %}selected{% endif %}>Specialty Foods & International Cuisine</option>
+        <option value="Organic and Health Foods" {% if product.category == 'Organic and Health Foods' %}selected{% endif %}>Organic and Health Foods</option>
+        <option value="Meal Kits & Prepped Foods" {% if product.category == 'Meal Kits & Prepped Foods' %}selected{% endif %}>Meal Kits & Prepped Foods</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>Stock Quantity</label>
+      <input type="number" name="stock_quantity" min="0" value="{{ product.stock_quantity }}" required>
+    </div>
+
+    <div class="form-group">
+      <label>Product Image</label>
+      {% if product.image %}
+        <div class="current-image">
+          <p>Current Image:</p>
+          <img src="{{ url_for('static', filename='images/profile/' ~ product.image) }}" alt="Current Image" width="150" height="150">
+        </div>
+      {% endif %}
+      <input type="file" name="image" accept="image/*">
+      <p class="note">Leave empty to keep existing image</p>
+    </div>
+
+    <button type="submit" class="save-btn">Update Product</button>
+  </form>
+</div>
+{% endblock %}

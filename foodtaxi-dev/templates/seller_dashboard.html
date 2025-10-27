@@ -5,19 +5,16 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 
 <!-- ===== NAVBAR WITH START SELLING BUTTON ===== -->
-<nav>
-  <a href="{{ url_for('seller_dashboard') }}" class="title-btn">Food Taxi</a>
 
-  
-</nav>
 <!-- ========================================== -->
 
 <h2>New Arrivals</h2>
 <div class="product-scroll">
   {% if products %} 
     {% for product in products[:10] %} {# only show first 10 #}
-      <div class="product" data-id="{{ product.product_id }}">
-        <img src="{{ url_for('static', filename='images/' + product.image) }}" alt="{{ product.product_name }}" />
+      <div class="product" data-id="{{ product.product_id }}" 
+     data-description="{{ product.description }}">
+        <img src="{{ url_for('static', filename='images/profile/' + product.image) }}" alt="{{ product.product_name }}" />
         <h3 class="product-name">{{ product.maker }} ({{ product.product_name }})</h3>
         <p class="product-category">Category: {{ product.category }}</p>
         <div class="product-rating">★★★★☆</div>
@@ -33,8 +30,9 @@
 <div class="recommended-products">
   {% if recommended %}
     {% for product in recommended %}
-      <div class="product" data-id="{{ product.product_id }}">
-        <img src="{{ url_for('static', filename='images/' + product.image) }}" alt="{{ product.product_name }}" />
+      <div class="product" data-id="{{ product.product_id }}"
+      data-description="{{ product.description }}">
+        <img src="{{ url_for('static', filename='images/profile/' + product.image) }}" alt="{{ product.product_name }}" />
         <h3 class="product-name">{{ product.product_name }}</h3>
         <p class="product-category">Category: {{ product.category }}</p>
         <div class="product-rating">★★★★☆</div>

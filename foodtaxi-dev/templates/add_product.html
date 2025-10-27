@@ -1,0 +1,59 @@
+{% extends "navin.html" %}
+{% block title %}Add Product - Food Taxi{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/add_product.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="add-product-container">
+  <h2 class="page-title">Add New Product</h2>
+
+  <form method="POST" enctype="multipart/form-data" class="add-product-form">
+    <div class="form-group">
+      <label>Product Name</label>
+      <input type="text" name="product_name" placeholder="Enter product name" required>
+    </div>
+
+    <div class="form-group">
+      <label>Maker / Brand</label>
+      <input type="text" name="maker" placeholder="Enter brand or maker">
+    </div>
+
+    <div class="form-group">
+      <label>Description</label>
+      <textarea name="description" rows="3" placeholder="Short product description"></textarea>
+    </div>
+
+    <div class="form-group">
+      <label>Price (₱)</label>
+      <input type="number" name="price" step="0.01" placeholder="0.00" required>
+    </div>
+
+    <div class="form-group">
+      <label>Category</label>
+      <select name="category" required>
+        <option disabled selected>Select Category</option>
+        <option value="Baking Supplies & Ingredients">Baking Supplies & Ingredients</option>
+        <option value="Coffee, Tea & Beverages">Coffee, Tea & Beverages</option>
+        <option value="Snacks & Candy">Snacks & Candy</option>
+        <option value="Specialty Foods & International Cuisine">Specialty Foods & International Cuisine</option>
+        <option value="Organic and Health Foods">Organic and Health Foods</option>
+        <option value="Meal Kits & Prepped Foods">Meal Kits & Prepped Foods</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>Stock Quantity</label>
+      <input type="number" name="stock_quantity" min="0" placeholder="Enter quantity" required>
+    </div>
+
+    <div class="form-group">
+      <label>Product Image</label>
+      <input type="file" name="image" accept="image/*" required>
+    </div>
+
+    <button type="submit" class="save-btn">Save Product</button>
+  </form>
+</div>
+{% endblock %}

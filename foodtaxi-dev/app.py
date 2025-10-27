@@ -14,6 +14,10 @@ import os
 app = Flask(__name__)
 app.secret_key = 'your_secret_key_here'
 
+UPLOAD_FOLDER = os.path.join(app.root_path, 'static', 'images', 'product_images')
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
 # Email configuration
 SENDER_EMAIL = "your_email@gmail.com"
 SENDER_PASSWORD = "mdrd raly rsgq orsk"
@@ -314,11 +318,12 @@ def add_to_cart():
         db.close()
         return "Product not found", 404
 
-    # Check stock
+   # Check stock
     if quantity > product["stock_quantity"]:
-        cursor.close()
-        db.close()
-        return "Not enough stock available", 400
+     flash("Not enough stock available.", "error")
+     cursor.close()
+     db.close()
+     return redirect(url_for("homepage"))
 
     # Check if the user already has a pending order
     cursor.execute("""
@@ -494,6 +499,110 @@ def update_cart():
     db.close()
 
     return redirect(url_for("cart"))
+
+@app.route("/orders")
+@login_required
+def orders():
+    account_id = session.get("account_id")
+
+    db = get_db_connection()
+    cursor = db.cursor(dictionary=True)
+
+    # Fetch all orders of the user
+    cursor.execute("""
+        SELECT *
+        FROM orders
+        WHERE account_id = %s
+        ORDER BY order_date DESC
+    """, (account_id,))
+    orders = cursor.fetchall()
+
+    # For each order, fetch its items with product details
+    for order in orders:
+        cursor.execute("""
+            SELECT oi.*, p.product_name, p.maker, p.description, p.image
+            FROM order_items oi
+            JOIN products p ON oi.product_id = p.product_id
+            WHERE oi.order_id = %s
+        """, (order['order_id'],))
+        order['order_products'] = cursor.fetchall()
+
+    cursor.close()
+    db.close()
+
+    return render_template("orders.html", orders=orders)
+
+
+
+
+
+@app.route("/checkout", methods=["POST"])
+@login_required
+def checkout():
+    account_id = session.get("account_id")
+
+    db = get_db_connection()
+    cursor = db.cursor()
+
+    try:
+        # Fetch the pending order for this account
+        cursor.execute("""
+            SELECT order_id, total_price
+            FROM orders
+            WHERE account_id = %s AND order_status = 'pending'
+            ORDER BY order_date DESC
+            LIMIT 1
+        """, (account_id,))
+        order = cursor.fetchone()
+
+        if not order:
+            flash("You have no items to checkout.", "error")
+            return redirect(url_for("cart"))
+
+        order_id = order[0]
+
+        # Optional: Check stock before confirming checkout
+        cursor.execute("""
+            SELECT oi.product_id, oi.quantity, p.stock_quantity
+            FROM order_items oi
+            JOIN products p ON oi.product_id = p.product_id
+            WHERE oi.order_id = %s
+        """, (order_id,))
+        items = cursor.fetchall()
+        for product_id, quantity, stock in items:
+            if quantity > stock:
+                flash("Cannot checkout: some items exceed available stock.", "error")
+                return redirect(url_for("cart"))
+
+        # Update stock quantities
+        for product_id, quantity, stock in items:
+            cursor.execute("""
+                UPDATE products
+                SET stock_quantity = stock_quantity - %s
+                WHERE product_id = %s
+            """, (quantity, product_id))
+
+        # Mark order as processing (or whatever status)
+        cursor.execute("""
+            UPDATE orders
+            SET order_status = 'processing', last_updated = NOW()
+            WHERE order_id = %s
+        """, (order_id,))
+
+        db.commit()
+        flash("Checkout successful! Your order is now being processed.", "success")
+        return redirect(url_for("orders"))
+
+    except Exception as e:
+        db.rollback()
+        flash(f"Error during checkout: {e}", "error")
+        return redirect(url_for("cart"))
+
+    finally:
+        cursor.close()
+        db.close()
+
+
 
 
 
@@ -822,6 +931,129 @@ def seller_dashboard():
         products=products,
         recommended=recommended
     )
+
+@app.route('/seller/products')
+def seller_products():
+    if 'account_id' not in session:
+        return redirect(url_for('login'))
+
+    seller_id = session['account_id']
+    db = get_db_connection()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM products WHERE seller_id = %s", (seller_id,))
+    products = cursor.fetchall()
+    cursor.close()
+
+    return render_template('seller_products.html', products=products)
+
+
+@app.route('/seller/add-product', methods=['GET', 'POST'])
+def add_product():
+    if 'account_id' not in session:
+        return redirect(url_for('login'))
+
+    seller_id = session['account_id']
+
+    if request.method == 'POST':
+        product_name = request.form['product_name']
+        maker = request.form.get('maker')
+        description = request.form.get('description')
+        price = request.form['price']
+        category = request.form['category']
+        stock_quantity = request.form['stock_quantity']
+        image = request.files['image']
+
+        if image:
+         filename = secure_filename(image.filename)
+         image.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+        else:
+         filename = None
+        db = get_db_connection()
+        cursor = db.cursor()
+        cursor.execute("""
+            INSERT INTO products 
+            (seller_id, product_name, maker, description, price, category, stock_quantity, image)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+        """, (seller_id, product_name, maker, description, price, category, stock_quantity, filename))
+        db.commit()
+        cursor.close()
+
+        flash("Product added successfully!", "success")
+        return redirect(url_for('seller_products'))
+
+    return render_template('add_product.html')
+
+# Increase stock
+@app.route('/seller/product/increase/<int:product_id>', methods=['POST'])
+def increase_product(product_id):
+    db = get_db_connection()
+    cursor = db.cursor()
+    cursor.execute("UPDATE products SET stock_quantity = stock_quantity + 1 WHERE product_id = %s", (product_id,))
+    db.commit()
+    cursor.close()
+    return redirect(url_for('seller_products'))
+
+# Decrease stock
+@app.route('/seller/product/decrease/<int:product_id>', methods=['POST'])
+def decrease_product(product_id):
+    db = get_db_connection()
+    cursor = db.cursor()
+    # Prevent negative stock
+    cursor.execute("UPDATE products SET stock_quantity = GREATEST(stock_quantity - 1, 0) WHERE product_id = %s", (product_id,))
+    db.commit()
+    cursor.close()
+    return redirect(url_for('seller_products'))
+
+# Remove product
+@app.route('/seller/product/remove/<int:product_id>', methods=['POST'])
+def remove_product(product_id):
+    db = get_db_connection()
+    cursor = db.cursor()
+    cursor.execute("DELETE FROM products WHERE product_id = %s", (product_id,))
+    db.commit()
+    cursor.close()
+    return redirect(url_for('seller_products'))
+
+# Edit product (redirect to your existing add/edit form)
+@app.route('/seller/product/edit/<int:product_id>', methods=['GET', 'POST'])
+def edit_product(product_id):
+    db = get_db_connection()
+    cursor = db.cursor(dictionary=True)
+    
+    if request.method == 'POST':
+        product_name = request.form['product_name']
+        maker = request.form.get('maker')
+        description = request.form.get('description')
+        price = request.form['price']
+        category = request.form['category']
+        stock_quantity = request.form['stock_quantity']
+        
+        # Handle new image upload if provided
+        image_file = request.files.get('image')
+        if image_file and image_file.filename:
+            filename = secure_filename(image_file.filename)
+            image_file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+            cursor.execute("""
+                UPDATE products SET product_name=%s, maker=%s, description=%s, price=%s, category=%s,
+                stock_quantity=%s, image=%s WHERE product_id=%s
+            """, (product_name, maker, description, price, category, stock_quantity, filename, product_id))
+        else:
+            cursor.execute("""
+                UPDATE products SET product_name=%s, maker=%s, description=%s, price=%s, category=%s,
+                stock_quantity=%s WHERE product_id=%s
+            """, (product_name, maker, description, price, category, stock_quantity, product_id))
+        
+        db.commit()
+        cursor.close()
+        flash("Product updated successfully!", "success")
+        return redirect(url_for('seller_products'))
+    
+    # GET: show form with current product info
+    cursor.execute("SELECT * FROM products WHERE product_id=%s", (product_id,))
+    product = cursor.fetchone()
+    cursor.close()
+    return render_template('edit_product.html', product=product)
+
 
 @app.route('/update_profile_picture', methods=['POST'])
 @login_required

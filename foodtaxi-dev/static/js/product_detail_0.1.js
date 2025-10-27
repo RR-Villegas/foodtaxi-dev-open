@@ -29,7 +29,8 @@ document.addEventListener("DOMContentLoaded", function () {
       const price = product.querySelector(".product-price")?.innerText || "";
       const rating =
         product.querySelector(".product-rating")?.innerText || "★★★★☆";
-
+      
+ 
       modalImage.src = img;
       modalName.textContent = name;
       modalCategory.textContent = category;

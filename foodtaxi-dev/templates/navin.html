@@ -4,10 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="This is my first webpage" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/notification.css') }}">
+
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
+    
     <title>{% block title %}Food Taxi{% endblock %}</title>
     <link
       rel="stylesheet"
@@ -16,6 +19,10 @@
     <link
       rel="stylesheet"
       href="{{ url_for('static', filename='css/cart.css') }}"
+    />
+    <link 
+      rel="stylesheet" 
+      href="{{ url_for('static', filename='css/notification.css') }}">
     />
     <link
       rel="stylesheet"
@@ -32,16 +39,47 @@
     />
   </head>
   <body>
+
+    <!-- Global Notification Container -->
+   <div id="notification-container" class="notification-container"></div>
+
+
+    
+
+ <!-- Notification JS -->
+
+
+
+   <script src="{{ url_for('static', filename='js/notification.js') }}"></script>
+
+
+
+
+
+
     <header>
       <nav>
         <a href="{{ url_for('reload') }}" class="title-btn">Food Taxi</a>
+
         <ul>
-          <li class="cart-link">
-            <a href="{{ url_for('cart') }}" class="cartbutton">
-              <i class="fas fa-shopping-cart"></i>
-              <span class="cart-badge">{{ cart_quantity }}</span>
-            </a>
-          </li>
+
+          
+          <!-- My Products button (left of Cart) -->
+        {% if session.user_type == 'seller' %}
+        <li class="nav-item">
+         <a href="{{ url_for('seller_products') }}" class="nav-link">My Products</a>
+        </li>
+        
+        {% endif %}
+
+
+        <!-- Cart button -->
+        <li class="cart-link">
+          <a href="{{ url_for('cart') }}" class="cartbutton">
+            <i class="fas fa-shopping-cart"></i>
+            <span class="cart-badge">{{ cart_quantity }}</span>
+          </a>
+        </li>
 
           {% if session.first_name %}
           <div class="user-menu">
@@ -53,6 +91,8 @@
     <ul class="dropdown-content" id="dropdownMenu">
       <li><a href="{{ url_for('profile') }}">Profile</a></li>
       <li><a href="{{ url_for('settings') }}">Settings</a></li>
+      <li><a href="{{ url_for('orders') }}">My Orders</a></li>
+      
       {% if user_type == 'buyer' %}
       <li><a href="{{ url_for('become_seller') }}">Become Seller</a></li>
       <li><a href="{{ url_for('become_rider') }}">Become Rider</a></li>
@@ -64,7 +104,7 @@
       <li><a href="{{ url_for('logout') }}">Logout</a></li>
     </ul>
   </div>
-</div>
+ </div>
           {% endif %}
         </ul>
       </nav>
@@ -95,6 +135,18 @@
       }
     });
   });
-</script>
-  </body>
+ </script>
+ <script>
+  document.addEventListener("DOMContentLoaded", () => {
+    // Safely get flashed messages as JSON
+    const flashMessages = JSON.parse('{{ get_flashed_messages(with_categories=true) | tojson | safe }}');
+
+    flashMessages.forEach(([category, message]) => {
+        showNotification(message, category); // category = "success", "error", etc.
+    });
+ });
+ </script>
+ 
+
+ </body>
 </html>

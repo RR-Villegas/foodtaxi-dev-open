@@ -10,31 +10,35 @@ const modalDescription = document.getElementById("modalDescription");
 const closeBtn = document.querySelector(".close-btn");
 const modalRating = document.getElementById("modalRating");
 const modalProductId = document.getElementById("modalProductId");
+const modalQuantity = document.getElementById("modalQuantity"); // if you have quantity input
+const modalStock = document.getElementById("modalStock");
+
 
 // Attach click event to each product
 products.forEach((product) => {
   product.addEventListener("click", () => {
     // Grab data from product element
-    const img = product.querySelector("img").src;
-    const name = product.querySelector(".product-name").textContent;
-    const category = product.querySelector(".product-category").textContent;
-    const price = product.querySelector(".product-price").textContent;
-    const rating = product.querySelector(".product-rating").textContent;
-    const productId = product.dataset.id; // Make sure each product has data-id="{{ product.id }}"
+    modalImage.src = product.querySelector("img").src;
+    modalName.textContent = product.querySelector(".product-name").textContent;
+    modalCategory.textContent = product.querySelector(".product-category").textContent;
+    modalPrice.textContent = product.querySelector(".product-price").textContent;
+    modalRating.textContent = product.querySelector(".product-rating").textContent;
 
-    // Fill modal
-    modalImage.src = img;
-    modalName.textContent = name;
-    modalCategory.textContent = category;
-    modalPrice.textContent = price;
-    modalRating.textContent = rating;
-    modalDescription.textContent = "This is a placeholder description for now."; // Replace later if needed
+    // Use dataset for hidden info
+    modalDescription.textContent = product.dataset.description || "No description available";
+    modalProductId.value = product.dataset.id;
 
-    // Set product_id in hidden form field
-    modalProductId.value = productId;
+    modalStock.textContent = product.dataset.stock
+  ? `Stock: ${product.dataset.stock}`
+  : "Stock: N/A";
+
+
+    // Reset quantity if exists
+    if (modalQuantity) modalQuantity.value = 1;
 
     // Show modal
     overlay.classList.add("active");
+    overlay.style.display = "flex";
   });
 });
 
@@ -42,12 +46,6 @@ products.forEach((product) => {
 overlay.addEventListener("click", (e) => {
   if (e.target === overlay || e.target === closeBtn) {
     overlay.classList.remove("active");
+    overlay.style.display = "none";
   }
-});
-
-document.querySelectorAll(".product").forEach((product) => {
-  product.addEventListener("click", () => {
-    const overlay = document.getElementById("productOverlay");
-    overlay.style.display = "flex";
-  });
 });

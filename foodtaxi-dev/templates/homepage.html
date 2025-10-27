@@ -3,7 +3,7 @@
 {% block preload %}
 <!-- Hidden image to load the profile picture once when homepage loads -->
 {% if session.profile_image %}
-<img src="{{ url_for('get_encrypted_image', filename=session.profile_image) }}" alt="Profile" style="display: none;">
+<img src="{{ url_for('get_encrypted_image', filename=session.profile) }}" alt="Profile" style="display: none;">
 {% endif %}
 {% endblock %}
 {% block content %}
@@ -14,8 +14,9 @@
 <div class="product-scroll">
   {% if products %} 
     {% for product in products[:10] %} {# only show first 10 #}
-      <div class="product" data-id="{{ product.product_id }}">
-        <img src="{{ url_for('static', filename='images/' + product.image) }}" alt="{{ product.product_name }}" />
+      <div class="product" data-id="{{ product.product_id }}"
+      data-description="{{ product.description }}">
+        <img src="{{ url_for('static', filename='images/profile/' + product.image) }}" alt="{{ product.product_name }}" />
         <h3 class="product-name">{{ product.maker }} ({{ product.product_name }})</h3>
         <p class="product-category">Category: {{ product.category }}</p>
         <div class="product-rating">★★★★☆</div>
@@ -31,8 +32,9 @@
 <div class="recommended-products">
   {% if recommended %}
     {% for product in recommended %}
-      <div class="product" data-id="{{ product.product_id }}">
-        <img src="{{ url_for('static', filename='images/' + product.image) }}" alt="{{ product.product_name }}" />
+      <div class="product" data-id="{{ product.product_id }}"
+      data-description="{{ product.description }}">
+        <img src="{{ url_for('static', filename='images/profile/' + product.image) }}" alt="{{ product.product_name }}" />
         <h3 class="product-name">{{ product.product_name }}</h3>
         <p class="product-category">Category: {{ product.category }}</p>
         <div class="product-rating">★★★★☆</div>

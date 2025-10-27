@@ -4,6 +4,7 @@
 - [ ] Test the changes by running the app and checking seller_dashboard and become_seller
 
 ## Completed Tasks
+
 - [x] Confirm plan with user
 - [x] Add seller_id column to products table in database.sql
 - [x] Add applications and seller_stores tables to database.sql

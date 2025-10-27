@@ -1,0 +1,43 @@
+/* Container for all notifications */
+.notification-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 9999;
+}
+
+/* Individual notification card */
+.notification {
+  padding: 15px 20px;
+  border-radius: 10px;
+  color: #fff;
+  min-width: 250px;
+  max-width: 400px;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+  font-weight: 500;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  animation: slideIn 0.3s ease forwards;
+}
+
+/* Variants */
+.notification.success { background-color: #1fa14e; }
+.notification.error   { background-color: #f05d5d; }
+.notification.info    { background-color: #1a73e8; }
+
+.notification button {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(100%); }
+  to   { opacity: 1; transform: translateX(0); }
+}

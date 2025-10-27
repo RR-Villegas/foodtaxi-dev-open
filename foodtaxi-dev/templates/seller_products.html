@@ -1,0 +1,67 @@
+{% extends "navin.html" %}
+{% block title %}My Products - Food Taxi{% endblock %}
+{% block content %}
+
+<link rel="stylesheet" href="{{ url_for('static', filename='css/seller_products.css') }}">
+
+<div class="container">
+  <h2 class="page-title">My Products</h2>
+
+  <!-- Add new product button -->
+  <div class="add-product-container">
+    <a href="{{ url_for('add_product') }}" class="start-selling-btn">+ Add New Product</a>
+  </div>
+
+  {% if products %}
+    <div class="product-grid">
+      {% for product in products %}
+        <div class="product-card">
+          <!-- Product Image -->
+          <img src="{{ url_for('static', filename='images/profile/' + product.image) }}" 
+               alt="{{ product.product_name }}" 
+               class="product-image">
+
+          <!-- Product Info -->
+          <div class="product-info">
+            <h3 class="product-name">{{ product.product_name }}</h3>
+            <p class="product-category">{{ product.category }}</p>
+            <p class="product-price">₱{{ "%.2f"|format(product.price) }}</p>
+            <p class="product-stock">Stock: {{ product.stock_quantity }}</p>
+          </div>
+
+          <!-- Product Actions: Increase / Decrease / Edit / Remove -->
+          <div class="product-actions">
+            <!-- Decrease Stock -->
+            <form action="{{ url_for('decrease_product', product_id=product.product_id) }}" method="post" style="display:inline;">
+              <button type="submit" class="qty-btn">-</button>
+            </form>
+
+
+
+
+
+            <!-- Increase Stock -->
+            <form action="{{ url_for('increase_product', product_id=product.product_id) }}" method="post" style="display:inline;">
+              <button type="submit" class="qty-btn">+</button>
+            </form>
+
+            
+
+            <!-- Edit Product -->
+            <a href="{{ url_for('edit_product', product_id=product.product_id) }}" class="edit-btn">Edit</a>
+
+            <!-- Remove Product -->
+            <form action="{{ url_for('remove_product', product_id=product.product_id) }}" method="post" style="display:inline;">
+              <button type="submit" class="delete-btn">Remove</button>
+            </form>
+          </div>
+
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="no-products">You haven’t added any products yet.</p>
+  {% endif %}
+</div>
+
+{% endblock %}

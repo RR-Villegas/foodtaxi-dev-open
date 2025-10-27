@@ -19,7 +19,7 @@
       <!-- Image Wrapper -->
       <div class="cart-image-wrapper">
         <img
-          src="{{ url_for('static', filename='images/' ~ item.image) }}"
+          src="{{ url_for('static', filename='images/profile/' ~ item.image) }}"
           alt="{{ item.product_name }}"
           class="cart-image"
           width="150"
@@ -30,10 +30,10 @@
       <!-- Details -->
       <div class="cart-details">
         <h3>{{ item.product_name }}</h3>
-        <p>Price: ${{ "%.2f"|format(item.price_each) }}</p>
+        <p>Price:  ₱{{ "%.2f"|format(item.price_each) }}</p>
         
         <!-- Quantity Controls -->
-        <div class="quantity-controls">
+        <div class="quantity-controls" data-stock="{{ item.stock_quantity }}">
           <form action="{{ url_for('update_cart') }}" method="post" style="display:inline;">
             <input type="hidden" name="product_id" value="{{ item.product_id }}">
             <input type="hidden" name="action" value="decrease">
@@ -41,6 +41,7 @@
           </form>
 
           <span class="quantity-display">{{ item.quantity }}</span>
+          
 
           <form action="{{ url_for('update_cart') }}" method="post" style="display:inline;">
             <input type="hidden" name="product_id" value="{{ item.product_id }}">
@@ -68,23 +69,51 @@
 
     <div class="summary-item">
       <span>Subtotal:</span>
-      <span>${{ "%.2f"|format(total) }}</span>
+      <span> ₱{{ "%.2f"|format(total) }}</span>
     </div>
 
     <div class="summary-item">
       <span>Delivery Fee:</span>
-      <span>$0.00</span>
+      <span> ₱0.00</span>
     </div>
 
     <div class="summary-item total">
       <span>Total:</span>
-      <span>${{ "%.2f"|format(total) }}</span>
+      <span> ₱{{ "%.2f"|format(total) }}</span>
     </div>
 
-    <button class="checkout-btn">Proceed to Checkout</button>
+    <form action="{{ url_for('checkout') }}" method="POST">
+    <button type="submit" class="checkout-btn">Proceed to Checkout</button>
+    </form>
+
   </div>
 
 </div>
+
+{% block scripts %}
+<script>
+  // Quantity control JS here
+  document.addEventListener("DOMContentLoaded", () => {
+    const qtyForms = document.querySelectorAll(".quantity-controls form");
+
+    qtyForms.forEach((form) => {
+      form.addEventListener("submit", (e) => {
+        const action = form.querySelector('input[name="action"]').value;
+        const quantityDisplay = form.parentElement.querySelector(".quantity-display");
+        let quantity = parseInt(quantityDisplay.textContent);
+
+        const maxStock = parseInt(form.dataset.stock) || 99; // optional max stock
+
+        if (action === "increase" && quantity >= maxStock) {
+          e.preventDefault();
+          alert("Cannot exceed available stock!");
+        }
+      });
+    });
+  });
+</script>
+{% endblock %}
+
 
 {% else %}
 <p class="empty-cart">Your cart is empty.</p>
