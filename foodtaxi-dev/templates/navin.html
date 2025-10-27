@@ -1,110 +1,65 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="This is my first webpage" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/notification.css') }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Food Taxi - Your Online Food Marketplace">
+  <title>{% block title %}Food Taxi{% endblock %}</title>
 
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
-    />
-    
-    <title>{% block title %}Food Taxi{% endblock %}</title>
-    <link
-      rel="stylesheet"
-      href="{{ url_for('static', filename='css/style.css') }}"
-    />
-    <link
-      rel="stylesheet"
-      href="{{ url_for('static', filename='css/cart.css') }}"
-    />
-    <link 
-      rel="stylesheet" 
-      href="{{ url_for('static', filename='css/notification.css') }}">
-    />
-    <link
-      rel="stylesheet"
-      href="{{ url_for('static', filename='css/category.css') }}"
-    />
-    <link
-      rel="icon"
-      href="{{ url_for('static', filename='favicon.ico') }}"
-      type="image/x-icon"
-    />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Roboto&display=swap"
-    />
-  </head>
-  <body>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/cart.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/notification.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/category.css') }}">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto&display=swap">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+</head>
+<body>
+  <div id="notification-container" class="notification-container"></div>
 
-    <!-- Global Notification Container -->
-   <div id="notification-container" class="notification-container"></div>
+  <script src="{{ url_for('static', filename='js/notification.js') }}"></script>
 
-
-    
-
- <!-- Notification JS -->
-
-
-
-   <script src="{{ url_for('static', filename='js/notification.js') }}"></script>
-
-
-
-
-
-
-    <header>
+  <header>
       <nav>
         <a href="{{ url_for('reload') }}" class="title-btn">Food Taxi</a>
 
         <ul>
+          {% if session.user_type == 'seller' %}
+          <li class="nav-item">
+            <a href="{{ url_for('seller_products') }}" class="nav-link">My Products</a>
+          </li>
+          {% endif %}
 
-          
-          <!-- My Products button (left of Cart) -->
-        {% if session.user_type == 'seller' %}
-        <li class="nav-item">
-         <a href="{{ url_for('seller_products') }}" class="nav-link">My Products</a>
-        </li>
-        
-        {% endif %}
-
-
-        <!-- Cart button -->
-        <li class="cart-link">
-          <a href="{{ url_for('cart') }}" class="cartbutton">
-            <i class="fas fa-shopping-cart"></i>
-            <span class="cart-badge">{{ cart_quantity }}</span>
-          </a>
-        </li>
+          <li class="cart-link">
+            <a href="{{ url_for('cart') }}" class="cartbutton">
+              <i class="fas fa-shopping-cart"></i>
+              <span class="cart-badge">{{ cart_quantity }}</span>
+            </a>
+          </li>
 
           {% if session.first_name %}
           <div class="user-menu">
-  <span class="user-greeting">Hello, <strong>{{ session['first_name'] }}</strong>!</span>
-  <div class="dropdown">
-    <button class="dropdown-btn" id="dropdownToggle">
-      <img src="{{ url_for('get_encrypted_image', filename=session.profile_image) if session.profile_image else url_for('static', filename='images/default-profile.png') }}" alt="Profile" style="width: 30px; height: 30px; border-radius: 50%; object-fit: cover;">
-    </button>
-    <ul class="dropdown-content" id="dropdownMenu">
-      <li><a href="{{ url_for('profile') }}">Profile</a></li>
-      <li><a href="{{ url_for('settings') }}">Settings</a></li>
-      <li><a href="{{ url_for('orders') }}">My Orders</a></li>
-      
-      {% if user_type == 'buyer' %}
-      <li><a href="{{ url_for('become_seller') }}">Become Seller</a></li>
-      <li><a href="{{ url_for('become_rider') }}">Become Rider</a></li>
-      {% elif user_type == 'seller' %}
-      <li><a href="{{ url_for('seller_dashboard') }}">Seller Dashboard</a></li>
-      {% elif user_type == 'rider' %}
-      <li><a href="{{ url_for('rider_dashboard') }}">Rider Dashboard</a></li>
-      {% endif %}
-      <li><a href="{{ url_for('logout') }}">Logout</a></li>
-    </ul>
-  </div>
- </div>
+            <span class="user-greeting">Hello, <strong>{{ session['first_name'] }}</strong>!</span>
+            <div class="dropdown">
+              <button class="dropdown-btn" id="dropdownToggle">
+                <img src="{{ url_for('get_encrypted_image', filename=session.profile_image) if session.profile_image else url_for('static', filename='images/default-profile.png') }}" alt="Profile" style="width: 30px; height: 30px; border-radius: 50%; object-fit: cover;">
+              </button>
+              <ul class="dropdown-content" id="dropdownMenu">
+                <li><a href="{{ url_for('profile') }}">Profile</a></li>
+                <li><a href="{{ url_for('settings') }}">Settings</a></li>
+                <li><a href="{{ url_for('orders') }}">My Orders</a></li>
+                {% if session.user_type == 'buyer' %}
+                <li><a href="{{ url_for('become_seller') }}">Become Seller</a></li>
+                <li><a href="{{ url_for('become_rider') }}">Become Rider</a></li>
+                {% elif session.user_type == 'seller' %}
+                <li><a href="{{ url_for('seller_dashboard') }}">Seller Dashboard</a></li>
+                {% elif session.user_type == 'rider' %}
+                <li><a href="{{ url_for('rider_dashboard') }}">Rider Dashboard</a></li>
+                {% endif %}
+                <li><a href="{{ url_for('logout') }}">Logout</a></li>
+              </ul>
+            </div>
+          </div>
           {% endif %}
         </ul>
       </nav>
@@ -118,34 +73,34 @@
       <p>&copy; 2025 Food Taxi. All rights reserved.</p>
     </footer>
 
-    <script>
-  document.addEventListener("DOMContentLoaded", function () {
-    const toggleBtn = document.getElementById("dropdownToggle");
-    const dropdown = document.querySelector(".dropdown");
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const toggleBtn = document.getElementById("dropdownToggle");
+      const dropdown = document.querySelector(".dropdown");
 
-    toggleBtn.addEventListener("click", function (e) {
-      e.stopPropagation();
-      dropdown.classList.toggle("active");
+      toggleBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        dropdown.classList.toggle("active");
+      });
+
+      // Close dropdown if user clicks outside
+      document.addEventListener("click", function (e) {
+        if (!dropdown.contains(e.target)) {
+          dropdown.classList.remove("active");
+        }
+      });
     });
+  </script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      // Safely get flashed messages as JSON
+      const flashMessages = JSON.parse('{{ get_flashed_messages(with_categories=true) | tojson | safe }}');
 
-    // Close dropdown if user clicks outside
-    document.addEventListener("click", function (e) {
-      if (!dropdown.contains(e.target)) {
-        dropdown.classList.remove("active");
-      }
-    });
-  });
- </script>
- <script>
-  document.addEventListener("DOMContentLoaded", () => {
-    // Safely get flashed messages as JSON
-    const flashMessages = JSON.parse('{{ get_flashed_messages(with_categories=true) | tojson | safe }}');
-
-    flashMessages.forEach(([category, message]) => {
+      flashMessages.forEach(([category, message]) => {
         showNotification(message, category); // category = "success", "error", etc.
+      });
     });
- });
- </script>
+  </script>
  
 
  </body>
