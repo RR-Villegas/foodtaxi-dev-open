@@ -21,11 +21,12 @@ block content %}
       alt="{{ product.product_name }}"
     />
     <h3 class="product-name">
-      {{ product.maker }} ({{ product.product_name }})
+     {{ product.product_name }}
+      <p class="product-maker">{{ product.maker }}</p>
     </h3>
     <p class="product-category">Category: {{ product.category }}</p>
     <div class="product-rating">★★★★☆</div>
-    <p class="product-price">${{ "%.2f"|format(product.price) }}</p>
+    <p class="product-price"> ₱{{ "%.2f"|format(product.price) }}</p>
   </div>
   {% endfor %}
 </div>
@@ -42,7 +43,7 @@ block content %}
     <h3 class="product-name">{{ product.product_name }}</h3>
     <p class="product-category">Category: {{ product.category }}</p>
     <div class="product-rating">★★★★☆</div>
-    <p class="product-price">${{ "%.2f"|format(product.price) }}</p>
+    <p class="product-price">₱{{ "%.2f"|format(product.price) }}</p>
   </div>
   {% endfor %} {% else %}
   <p>No recommended products yet.</p>

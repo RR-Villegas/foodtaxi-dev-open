@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+</head>
+<body>
+    <div class="admin-container">
+
+        <!-- ✅ Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <h2>FoodWeb</h2>
+                <p class="role">Admin Panel</p>
+            </div>
+            <nav class="menu">
+                <a href="{{ url_for('admin_dashboard') }}" class="active">Dashboard</a>
+                <a href="#">Accounts</a>
+                <a href="#">Sellers</a>
+                <a href="#">Products</a>
+                <a href="#">Orders</a>
+                <a href="#">Reports</a>
+                <a href="{{ url_for('logout') }}" class="logout">Logout</a>
+            </nav>
+        </aside>
+
+        <!-- ✅ Main Content -->
+        <main class="content">
+            <header class="header">
+                <h1>Dashboard Overview</h1>
+                <p>Monitor platform activity and account stats in real-time.</p>
+            </header>
+
+            <!-- ✅ Statistics Section -->
+            <section class="stats">
+                <div class="card">
+                    <h2>{{ total_users }}</h2>
+                    <p>Total Users</p>
+                </div>
+
+                <div class="card">
+                    <h2>{{ total_sellers }}</h2>
+                    <p>Total Sellers</p>
+                </div>
+
+                <div class="card">
+                    <h2>{{ total_products }}</h2>
+                    <p>Total Products</p>
+                </div>
+
+                <div class="card">
+                    <h2>{{ total_orders }}</h2>
+                    <p>Total Orders</p>
+                </div>
+            </section>
+
+            <!-- ✅ Quick Info Section -->
+            <section class="info">
+                <h3>System Summary</h3>
+                <table>
+                    <tr>
+                        <th>Database Table</th>
+                        <th>Record Count</th>
+                    </tr>
+                    <tr>
+                        <td>Accounts</td>
+                        <td>{{ total_users }}</td>
+                    </tr>
+                    <tr>
+                        <td>Products</td>
+                        <td>{{ total_products }}</td>
+                    </tr>
+                    <tr>
+                        <td>Orders</td>
+                        <td>{{ total_orders }}</td>
+                    </tr>
+                </table>
+            </section>
+        </main>
+    </div>
+</body>
+</html>
