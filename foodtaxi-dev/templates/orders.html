@@ -1,7 +1,7 @@
 {% extends "navin.html" %}
 {% block title %}My Orders{% endblock %}
 
-{% block styles %}
+{% block preload %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/orders.css') }}">
 {% endblock %}
 
@@ -16,9 +16,15 @@
     <!-- Order Header -->
     <div class="order-header">
       <h3>Order #{{ order.order_id }}</h3>
-      <p>Status: <span class="order-status">{{ order.order_status }}</span></p>
+      <p>Status: <span class="order-status">{{ order.order_status|capitalize }}</span></p>
       <p>Payment Method: {{ order.payment_method|upper }}</p>
       <p>Order Date: {{ order.order_date.strftime('%b %d, %Y %I:%M %p') }}</p>
+      
+      {% if order.order_status in ['pending', 'processing'] %}
+      <form action="{{ url_for('cancel_order', order_id=order.order_id) }}" method="POST" class="cancel-form">
+        <button type="submit" class="cancel-btn">Cancel Order</button>
+      </form>
+      {% endif %}
     </div>
 
     <!-- Order Items -->
@@ -28,23 +34,14 @@
         <!-- Image Wrapper -->
         <div class="order-item-image-wrapper">
           <img src="{{ url_for('static', filename='images/profile/' ~ item.image) }}" 
-               alt="{{ item.product_name }}" class="order-item-image" >
-               
-               
-               
-          
-          
+               alt="{{ item.product_name }}" class="order-item-image">
         </div>
 
         <!-- Details Card -->
         <div class="order-item-details-card">
           <h4>{{ item.product_name }}</h4>
-          {% if item.maker %}
-          <p class="product-maker">by {{ item.maker }}</p>
-          {% endif %}
-          {% if item.description %}
-          <p class="product-description">{{ item.description }}</p>
-          {% endif %}
+          {% if item.maker %}<p class="product-maker">by {{ item.maker }}</p>{% endif %}
+          {% if item.description %}<p class="product-description">{{ item.description }}</p>{% endif %}
           <p>Price: ₱{{ "%.2f"|format(item.price_each) }}</p>
           <p>Quantity: {{ item.quantity }}</p>
           <p>Subtotal: ₱{{ "%.2f"|format(item.subtotal) }}</p>
