@@ -2,14 +2,15 @@ body {
   margin: 0;
   padding: 0;
   font-family: 'Segoe UI', sans-serif;
-  background: url("../images/signup_pic.jpg") no-repeat center center/cover;
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 100vh;
-  background-color: #000; /* fallback */
-  position: relative;
+  min-height: 100vh;
+
+  /* Example gradient: lime → green */
+  background: linear-gradient(135deg, #b4ec51 0%, #429321 100%);
 }
+
 
 /* Container and layout */
 .container {
@@ -156,14 +157,6 @@ form button:active {
   text-align: center;
   margin-bottom: 15px;
   font-size: 14px;
-}
-
-.flash-message.success {
-  background-color: #2ecc71;
-}
-
-.flash-message.error {
-  background-color: #e74c3c;
 }
 
 /* Responsive */
