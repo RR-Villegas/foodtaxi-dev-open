@@ -526,15 +526,16 @@ def orders():
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
 
+    # Fetch all orders except pending (cart) orders safely
     cursor.execute("""
         SELECT *
         FROM orders
-        WHERE account_id = %s
+        WHERE account_id = %s AND LOWER(order_status) != 'pending'
         ORDER BY order_date DESC
     """, (account_id,))
     orders = cursor.fetchall()
 
-    # Fetch all items for each order
+    # For each order, fetch its items with product details
     for order in orders:
         cursor.execute("""
             SELECT oi.*, p.product_name, p.maker, p.description, p.image
@@ -548,6 +549,9 @@ def orders():
     db.close()
 
     return render_template("orders.html", orders=orders)
+
+
+
 
 @app.route("/cancel_order/<int:order_id>", methods=["POST"])
 @login_required
