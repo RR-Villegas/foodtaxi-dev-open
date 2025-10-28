@@ -84,7 +84,7 @@ def guest_only(f):
     return decorated_function
 
 
-# ✅ NEW — admin-only decorator
+# ✅ Admin-only decorator
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -92,17 +92,52 @@ def admin_required(f):
         if not account_id:
             flash("Please log in to continue.", "warning")
             return redirect(url_for('login'))
+
         db = get_db_connection()
         cursor = db.cursor(dictionary=True)
         cursor.execute("SELECT user_type FROM accounts WHERE account_id = %s", (account_id,))
         user = cursor.fetchone()
         cursor.close()
         db.close()
+
         if not user or user['user_type'] != 'admin':
             flash("Access denied: Admins only.", "danger")
             return redirect(url_for('homepage'))
+
         return f(*args, **kwargs)
     return decorated_function
+
+
+# ✅ Admin Dashboard route
+@app.route('/admin/dashboard')
+@admin_required
+def admin_dashboard():
+    db = get_db_connection()
+    cursor = db.cursor(dictionary=True)
+
+    cursor.execute("SELECT COUNT(*) AS total_users FROM accounts")
+    total_users = cursor.fetchone()['total_users']
+
+    cursor.execute("SELECT COUNT(*) AS total_sellers FROM accounts WHERE user_type = 'seller'")
+    total_sellers = cursor.fetchone()['total_sellers']
+
+    cursor.execute("SELECT COUNT(*) AS total_products FROM products")
+    total_products = cursor.fetchone()['total_products']
+
+    cursor.execute("SELECT COUNT(*) AS total_orders FROM orders")
+    total_orders = cursor.fetchone()['total_orders']
+
+    cursor.close()
+    db.close()
+
+    return render_template(
+        'admin_dashboard.html',
+        total_users=total_users,
+        total_sellers=total_sellers,
+        total_products=total_products,
+        total_orders=total_orders
+    )
+
 
 
 # ===============================
@@ -201,7 +236,7 @@ def login():
 
                 # Redirect by role
                 if user['user_type'] == 'admin':
-                    return redirect(url_for('admin'))
+                    return redirect(url_for('admin_dashboard'))
                 elif user['user_type'] == 'seller':
                     return redirect(url_for('seller_dashboard'))
                 else:
@@ -318,14 +353,13 @@ def add_to_cart():
         db.close()
         return "Product not found", 404
 
-   # Check stock
     if quantity > product["stock_quantity"]:
-     flash("Not enough stock available.", "error")
-     cursor.close()
-     db.close()
-     return redirect(url_for("homepage"))
+        flash("Not enough stock available.", "error")
+        cursor.close()
+        db.close()
+        return redirect(url_for("homepage"))
 
-    # Check if the user already has a pending order
+    # Check for existing pending order
     cursor.execute("""
         SELECT order_id FROM orders 
         WHERE account_id = %s AND order_status = 'pending'
@@ -335,7 +369,7 @@ def add_to_cart():
     if order:
         order_id = order["order_id"]
     else:
-        # Create new order for this user
+        # Create new pending order
         cursor.execute("""
             INSERT INTO orders (account_id, order_status, total_price)
             VALUES (%s, 'pending', 0.00)
@@ -343,27 +377,11 @@ def add_to_cart():
         db.commit()
         order_id = cursor.lastrowid
 
-    # Check if product already in order_items
+    # Always insert new row (allow stacking)
     cursor.execute("""
-        SELECT * FROM order_items
-        WHERE order_id = %s AND product_id = %s
-    """, (order_id, product_id))
-    existing_item = cursor.fetchone()
-
-    if existing_item:
-        # Update quantity and price
-        new_qty = existing_item["quantity"] + quantity
-        cursor.execute("""
-            UPDATE order_items
-            SET quantity = %s, price_each = %s
-            WHERE item_id = %s
-        """, (new_qty, product["price"], existing_item["item_id"]))
-    else:
-        # Add new item
-        cursor.execute("""
-            INSERT INTO order_items (order_id, product_id, quantity, price_each)
-            VALUES (%s, %s, %s, %s)
-        """, (order_id, product_id, quantity, product["price"]))
+        INSERT INTO order_items (order_id, product_id, quantity, price_each)
+        VALUES (%s, %s, %s, %s)
+    """, (order_id, product_id, quantity, product["price"]))
 
     # Update order total
     cursor.execute("""
@@ -395,7 +413,6 @@ def cart():
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
 
-    # Get pending order items
     cursor.execute("""
         SELECT o.order_id, oi.*, p.product_name, p.image
         FROM orders o
@@ -411,6 +428,7 @@ def cart():
     db.close()
 
     return render_template("cart.html", cart=items, total=total)
+
 
 
 # ===============================
@@ -508,7 +526,6 @@ def orders():
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
 
-    # Fetch all orders of the user
     cursor.execute("""
         SELECT *
         FROM orders
@@ -517,7 +534,7 @@ def orders():
     """, (account_id,))
     orders = cursor.fetchall()
 
-    # For each order, fetch its items with product details
+    # Fetch all items for each order
     for order in orders:
         cursor.execute("""
             SELECT oi.*, p.product_name, p.maker, p.description, p.image
@@ -532,7 +549,53 @@ def orders():
 
     return render_template("orders.html", orders=orders)
 
+@app.route("/cancel_order/<int:order_id>", methods=["POST"])
+@login_required
+def cancel_order(order_id):
+    account_id = session.get("account_id")
 
+    db = get_db_connection()
+    cursor = db.cursor(dictionary=True)
+
+    # Verify the order belongs to the user and is cancelable
+    cursor.execute("""
+        SELECT * FROM orders
+        WHERE order_id = %s AND account_id = %s AND order_status IN ('pending', 'processing')
+    """, (order_id, account_id))
+    order = cursor.fetchone()
+
+    if not order:
+        flash("Order cannot be canceled.", "error")
+        cursor.close()
+        db.close()
+        return redirect(url_for("orders"))
+
+    # Return stock quantities
+    cursor.execute("""
+        SELECT product_id, quantity FROM order_items
+        WHERE order_id = %s
+    """, (order_id,))
+    items = cursor.fetchall()
+    for item in items:
+        cursor.execute("""
+            UPDATE products
+            SET stock_quantity = stock_quantity + %s
+            WHERE product_id = %s
+        """, (item["quantity"], item["product_id"]))
+
+    # Mark order as canceled
+    cursor.execute("""
+        UPDATE orders
+        SET order_status = 'cancelled', last_updated = NOW()
+        WHERE order_id = %s
+    """, (order_id,))
+
+    db.commit()
+    cursor.close()
+    db.close()
+
+    flash("Order has been canceled and stock restored.", "success")
+    return redirect(url_for("orders"))
 
 
 
@@ -542,10 +605,10 @@ def checkout():
     account_id = session.get("account_id")
 
     db = get_db_connection()
-    cursor = db.cursor()
+    cursor = db.cursor(dictionary=True)
 
     try:
-        # Fetch the pending order for this account
+        # Fetch pending order
         cursor.execute("""
             SELECT order_id, total_price
             FROM orders
@@ -559,9 +622,9 @@ def checkout():
             flash("You have no items to checkout.", "error")
             return redirect(url_for("cart"))
 
-        order_id = order[0]
+        order_id = order["order_id"]
 
-        # Optional: Check stock before confirming checkout
+        # Check stock for all items
         cursor.execute("""
             SELECT oi.product_id, oi.quantity, p.stock_quantity
             FROM order_items oi
@@ -569,20 +632,20 @@ def checkout():
             WHERE oi.order_id = %s
         """, (order_id,))
         items = cursor.fetchall()
-        for product_id, quantity, stock in items:
-            if quantity > stock:
+        for item in items:
+            if item["quantity"] > item["stock_quantity"]:
                 flash("Cannot checkout: some items exceed available stock.", "error")
                 return redirect(url_for("cart"))
 
-        # Update stock quantities
-        for product_id, quantity, stock in items:
+        # Update stock
+        for item in items:
             cursor.execute("""
                 UPDATE products
                 SET stock_quantity = stock_quantity - %s
                 WHERE product_id = %s
-            """, (quantity, product_id))
+            """, (item["quantity"], item["product_id"]))
 
-        # Mark order as processing (or whatever status)
+        # Mark order as processing
         cursor.execute("""
             UPDATE orders
             SET order_status = 'processing', last_updated = NOW()
@@ -1053,6 +1116,64 @@ def edit_product(product_id):
     product = cursor.fetchone()
     cursor.close()
     return render_template('edit_product.html', product=product)
+
+@app.route('/seller/income')
+def seller_income():
+    seller_id = session.get('account_id')
+    if not seller_id:
+        flash("Please log in to continue.", "warning")
+        return redirect(url_for('login'))
+
+    db = get_db_connection()
+    cursor = db.cursor(dictionary=True)
+
+    # ✅ Total income from all orders (processing + delivered)
+    cursor.execute("""
+        SELECT IFNULL(SUM(oi.subtotal), 0) AS total_income
+        FROM order_items oi
+        JOIN products p ON oi.product_id = p.product_id
+        JOIN orders o ON oi.order_id = o.order_id
+        WHERE p.seller_id = %s
+    """, (seller_id,))
+    total_income = cursor.fetchone()['total_income'] or 0.0
+
+    # ✅ Delivered income (completed orders)
+    cursor.execute("""
+        SELECT IFNULL(SUM(oi.subtotal), 0) AS delivered_income
+        FROM order_items oi
+        JOIN products p ON oi.product_id = p.product_id
+        JOIN orders o ON oi.order_id = o.order_id
+        WHERE p.seller_id = %s AND o.order_status = 'delivered'
+    """, (seller_id,))
+    delivered_income = cursor.fetchone()['delivered_income'] or 0.0
+
+    # ✅ Pending income (processing or not yet delivered)
+    pending_income = total_income - delivered_income
+
+    # ✅ Recent orders
+    cursor.execute("""
+        SELECT o.order_id, o.order_status, o.order_date, p.product_name,
+               oi.quantity, oi.price_each, oi.subtotal
+        FROM order_items oi
+        JOIN products p ON oi.product_id = p.product_id
+        JOIN orders o ON oi.order_id = o.order_id
+        WHERE p.seller_id = %s
+        ORDER BY o.order_date DESC
+        LIMIT 10
+    """, (seller_id,))
+    recent_orders = cursor.fetchall()
+
+    cursor.close()
+    db.close()
+
+    return render_template(
+        'seller_income.html',
+        total_income=total_income,
+        delivered_income=delivered_income,
+        pending_income=pending_income,
+        recent_orders=recent_orders
+    )
+
 
 
 @app.route('/update_profile_picture', methods=['POST'])
