@@ -13,7 +13,6 @@
 <div class="orders-container">
 
   {% for order in orders %}
-    {% if order.order_status|lower != 'pending' %}
     <div class="order-card">
         <!-- Order Header -->
         <div class="order-header">
@@ -21,9 +20,9 @@
           <p>Status: <span class="order-status {{ order.order_status|lower }}">{{ order.order_status }}</span></p>
           <p>Payment Method: {{ order.payment_method|upper }}</p>
           <p>Order Date: {{ order.order_date.strftime('%b %d, %Y %I:%M %p') }}</p>
-          
-          <!-- Cancel Order button (if processing/pending) -->
-          {% if order.order_status|lower in ['pending', 'processing'] %}
+
+          <!-- Cancel button only if order is processing -->
+          {% if order.order_status|lower == 'processing' %}
           <form action="{{ url_for('cancel_order', order_id=order.order_id) }}" method="POST" class="cancel-form">
               <button type="submit" class="cancel-btn">Cancel Order</button>
           </form>
@@ -56,7 +55,6 @@
           Total Price: ₱{{ "%.2f"|format(order.total_price) }}
         </div>
     </div>
-    {% endif %}
   {% endfor %}
 
 </div>
