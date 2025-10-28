@@ -526,12 +526,14 @@ def orders():
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
 
-    # Fetch all orders except pending (cart) orders safely
+    # Fetch all orders and put cancelled ones at the bottom
     cursor.execute("""
         SELECT *
         FROM orders
-        WHERE account_id = %s AND LOWER(order_status) != 'pending'
-        ORDER BY order_date DESC
+        WHERE account_id = %s
+        ORDER BY 
+            CASE WHEN LOWER(order_status) = 'cancelled' THEN 1 ELSE 0 END ASC,
+            order_date DESC
     """, (account_id,))
     orders = cursor.fetchall()
 
@@ -549,6 +551,7 @@ def orders():
     db.close()
 
     return render_template("orders.html", orders=orders)
+
 
 
 
