@@ -358,6 +358,12 @@ def add_to_cart():
         cursor.close()
         db.close()
         return redirect(url_for("homepage"))
+    
+    if product["seller_id"] == account_id:
+     flash("You cannot buy your own product.", "error")
+     cursor.close()
+     db.close()
+     return redirect(request.referrer or url_for("homepage"))
 
     # Check for existing pending order
     cursor.execute("""
