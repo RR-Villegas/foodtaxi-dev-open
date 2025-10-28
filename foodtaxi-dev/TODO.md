@@ -1,4 +1,11 @@
+## Roadmap
+High-level goals or milestones for the project:
+
+
+
 # TODO: Update
+Tasks that need to be done (specific features or bug fixes): 
+
 
 ## Pending Tasks
 - [ ] Test the changes by running the app and checking seller_dashboard and become_seller
