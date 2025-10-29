@@ -1,3 +1,7 @@
+/* ======================= */
+/* Existing CSS patched to support new signup form */
+/* ======================= */
+
 body {
   margin: 0;
   padding: 0;
@@ -6,11 +10,8 @@ body {
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-
-  /* Example gradient: lime → green */
   background: linear-gradient(135deg, #b4ec51 0%, #429321 100%);
 }
-
 
 /* Container and layout */
 .container {
@@ -74,8 +75,9 @@ body {
   flex: 1;
 }
 
-/* Inputs */
-form input {
+/* Inputs & dropdowns */
+form input,
+form select {
   width: 100%;
   padding: 12px;
   margin-bottom: 15px;
@@ -87,10 +89,26 @@ form input {
   transition: background 0.3s, box-shadow 0.3s;
 }
 
-form input:focus {
+form input:focus,
+form select:focus {
   outline: none;
   background-color: #333;
   box-shadow: 0 0 0 2px #f39c12;
+}
+
+/* File inputs (custom styling optional) */
+form input[type="file"] {
+  padding: 6px 12px;
+  background-color: #2a2a2a;
+}
+
+/* Seller & Rider sections */
+#sellerFields,
+#riderFields {
+  margin-bottom: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 /* Password field icons */
