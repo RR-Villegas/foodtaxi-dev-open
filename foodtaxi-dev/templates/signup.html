@@ -21,38 +21,65 @@
         <div class="form-section">
           <h2>Sign Up</h2>
 
-          {% with messages = get_flashed_messages(with_categories=true) %} {% if
-          messages %} {% for category, message in messages %}
-          <div class="flash-message {{ category }}">{{ message }}</div>
-          {% endfor %} {% endif %} {% endwith %}
+          {% with messages = get_flashed_messages(with_categories=true) %} 
+          {% if messages %} 
+            {% for category, message in messages %}
+              <div class="flash-message {{ category }}">{{ message }}</div>
+            {% endfor %} 
+          {% endif %} 
+          {% endwith %}
 
-          <form method="POST" action="{{ url_for('signup') }}" autocomplete="off">
-  <div class="name-fields">
-    <input
-      type="text"
-      name="first_name"
-      placeholder="First Name"
-      required
-    />
-    <input
-      type="text"
-      name="last_name"
-      placeholder="Last Name"
-      required
-    />
-  </div>
+          <form method="POST" action="{{ url_for('signup') }}" autocomplete="off" enctype="multipart/form-data">
+            
+            <!-- User Type Selection -->
+            <label for="user_type">I am a:</label>
+            <select name="user_type" id="user_type" required>
+              <option value="buyer">Buyer</option>
+              <option value="seller">Seller</option>
+              <option value="rider">Rider</option>
+            </select>
 
-  <input type="email" name="email" placeholder="Email" required />
-  <input type="password" name="password" placeholder="Password" required />
-  <input
-    type="password"
-    name="confirm_password"
-    placeholder="Confirm Password"
-    required
-  />
-  <button type="submit">Sign Up</button>
-</form>
+            <!-- Name Fields -->
+            <div class="name-fields">
+              <input type="text" name="first_name" placeholder="First Name" required />
+              <input type="text" name="last_name" placeholder="Last Name" required />
+            </div>
 
+            <!-- Common Fields -->
+            <input type="email" name="email" placeholder="Email" required />
+            <input type="password" name="password" placeholder="Password" required />
+            <input type="password" name="confirm_password" placeholder="Confirm Password" required />
+            <input type="text" name="mobile_number" placeholder="Mobile Number" />
+
+            <!-- Location Dropdowns -->
+            <label for="province">Province</label>
+            <select name="province" id="province" required>
+              <option value="">Select Province</option>
+            </select>
+
+            <label for="town">Town / City</label>
+            <select name="town" id="town" required>
+              <option value="">Select Town</option>
+            </select>
+
+            <!-- Seller-specific fields -->
+            <div id="sellerFields" style="display:none;">
+              <input type="text" name="store_name" placeholder="Store Name" />
+              <input type="text" name="business_address" placeholder="Business Address" />
+              <label for="business_permit">Upload Business Permit</label>
+              <input type="file" name="business_permit" id="business_permit" />
+            </div>
+
+            <!-- Rider-specific fields -->
+            <div id="riderFields" style="display:none;">
+              <input type="text" name="vehicle_type" placeholder="Vehicle Type" />
+              <label for="license_upload">Upload Driver’s License / ID</label>
+              <input type="file" name="license_upload" id="license_upload" />
+            </div>
+
+            <!-- Submit Button -->
+            <button type="submit">Sign Up</button>
+          </form>
 
           <p class="register-text">
             Already have an account?
