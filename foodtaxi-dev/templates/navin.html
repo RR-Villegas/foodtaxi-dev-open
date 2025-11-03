@@ -48,15 +48,13 @@
                 <li><a href="{{ url_for('profile') }}">Profile</a></li>
                 <li><a href="{{ url_for('settings') }}">Settings</a></li>
                 <li><a href="{{ url_for('orders') }}">My Orders</a></li>
-                {% if session.user_type == 'buyer' %}
-                <li><a href="{{ url_for('become_seller') }}">Become Seller</a></li>
-                <li><a href="{{ url_for('become_rider') }}">Become Rider</a></li>
-                {% elif session.user_type == 'seller' %}
-                <li><a href="{{ url_for('seller_dashboard') }}">Seller Dashboard</a></li>
-                {% elif session.user_type == 'rider' %}
-                <li><a href="{{ url_for('rider_dashboard') }}">Rider Dashboard</a></li>
-                {% endif %}
-                <li><a href="{{ url_for('logout') }}">Logout</a></li>
+                
+               
+                <li>
+                    <form action="{{ url_for('logout') }}" method="POST">
+                      <button type="submit">Logout</button>
+                    </form>
+                </li>
               </ul>
             </div>
           </div>

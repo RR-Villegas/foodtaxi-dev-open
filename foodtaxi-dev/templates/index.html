@@ -17,7 +17,7 @@ block content %}
   {% for product in products[:10] %} {# only first 10 #}
   <div class="product" data-id="{{ product.product_id }}" data-description="{{ product.description }}">
     <img
-      src="{{ url_for('static', filename='images/profile/' ~ product.image) }}"
+      
       alt="{{ product.product_name }}"
     />
     <h3 class="product-name">
@@ -37,7 +37,7 @@ block content %}
   <div class="product" data-id="{{ product.product_id }}"
    data-description="{{ product.description }}">
     <img
-      src="{{ url_for('static', filename='images/profile/' + product.image) }}"
+      
       alt="{{ product.product_name }}"
     />
     <h3 class="product-name">{{ product.product_name }}</h3>

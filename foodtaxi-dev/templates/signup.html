@@ -1,92 +1,109 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Sign Up | Food App</title>
-    <link
-      rel="stylesheet"
-      href="{{ url_for('static', filename='css/login.css') }}"
-    />
-  </head>
-  <body>
-    <div class="container">
-      <div class="login-box">
-        <div class="image-section">
-          <img
-            src="{{ url_for('static', filename='images/logo.jpg') }}"
-            alt="Food"
-          />
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sign Up | Food App</title>
+
+  <!-- JQuery -->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script src="{{ url_for('static', filename='js/ph-address-selector.js') }}"></script>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/signup.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/signup-steps.css') }}">
+</head>
+
+<body>
+  <div class="container">
+    <div class="login-box">
+
+      <!-- Left Section -->
+      <div class="image-section">
+        <img src="{{ url_for('static', filename='images/logo.jpg') }}" alt="Food App Logo" />
+        <h2>Welcome to Food App</h2>
+      </div>
+
+      <!-- Right Section -->
+      <div class="form-section">
+        <h2>Sign Up</h2>
+
+        <div class="step-indicator">
+          <div class="active"></div>
+          <div></div>
+          <div></div>
         </div>
-        <div class="form-section">
-          <h2>Sign Up</h2>
 
-          {% with messages = get_flashed_messages(with_categories=true) %} 
-          {% if messages %} 
-            {% for category, message in messages %}
-              <div class="flash-message {{ category }}">{{ message }}</div>
-            {% endfor %} 
-          {% endif %} 
-          {% endwith %}
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="flash-message {{ category }}">{{ message }}</div>
+          {% endfor %}
+        {% endif %}
+        {% endwith %}
 
-          <form method="POST" action="{{ url_for('signup') }}" autocomplete="off" enctype="multipart/form-data">
-            
-            <!-- User Type Selection -->
-            <label for="user_type">I am a:</label>
+        <form method="POST" action="{{ url_for('signup') }}" autocomplete="off" enctype="multipart/form-data">
+          
+          <!-- STEP 1 -->
+          <div class="form-step active" id="step1">
+            <h3>Account Info</h3>
+            <input type="text" name="first_name" placeholder="First Name" required>
+            <input type="text" name="last_name" placeholder="Last Name" required>
+            <input type="email" name="email" placeholder="Email" required>
+            <input type="password" name="password" placeholder="Password" required>
+            <input type="password" name="confirm_password" placeholder="Confirm Password" required>
+
+            <div class="step-buttons">
+              <button type="button" class="next-btn" data-next="2">Next</button>
+            </div>
+          </div>
+
+          <!-- STEP 2 -->
+          <div class="form-step" id="step2">
+            <h3>User Type</h3>
             <select name="user_type" id="user_type" required>
+              <option value="" disabled selected>Select Role</option>
               <option value="buyer">Buyer</option>
               <option value="seller">Seller</option>
               <option value="rider">Rider</option>
             </select>
 
-            <!-- Name Fields -->
-            <div class="name-fields">
-              <input type="text" name="first_name" placeholder="First Name" required />
-              <input type="text" name="last_name" placeholder="Last Name" required />
+            
+
+            <div class="step-buttons">
+              <button type="button" class="back-btn" data-prev="1">Back</button>
+              <button type="button" class="next-btn" data-next="3">Next</button>
             </div>
+          </div>
 
-            <!-- Common Fields -->
-            <input type="email" name="email" placeholder="Email" required />
-            <input type="password" name="password" placeholder="Password" required />
-            <input type="password" name="confirm_password" placeholder="Confirm Password" required />
-            <input type="text" name="mobile_number" placeholder="Mobile Number" />
+          <!-- STEP 3 -->
+          <div class="form-step" id="step3">
+            <h3>Address</h3>
+            <select id="region" name="region"></select>
+            <select id="province" name="province"></select>
+            <select id="city" name="city"></select>
+            <select id="barangay" name="barangay"></select>
 
-            <!-- Location Dropdowns -->
-            <label for="province">Province</label>
-            <select name="province" id="province" required>
-              <option value="">Select Province</option>
-            </select>
+            <input type="hidden" id="region-text" name="region_text" required>
+            <input type="hidden" id="province-text" name="province_text" required>
+            <input type="hidden" id="city-text" name="city_text" required>
+            <input type="hidden" id="barangay-text" name="barangay_text" required>
 
-            <label for="town">Town / City</label>
-            <select name="town" id="town" required>
-              <option value="">Select Town</option>
-            </select>
-
-            <!-- Seller-specific fields -->
-            <div id="sellerFields" style="display:none;">
-              <input type="text" name="store_name" placeholder="Store Name" />
-              <input type="text" name="business_address" placeholder="Business Address" />
-              <label for="business_permit">Upload Business Permit</label>
-              <input type="file" name="business_permit" id="business_permit" />
+            <div class="step-buttons">
+              <button type="button" class="back-btn" data-prev="2">Back</button>
+              <button type="submit">Finish</button>
             </div>
+          </div>
+        </form>
 
-            <!-- Rider-specific fields -->
-            <div id="riderFields" style="display:none;">
-              <input type="text" name="vehicle_type" placeholder="Vehicle Type" />
-              <label for="license_upload">Upload Driver’s License / ID</label>
-              <input type="file" name="license_upload" id="license_upload" />
-            </div>
-
-            <!-- Submit Button -->
-            <button type="submit">Sign Up</button>
-          </form>
-
-          <p class="register-text">
-            Already have an account?
-            <a href="{{ url_for('login') }}">Login here</a>
-          </p>
-        </div>
+        <p class="register-text">
+          Already have an account? <a href="{{ url_for('login') }}">Login here</a>
+        </p>
       </div>
     </div>
-  </body>
+  </div>
+
+  <!-- Step JS -->
+  <script src="{{ url_for('static', filename='js/signup-steps.js') }}"></script>
+</body>
 </html>

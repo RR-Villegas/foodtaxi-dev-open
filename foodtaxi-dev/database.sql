@@ -21,6 +21,7 @@ CREATE TABLE accounts (
     profile_image VARCHAR(255) DEFAULT NULL,
 
     -- Address fields
+    region VARCHAR(100),
     home_number VARCHAR(20),
     street VARCHAR(100),
     barangay VARCHAR(100),

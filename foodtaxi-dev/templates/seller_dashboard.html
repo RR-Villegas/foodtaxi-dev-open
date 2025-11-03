@@ -1,52 +1,473 @@
-{% extends "navin.html" %}
-{% block title %}Home - Food Taxi{% endblock %}
-{% block content %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Seller Dashboard — E‑commerce</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/seller_dashboard.css') }}">
+</head>
+<body>
+  <div class="dashboard">
 
-<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-
-<!-- ===== NAVBAR WITH START SELLING BUTTON ===== -->
-
-<!-- ========================================== -->
-
-<h2>New Arrivals</h2>
-<div class="product-scroll">
-  {% if products %} 
-    {% for product in products[:10] %} {# only show first 10 #}
-      <div class="product" data-id="{{ product.product_id }}" 
-     data-description="{{ product.description }}" data-stock_quantity="{{ product.stock_quantity }}">
-        <img src="{{ url_for('static', filename='images/profile/' + product.image) }}" alt="{{ product.product_name }}" />
-        <h3 class="product-name"> {{ product.product_name }}</h3>
-        <p class="product-maker">{{ product.maker }}</p>
-        <p class="product-category">Category: {{ product.category }}</p>
-        <div class="product-rating">★★★★☆</div>
-        <p class="product-price">₱{{ "%.2f"|format(product.price) }}</p>
+    <!-- ===== 1. Sidebar ===== -->
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <span class="logo" aria-hidden></span>
+        <span>Food<span class="opacity-low">Taxi</span></span>
       </div>
-    {% endfor %}
-  {% else %}
-    <p>No products found.</p>
-  {% endif %}
+
+      <!-- Store Link -->
+      <a class="nav-item store-link" href="#store">🏪 My Store</a>
+
+      <!-- Navigation -->
+      <nav>
+        <a class="nav-item" href="#" data-target="homePanel">🏠 Home</a>
+        <a class="nav-item" href="#" data-target="productsPanel">📦 Products</a>
+        <a class="nav-item" href="#" data-target="ordersPanel">🛒 Orders</a>
+        <a class="nav-item" href="#" data-target="analyticsPanel">📊 Analytics</a>
+        <a class="nav-item" href="#" data-target="settingsPanel">⚙️ Settings</a>
+        <a class="nav-item" id="logoutPanel">🚪 Logout</a>
+
+        <form id="logoutForm" action="{{ url_for('logout') }}" method="post" style="display:none;"></form>
+
+      </nav>
+
+      <div class="sidebar-footer">
+        Plan: Free • Products: 12 • Orders: 42
+      </div>
+    </aside>
+
+    <!-- ===== 2. Main Content ===== -->
+    <main class="main" id="mainContent">
+
+      <!-- Topbar -->
+      <div class="topbar">
+        <button class="toggle-btn" id="btnToggle" title="Toggle sidebar">☰</button>
+        <div class="search">
+          <input placeholder="Search products, orders or customers..." id="searchInput" />
+        </div>
+        <div class="top-actions">
+          <button class="btn ghost" id="btnExport">Export</button>
+          <button class="btn primary" id="btnAdd">+ Add Product</button>
+          <div class="profile">
+            <div class="avatar" aria-hidden></div>
+            <div class="muted">Hi, {{ user.first_name }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dashboard Cards -->
+      <div class="cards">
+        <div class="card sales-card">
+          <h4>Today's Sales</h4>
+          <div class="value">₱12,480</div>
+          <div class="muted">+8% from yesterday</div>
+        </div>
+        <div class="card orders-card">
+          <h4>Orders</h4>
+          <div class="value">42</div>
+          <div class="muted">3 new today</div>
+        </div>
+        <div class="card visitors-card">
+          <h4>Visitors</h4>
+          <div class="value">1,254</div>
+          <div class="muted">Conversion 2.1%</div>
+        </div>
+      </div>
+
+      <!-- Content Panels -->
+      <section class="content-panels">
+        <!-- Home Panel -->
+        <div class="panel" id="homePanel" style="display:block">
+          <h2>Welcome!</h2>
+          <p>Select a panel from the sidebar.</p>
+        </div>
+
+        <!-- Products Panel -->
+<div class="panel" id="productsPanel" style="display:none">
+  <section class="products-section">
+    <div class="products-header">
+      <h3>Products</h3>
+      <div class="products-actions">
+        <span class="muted">Total: <strong>{{ products|length }}</strong></span>
+        <button class="btn primary" id="btnAddProduct">+ Add Product</button>
+      </div>
+    </div>
+
+    <div class="products-filters">
+      <select id="filterCategory">
+        <option value="">All Categories</option>
+        <option value="Baking Supplies & Ingredients">Baking Supplies & Ingredients</option>
+        <option value="Coffee, Tea & Beverages">Coffee, Tea & Beverages</option>
+        <option value="Snacks & Candy">Snacks & Candy</option>
+        <option value="Specialty Foods & International Cuisine">Specialty Foods & International Cuisine</option>
+        <option value="Organic and Health Foods">Organic and Health Foods</option>
+        <option value="Meal Kits & Prepped Foods">Meal Kits & Prepped Foods</option>
+
+      
+        
+      </select>
+      <input type="text" id="searchProducts" placeholder="Search product..." />
+    </div>
+
+    <div class="products-list" id="productsList">
+      {% for p in products %}
+      <div class="product-card">
+        <div class="product-thumb" style="background-image: url('{{ p.image }}');"></div>
+        <div class="product-info">
+          <h5 class="product-name">{{ p.product_name }}</h5>
+          <div class="product-maker">{{ p.maker }}</div>
+          <div class="product-category">{{ p.category }}</div>
+          <div class="product-price-stock">
+            <span class="product-price">₱{{ p.price }}</span>
+            <span class="product-stock {% if p.stock_quantity < 5 %}low{% endif %}">
+              Stock: {{ p.stock_quantity }}
+            </span>
+          </div>
+          <div class="product-sizes">
+            {% if p.sizes %}
+              {% for s in p.sizes %}
+              <span>{{ s }}</span>
+              {% endfor %}
+            {% endif %}
+          </div>
+        </div>
+        <div class="product-actions">
+          <button class="btn ghost edit" data-id="${p.product_id}">Edit</button>
+
+          <button class="btn danger delete" data-id="{{ p.product_id }}">Delete</button>
+          <button class="btn accent gallery" data-id="{{ p.product_id }}">Gallery</button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
 </div>
 
-<h2>Recommended for You</h2>
-<div class="recommended-products">
-  {% if recommended %}
-    {% for product in recommended %}
-      <div class="product" data-id="{{ product.product_id }}"
-      data-description="{{ product.description }}" data-stock_quantity="{{ product.stock_quantity }}">
-        <img src="{{ url_for('static', filename='images/profile/' + product.image) }}" alt="{{ product.product_name }}" />
-        <h3 class="product-name">{{ product.product_name }}</h3>
-        <p class="product-maker">{{ product.maker }}</p>
-        <p class="product-category">Category: {{ product.category }}</p>
-        <div class="product-rating">★★★★☆</div>
-        <p class="product-price">₱{{ "%.2f"|format(product.price) }}</p>
+<!-- Add Product Modal -->
+<div id="addProductModal" class="modal" style="display: none;">
+  <div class="modal-content">
+    <h3>Add New Product</h3>
+    <form id="addProductForm">
+      <input type="text" name="product_name" placeholder="Product Name" required />
+      <input type="text" name="maker" placeholder="Maker / Brand" />
+      <textarea name="description" placeholder="Description"></textarea>
+      <input type="number" name="price" step="0.01" placeholder="Price" required />
+      <input type="file" name="image" accept="image/*" />
+
+      <select name="category" required>
+        <option value="">Select Category</option>
+        <option value="Baking Supplies & Ingredients">Baking Supplies & Ingredients</option>
+        <option value="Coffee, Tea & Beverages">Coffee, Tea & Beverages</option>
+        <option value="Snacks & Candy">Snacks & Candy</option>
+        <option value="Specialty Foods & International Cuisine">Specialty Foods & International Cuisine</option>
+        <option value="Organic and Health Foods">Organic and Health Foods</option>
+        <option value="Meal Kits & Prepped Foods">Meal Kits & Prepped Foods</option>
+        
+      </select>
+
+      <input type="number" name="stock_quantity" placeholder="Stock Quantity" min="0" />
+
+      <div class="modal-actions">
+        <button type="submit" class="btn primary">Save</button>
+        <button type="button" id="btnCancelProduct" class="btn ghost">Cancel</button>
       </div>
-    {% endfor %}
-  {% else %}
-    <p>No recommended products yet.</p>
-  {% endif %}
+    </form>
+  </div>
 </div>
 
-{% include "product_detail_in.html" %}
-<script src="{{ url_for('static', filename='js/product_detail.js') }}"></script>
 
-{% endblock %}
+
+        <!-- Orders Panel -->
+        <div class="panel" id="ordersPanel" style="display:none">
+          <h3>Recent Orders</h3>
+          <!-- Orders Table Here -->
+        </div>
+
+        <!-- Analytics Panel -->
+        <div class="panel" id="analyticsPanel" style="display:none">
+          <h3>Analytics</h3>
+          <!-- Charts Here -->
+        </div>
+
+        <!-- Settings Panel -->
+        <div class="panel" id="settingsPanel" style="display:none">
+          <h3>Settings</h3>
+          <!-- Settings Form -->
+        </div>
+
+        <div class="panel" id="logoutPanel" style="display:none;">
+   <div class="panel-content">
+    <h3>Confirm Logout</h3>
+    <p>Are you sure you want to log out?</p>
+
+    <form action="{{ url_for('logout') }}" method="post">
+      <div class="panel-buttons">
+        <button type="submit" class="btn btn-danger">Yes, Logout</button>
+        <button type="button" id="cancelLogout" class="btn btn-secondary">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+      <!-- Footer -->
+      <footer class="footer">© 2025 SellerHub • Built for demo purposes</footer>
+
+    </main>
+
+  </div>
+
+  <!-- Modal -->
+  <div class="modal-backdrop" id="modalBackdrop">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <h3 id="modalTitle">Add Product</h3>
+      <!-- Add Product Form -->
+    </div>
+  </div>
+
+  <!-- JS: Panel Switching -->
+  <script>
+    const sidebarItems = document.querySelectorAll(".sidebar .nav-item[data-target]");
+   const panels = document.querySelectorAll(".panel");
+   const toggleBtn = document.getElementById("btnToggle");
+   const sidebar = document.querySelector(".sidebar");
+   const main = document.querySelector(".main");
+   document.getElementById("logoutPanel").addEventListener("click", function (event) {
+   event.preventDefault(); // prevent default navigation
+   document.getElementById("logoutForm").submit(); // submit the hidden form
+ });
+
+  // Sidebar toggle (hamburger)
+   toggleBtn.addEventListener("click", () => {
+    sidebar.classList.toggle("open");
+    main.classList.toggle("shifted");
+   });
+
+  // Sidebar navigation click
+   sidebarItems.forEach(item => {
+    item.addEventListener("click", e => {
+      e.preventDefault();
+      const targetId = item.dataset.target;
+
+      // Highlight active sidebar item
+      sidebarItems.forEach(i => i.classList.remove("active"));
+      item.classList.add("active");
+
+      // Hide all panels
+      panels.forEach(panel => (panel.style.display = "none"));
+
+      // Show clicked panel
+      const targetPanel = document.getElementById(targetId);
+      if (targetPanel) targetPanel.style.display = "block";
+    });
+  
+
+  // Show default panel on load
+     const firstPanel = panels[0];
+     if (firstPanel) firstPanel.style.display = "block";
+  
+      // === LOAD PRODUCTS DYNAMICALLY ===
+ async function loadProducts() {
+  const list = document.getElementById("productsList");
+  if (!list) return;
+
+  list.innerHTML = `<div class="muted">Loading products...</div>`;
+
+  try {
+    const res = await fetch("/seller/products_data", {
+      method: "GET",
+      headers: {
+        "Accept": "application/json"
+      },
+      credentials: "include" // important for session-based auth
+    });
+
+    if (!res.ok) {
+      throw new Error(`Server returned ${res.status}`);
+    }
+
+    const data = await res.json();
+
+    if (!Array.isArray(data)) {
+      console.error("Invalid response format:", data);
+      list.innerHTML = `<div class="muted">Failed to load products (invalid data).</div>`;
+      return;
+    }
+
+    list.innerHTML = ""; // clear previous
+
+    if (data.length === 0) {
+      list.innerHTML = `<div class="muted">No products found.</div>`;
+      return;
+    }
+
+    data.forEach(p => {
+      const card = document.createElement("div");
+      card.className = "product-card";
+      const imageUrl = p.image || "/static/images/placeholder.png";
+
+      let sizesHTML = "";
+      try {
+        if (p.sizes) {
+          const sizes = JSON.parse(p.sizes);
+          sizesHTML = sizes.map(s => `<span>${s}</span>`).join(" ");
+        }
+      } catch {
+        sizesHTML = "";
+      }
+
+      card.innerHTML = `
+        <div class="product-thumb" style="background-image:url('${imageUrl}')"></div>
+        <div class="product-info">
+          <h5 class="product-name">${p.product_name}</h5>
+          <div class="product-maker">${p.maker || ""}</div>
+          <div class="product-category">${p.category || ""}</div>
+          <div class="product-price-stock">
+            <span class="product-price">₱${p.price}</span>
+            <span class="product-stock ${p.stock_quantity < 5 ? 'low' : ''}">
+              Stock: ${p.stock_quantity}
+            </span>
+          </div>
+          <div class="product-sizes">${sizesHTML}</div>
+        </div>
+        <div class="product-actions">
+          <button class="btn ghost edit" data-id="${p.product_id}">Edit</button>
+          <button class="btn danger delete" data-id="${p.product_id}">Delete</button>
+          <button class="btn accent gallery" data-id="${p.product_id}">Gallery</button>
+        </div>
+      `;
+      list.appendChild(card);
+    });
+
+  } catch (err) {
+    console.error("❌ Fetch error:", err);
+    list.innerHTML = `<div class="muted">Failed to load products.</div>`;
+  }
+ }
+
+ // initial call
+ loadProducts();
+});
+
+ 
+  
+</script>
+
+
+<script>
+     document.addEventListener("DOMContentLoaded", () => {
+  const btnAddProduct = document.getElementById("btnAddProduct");
+  const addProductModal = document.getElementById("addProductModal");
+  const btnCancelProduct = document.getElementById("btnCancelProduct");
+  const addProductForm = document.getElementById("addProductForm");
+
+  // Open modal
+  btnAddProduct.addEventListener("click", () => {
+    addProductModal.style.display = "flex";
+  });
+
+  // Close modal
+  btnCancelProduct.addEventListener("click", () => {
+    addProductModal.style.display = "none";
+  });
+
+  // Close modal by clicking outside content
+  addProductModal.addEventListener("click", (e) => {
+    if (e.target === addProductModal) {
+      addProductModal.style.display = "none";
+    }
+  });
+
+  // Submit form (Add or Edit)
+addProductForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const formData = new FormData(addProductForm);
+
+  // Check if this is an edit (productId stored on modal)
+  const productId = addProductModal.dataset.productId; // undefined if adding
+  const url = productId ? `/seller/edit_product/${productId}` : "/seller/add_product";
+
+  // DEBUG: Check form data
+  for (let pair of formData.entries()) {
+    console.log(pair[0], pair[1]);
+  }
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      body: formData,
+      credentials: "same-origin" // include cookies/session
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      console.error("Failed response:", text);
+      alert("❌ Failed to submit product.");
+      return;
+    }
+
+    const json = await res.json();
+    console.log("Server response:", json);
+
+    alert(productId ? "✅ Product updated successfully!" : "✅ Product added successfully!");
+
+    // Close modal and reset edit flag
+    addProductModal.style.display = "none";
+    delete addProductModal.dataset.productId;
+
+    // Reload product list
+    if (typeof loadProducts === "function") {
+      loadProducts();
+    }
+
+  } catch (err) {
+    console.error("Error submitting form:", err);
+    alert("⚠️ An error occurred while submitting the product.");
+  }
+});
+
+
+
+});
+
+// --- Edit Product modal logic ---
+  document.getElementById("productsList").addEventListener("click", async (e) => {
+    if (!e.target.classList.contains("edit")) return;
+
+    const productId = e.target.dataset.id;
+
+    try {
+      const res = await fetch(`/seller/get_product/${productId}`, { method: "GET", credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch product");
+      const product = await res.json();
+
+      // Pre-fill modal inputs
+      document.getElementById("productName").value = product.product_name;
+      document.getElementById("maker").value = product.maker || "";
+      document.getElementById("description").value = product.description || "";
+      document.getElementById("price").value = product.price;
+      document.getElementById("stockQuantity").value = product.stock_quantity;
+      document.getElementById("category").value = product.category;
+
+      const imgPreview = document.getElementById("imagePreview");
+      imgPreview.src = product.image || "/static/images/placeholder.png";
+
+      // Open modal
+      addProductModal.style.display = "flex";
+
+      // Store productId for submit
+      addProductModal.dataset.productId = productId;
+
+    } catch (err) {
+      console.error(err);
+      alert("Failed to load product for editing.");
+    }
+  });
+
+
+</script>
+
+  <script src="{{ url_for('static', filename='js/seller_dashboard.js') }}"></script>
+</body>
+</html>

@@ -1,8 +1,9 @@
 from functools import wraps
-from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from cryptography.fernet import Fernet
+from datetime import datetime
 import base64
 import mysql.connector
 import smtplib
@@ -140,6 +141,7 @@ def admin_dashboard():
 
 
 
+
 # ===============================
 # ROUTES
 # ===============================
@@ -172,26 +174,43 @@ def index():
 
 
 
-
 @app.route("/homepage")
 @login_required
 def homepage():
+    # Check user type from session
+    user_type = session.get('user_type')
 
-    db = get_db_connection()
-    cursor = db.cursor(dictionary=True)
-    
-    # New Arrivals (scrollable, max 10)
-    cursor.execute("SELECT * FROM products ORDER BY product_id DESC LIMIT 10")
-    products = cursor.fetchall()
-    
-    # Recommended (everything, no limit)
-    cursor.execute("SELECT * FROM products ORDER BY product_id DESC")
-    recommended = cursor.fetchall()
-    
-    cursor.close()
-    db.close()
-    
-    return render_template("homepage.html", products=products, recommended=recommended)
+    if user_type == "buyer":
+        # Buyer sees the homepage
+        db = get_db_connection()
+        cursor = db.cursor(dictionary=True)
+
+        # New Arrivals (scrollable, max 10)
+        cursor.execute("SELECT * FROM products ORDER BY product_id DESC LIMIT 10")
+        products = cursor.fetchall()
+
+        # Recommended (everything, no limit)
+        cursor.execute("SELECT * FROM products ORDER BY product_id DESC")
+        recommended = cursor.fetchall()
+
+        cursor.close()
+        db.close()
+
+        return render_template("homepage.html", products=products, recommended=recommended)
+
+    elif user_type == "seller":
+        # Seller sees their dashboard
+        return redirect(url_for('seller_dashboard'))
+
+    elif user_type == "admin":
+        # Admin sees admin dashboard
+        return redirect(url_for('admin_dashboard'))
+
+    else:
+        # Unknown type: force logout or redirect to index
+        flash("Unauthorized access.", "danger")
+        return redirect(url_for('index'))
+
 
 
 
@@ -259,22 +278,29 @@ def login():
 
 
 
-
-# ===============================
+# ==============================================================
 # SIGNUP
-# ===============================
+# ==============================================================
 @app.route('/signup', methods=['GET', 'POST'])
-@guest_only
 def signup():
     if request.method == 'POST':
-        first_name = request.form['first_name']
-        last_name = request.form['last_name']
-        email = request.form['email']
-        password = request.form['password']
-        confirm_password = request.form['confirm_password']
+        # 🧾 Get form fields
+        form = request.form
+        first_name = form.get('first_name', '').strip()
+        last_name = form.get('last_name', '').strip()
+        email = form.get('email', '').strip()
+        password = form.get('password', '')
+        confirm_password = form.get('confirm_password', '')
+        user_type = form.get('user_type', '')
+        region = form.get('region_text', '')
+        province = form.get('province_text', '')
+        city = form.get('city_text', '')
+        barangay = form.get('barangay_text', '')
 
+
+        # 🔒 Validation
         if password != confirm_password:
-            flash("Passwords do not match. Please try again.", "error")
+            flash("Passwords do not match.", "error")
             return redirect(url_for('signup'))
 
         hashed_password = generate_password_hash(password)
@@ -283,30 +309,34 @@ def signup():
             db = get_db_connection()
             cursor = db.cursor()
             cursor.execute("SELECT email FROM accounts WHERE email = %s", (email,))
-            existing_user = cursor.fetchone()
-
-            if existing_user:
-                flash("Email already registered. Please log in instead.", "warning")
+            if cursor.fetchone():
+                flash("Email already registered.", "warning")
                 return redirect(url_for('login'))
 
-            insert_query = """
-                INSERT INTO accounts (first_name, last_name, email, account_password)
-                VALUES (%s, %s, %s, %s)
-            """
-            cursor.execute(insert_query, (first_name, last_name, email, hashed_password))
+            cursor.execute("""
+                INSERT INTO accounts 
+                (first_name, last_name, email, account_password, user_type, region, province, city, barangay)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (first_name, last_name, email, hashed_password, user_type,
+                  region, province, city, barangay))
             db.commit()
-
-            flash(f"Account created successfully! Welcome, {first_name}!", "success")
+            flash("Account created successfully!", "success")
             return redirect(url_for('login'))
-
         except mysql.connector.Error as err:
             print("Database error:", err)
-            flash("An error occurred while creating your account. Please try again.", "error")
-
+            flash("Error creating account. Please try again.", "error")
         finally:
-            cursor.close()
+            if 'cursor' in locals() and cursor:
+                cursor.close()
+            if 'db' in locals() and db:
+                db.close()
 
+
+    # 👇 If GET, just render the signup page
     return render_template('signup.html')
+
+
+
 
 
 # ===============================
@@ -686,7 +716,7 @@ def checkout():
 # ===============================
 # LOGOUT
 # ===============================
-@app.route('/logout')
+@app.route('/logout' , methods=['POST'])
 @login_required
 def logout():
     session.clear()
@@ -694,13 +724,6 @@ def logout():
     return redirect(url_for('login'))
 
 
-# ===============================
-# BUYER DASHBOARD
-# ===============================
-@app.route('/buyer')
-@login_required
-def buyer_dashboard():
-    return render_template('buyerdashboard.html')
 
 @app.route('/profile')
 @login_required
@@ -755,40 +778,6 @@ def settings():
     cursor.close()
     return render_template('settings.html', user=user)
 
-@app.route('/become_seller')
-@login_required
-def become_seller():
-    account_id = session.get('account_id')
-
-    # Generate verification token
-    verification_token = secrets.token_urlsafe(32)
-
-    db = get_db_connection()
-    cursor = db.cursor(dictionary=True)
-
-    # Update user to seller and set email_status to unverified, store token
-    cursor.execute("""
-        UPDATE accounts
-        SET user_type = 'seller', email_status = 'unverified', verification_token = %s
-        WHERE account_id = %s
-    """, (verification_token, account_id))
-    db.commit()
-
-    # Get user email
-    cursor.execute("SELECT email, first_name FROM accounts WHERE account_id = %s", (account_id,))
-    user = cursor.fetchone()
-    cursor.close()
-    db.close()
-
-    if user:
-        # Send verification email
-        send_verification_email(user['email'], user['first_name'], verification_token)
-
-    # Update session
-    session['user_type'] = 'seller'
-
-    flash("A verification email has been sent to your email address. Please verify your email to become a seller.", "info")
-    return redirect(url_for('profile'))
 
 @app.route('/become_rider')
 @login_required
@@ -989,75 +978,165 @@ def seller_dashboard():
         cursor.close()
         db.close()
         flash("Access denied: Only sellers can view this page.", "error")
-        return redirect(url_for('profile'))
+        return redirect(url_for('index'))
 
-    # Fetch only products belonging to this seller
-    cursor.execute("SELECT * FROM products WHERE seller_id = %s ORDER BY product_id DESC LIMIT 10", (account_id,))
-    products = cursor.fetchall()
-
-    cursor.execute("SELECT * FROM products WHERE seller_id = %s ORDER BY product_id DESC", (account_id,))
-    recommended = cursor.fetchall()
+    # ✅ Set the seller_id in session if not already set
+    session["seller_id"] = account_id
 
     cursor.close()
     db.close()
 
     return render_template(
         'seller_dashboard.html',
-        user=session,
-        products=products,
-        recommended=recommended
-    )
+        user=session)
 
-@app.route('/seller/products')
-def seller_products():
-    if 'account_id' not in session:
-        return redirect(url_for('login'))
 
-    seller_id = session['account_id']
+
+
+@app.route("/seller/add_product", methods=["POST"])
+def add_product():
+    # Ensure seller is logged in
+    seller_id = session.get("seller_id")
+    if not seller_id:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    data = request.form
+    image = request.files.get("image")
+    image_path = None
+
+    # ✅ Handle image upload
+    if image:
+        filename = secure_filename(image.filename)
+        upload_folder = os.path.join("static", "uploads")
+        os.makedirs(upload_folder, exist_ok=True)
+        image_path = os.path.join(upload_folder, filename)
+        image.save(image_path)
+
+    # ✅ Use your existing DB connection helper
+    db = get_db_connection()
+    cursor = db.cursor()
+
+    cursor.execute("""
+        INSERT INTO products (
+            seller_id, product_name, maker, description, price, image, category, stock_quantity
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    """, (
+        seller_id,
+        data["product_name"],
+        data.get("maker"),
+        data.get("description"),
+        data["price"],
+        image_path,
+        data["category"],
+        data.get("stock_quantity", 0)
+    ))
+
+    db.commit()
+    cursor.close()
+    db.close()
+
+    return jsonify({"message": "✅ Product added successfully!"})
+
+   
+
+
+@app.route('/seller/products_data')
+@login_required
+def products_data():
+    seller_id = session.get('seller_id')
+    if not seller_id:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    try:
+        db = get_db_connection()
+        cursor = db.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT 
+                product_id, seller_id, product_name, maker, description,
+                price, image, gallery, size_type, sizes,
+                stock_quantity, category, created_at, updated_at
+            FROM products
+            WHERE seller_id = %s
+            ORDER BY created_at DESC
+        """, (seller_id,))
+        products = cursor.fetchall()
+        cursor.close()
+        db.close()
+
+        return jsonify(products)
+
+    except Exception as e:
+        print("❌ Error loading products:", e)
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/seller/get_product/<int:product_id>")
+@login_required
+def get_product(product_id):
+    seller_id = session.get("seller_id")
     db = get_db_connection()
     cursor = db.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM products WHERE seller_id = %s", (seller_id,))
-    products = cursor.fetchall()
+    cursor.execute("""
+        SELECT * FROM products
+        WHERE product_id = %s AND seller_id = %s
+    """, (product_id, seller_id))
+    product = cursor.fetchone()
     cursor.close()
+    db.close()
+    if not product:
+        return jsonify({"error": "Product not found"}), 404
+    return jsonify(product)
 
-    return render_template('seller_products.html', products=products)
+
+@app.route("/seller/edit_product/<int:product_id>", methods=["POST"])
+@login_required
+def edit_product(product_id):
+    seller_id = session.get("seller_id")
+    data = request.form
+    image = request.files.get("image")
+
+    db = get_db_connection()
+    cursor = db.cursor()
+
+    # Handle image if uploaded
+    image_path = None
+    if image:
+        filename = secure_filename(image.filename)
+        upload_folder = os.path.join("static", "uploads")
+        os.makedirs(upload_folder, exist_ok=True)
+        image_path = os.path.join(upload_folder, filename)
+        image.save(image_path)
+
+    # Build update query
+    query = """
+        UPDATE products
+        SET product_name=%s, maker=%s, description=%s, price=%s,
+            category=%s, stock_quantity=%s
+    """
+    params = [
+        data["product_name"],
+        data.get("maker"),
+        data.get("description"),
+        data["price"],
+        data["category"],
+        data.get("stock_quantity", 0)
+    ]
+
+    if image_path:
+        query += ", image=%s"
+        params.append(image_path)
+
+    query += " WHERE product_id=%s AND seller_id=%s"
+    params.extend([product_id, seller_id])
+
+    cursor.execute(query, params)
+    db.commit()
+    cursor.close()
+    db.close()
+
+    return jsonify({"message": "✅ Product updated successfully!"})
 
 
-@app.route('/seller/add-product', methods=['GET', 'POST'])
-def add_product():
-    if 'account_id' not in session:
-        return redirect(url_for('login'))
 
-    seller_id = session['account_id']
-
-    if request.method == 'POST':
-        product_name = request.form['product_name']
-        maker = request.form.get('maker')
-        description = request.form.get('description')
-        price = request.form['price']
-        category = request.form['category']
-        stock_quantity = request.form['stock_quantity']
-        image = request.files['image']
-
-        if image:
-         filename = secure_filename(image.filename)
-         image.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-        else:
-         filename = None
-        db = get_db_connection()
-        cursor = db.cursor()
-        cursor.execute("""
-            INSERT INTO products 
-            (seller_id, product_name, maker, description, price, category, stock_quantity, image)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-        """, (seller_id, product_name, maker, description, price, category, stock_quantity, filename))
-        db.commit()
-        cursor.close()
-
-        flash("Product added successfully!", "success")
-        return redirect(url_for('seller_products'))
-
-    return render_template('add_product.html')
 
 # Increase stock
 @app.route('/seller/product/increase/<int:product_id>', methods=['POST'])
@@ -1090,45 +1169,7 @@ def remove_product(product_id):
     cursor.close()
     return redirect(url_for('seller_products'))
 
-# Edit product (redirect to your existing add/edit form)
-@app.route('/seller/product/edit/<int:product_id>', methods=['GET', 'POST'])
-def edit_product(product_id):
-    db = get_db_connection()
-    cursor = db.cursor(dictionary=True)
-    
-    if request.method == 'POST':
-        product_name = request.form['product_name']
-        maker = request.form.get('maker')
-        description = request.form.get('description')
-        price = request.form['price']
-        category = request.form['category']
-        stock_quantity = request.form['stock_quantity']
-        
-        # Handle new image upload if provided
-        image_file = request.files.get('image')
-        if image_file and image_file.filename:
-            filename = secure_filename(image_file.filename)
-            image_file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            cursor.execute("""
-                UPDATE products SET product_name=%s, maker=%s, description=%s, price=%s, category=%s,
-                stock_quantity=%s, image=%s WHERE product_id=%s
-            """, (product_name, maker, description, price, category, stock_quantity, filename, product_id))
-        else:
-            cursor.execute("""
-                UPDATE products SET product_name=%s, maker=%s, description=%s, price=%s, category=%s,
-                stock_quantity=%s WHERE product_id=%s
-            """, (product_name, maker, description, price, category, stock_quantity, product_id))
-        
-        db.commit()
-        cursor.close()
-        flash("Product updated successfully!", "success")
-        return redirect(url_for('seller_products'))
-    
-    # GET: show form with current product info
-    cursor.execute("SELECT * FROM products WHERE product_id=%s", (product_id,))
-    product = cursor.fetchone()
-    cursor.close()
-    return render_template('edit_product.html', product=product)
+
 
 @app.route('/seller/income')
 def seller_income():

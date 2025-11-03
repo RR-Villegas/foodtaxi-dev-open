@@ -1,183 +1,210 @@
 /* ======================= */
-/* Existing CSS patched to support new signup form */
+/* Food App Signup Form CSS */
 /* ======================= */
 
+/* Body */
 body {
   margin: 0;
-  padding: 0;
-  font-family: 'Segoe UI', sans-serif;
+  font-family: "Poppins", sans-serif;
+  background: linear-gradient(135deg, #04210d, #093a1a);
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 100vh;
-  background: linear-gradient(135deg, #b4ec51 0%, #429321 100%);
+  height: 100vh;
 }
 
-/* Container and layout */
+/* Container */
 .container {
-  width: 90%;
-  max-width: 900px;
-  background-color: #1e1e1e;
+  width: 100%;
+  max-width: 950px;
   display: flex;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 0 30px rgba(255, 165, 0, 0.2);
+  justify-content: center;
 }
 
+/* Main login box */
 .login-box {
   display: flex;
-  width: 100%;
+  background: #0b1f12;
+  border-radius: 15px;
+  box-shadow: 0 0 30px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+  width: 850px;
+  max-width: 90%;
 }
 
+/* Left side image section */
 .image-section {
-  width: 50%;
-  background-color: #000;
+  flex: 1;
+  background: #14532d;
   display: flex;
-  align-items: center;
   justify-content: center;
-  padding: 20px;
+  align-items: center;
+  flex-direction: column;
+  padding: 50px 30px;
+  color: #fff;
 }
 
 .image-section img {
-  width: 100%;
-  height: auto;
-  border-radius: 8px;
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background: #fff;
+  padding: 10px;
   object-fit: cover;
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
 }
 
-/* Form section */
+.image-section h2 {
+  color: #ffc107;
+  font-weight: 600;
+  margin-top: 20px;
+}
+
+/* Right side form section */
 .form-section {
-  width: 50%;
-  background-color: #121212;
-  color: #fff;
-  padding: 40px 30px;
+  flex: 1;
+  background: #112a18;
+  padding: 60px 50px;
   display: flex;
   flex-direction: column;
   justify-content: center;
 }
 
 .form-section h2 {
-  margin-bottom: 25px;
-  font-size: 26px;
-  color: #fff;
   text-align: center;
-  font-weight: 600;
+  margin-bottom: 25px;
+  color: #ffc107;
+  font-size: 28px;
+  font-weight: 700;
 }
 
-/* Name field grouping */
-.name-fields {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 15px;
-}
-
-.name-fields input {
-  flex: 1;
-}
-
-/* Inputs & dropdowns */
-form input,
-form select {
+/* Inputs & Dropdowns */
+.form-section input,
+.form-section select {
   width: 100%;
   padding: 12px;
-  margin-bottom: 15px;
-  border: none;
-  border-radius: 6px;
-  font-size: 16px;
-  background-color: #2a2a2a;
+  margin: 10px 0;
+  border-radius: 8px;
+  border: 2px solid #14532d;
+  background: #0f2415;
   color: #fff;
-  transition: background 0.3s, box-shadow 0.3s;
-}
-
-form input:focus,
-form select:focus {
+  font-size: 15px;
   outline: none;
-  background-color: #333;
-  box-shadow: 0 0 0 2px #f39c12;
+  transition: 0.3s;
+  -webkit-appearance: none; /* Remove default arrow on some browsers */
+  -moz-appearance: none;
+  appearance: none;
 }
 
-/* File inputs (custom styling optional) */
-form input[type="file"] {
-  padding: 6px 12px;
-  background-color: #2a2a2a;
+.form-section input:focus,
+.form-section select:focus {
+  border-color: #ffc107;
+  box-shadow: 0 0 8px rgba(255, 193, 7, 0.6);
 }
 
-/* Seller & Rider sections */
-#sellerFields,
-#riderFields {
-  margin-bottom: 15px;
+/* Dropdown placeholder opacity */
+.form-section select option[disabled] {
+  color: #aaa;
+}
+
+/* Location fields group */
+.location-fields {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  margin-top: 15px;
 }
 
-/* Password field icons */
+.location-fields div {
+  display: flex;
+  flex-direction: column;
+}
+
+.location-fields label {
+  margin-bottom: 4px;
+  font-size: 14px;
+  color: #fff;
+}
+
+.location-fields input[type="hidden"] {
+  display: none;
+}
+
+/* Password field eye icon */
 .password-field {
   position: relative;
 }
 
 .password-field i {
   position: absolute;
-  right: 12px;
   top: 50%;
+  right: 12px;
   transform: translateY(-50%);
   color: #aaa;
   cursor: pointer;
-  transition: color 0.3s;
 }
 
 .password-field i:hover {
-  color: #f39c12;
+  color: #ffc107;
 }
 
-/* Button */
-form button {
+/* Buttons */
+button {
   width: 100%;
   padding: 12px;
-  background-color: #f39c12;
-  color: white;
-  font-size: 16px;
+  background: #ffc107;
+  color: #0b1f12;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.3s ease, transform 0.1s ease;
+  transition: 0.3s;
 }
 
-form button:hover {
-  background-color: #e67e22;
+button:hover {
+  background: #ffda47;
 }
 
-form button:active {
-  transform: scale(0.98);
-}
-
-/* Footer text */
+/* Register text */
 .register-text {
   text-align: center;
-  margin-top: 20px;
-  font-size: 14px;
+  margin-top: 15px;
+  color: #ccc;
 }
 
 .register-text a {
-  color: #f39c12;
+  color: #66bb6a;
+  font-weight: 600;
   text-decoration: none;
-  transition: text-decoration 0.2s;
 }
 
 .register-text a:hover {
-  text-decoration: underline;
+  color: #81c784;
 }
 
-/* Flash messages (optional) */
+/* Flash messages */
 .flash-message {
-  padding: 10px;
-  border-radius: 6px;
   text-align: center;
   margin-bottom: 15px;
-  font-size: 14px;
+  padding: 10px;
+  border-radius: 6px;
+  font-weight: 500;
 }
 
-/* Responsive */
+.flash-message.success {
+  color: #ffffff;
+}
+
+.flash-message.error {
+  color: #ffffff;
+}
+
+.flash-message.info {
+  color: #ef5350;
+}
+
+/* Responsive adjustments */
 @media (max-width: 768px) {
   .login-box {
     flex-direction: column;
@@ -186,13 +213,6 @@ form button:active {
   .image-section,
   .form-section {
     width: 100%;
-  }
-
-  .form-section {
     padding: 30px 20px;
-  }
-
-  .name-fields {
-    flex-direction: column;
   }
 }

@@ -18,7 +18,7 @@ const modalStock = document.getElementById("modalStock");
 products.forEach((product) => {
   product.addEventListener("click", () => {
     // Grab data from product element
-    modalImage.src = product.querySelector("img").src;
+    modalImage.src = product.querySelector("img")?.src || "/static/images/placeholder.png";
     modalName.textContent = product.querySelector(".product-name").textContent;
     modalCategory.textContent = product.querySelector(".product-category").textContent;
     modalPrice.textContent = product.querySelector(".product-price").textContent;
