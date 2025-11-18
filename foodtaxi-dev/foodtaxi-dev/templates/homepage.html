@@ -1,0 +1,63 @@
+{% extends "navin.html" %}
+{% block title %}Home - Food Taxi{% endblock %}
+
+{% block preload %}
+<!-- Hidden image to load the profile picture once when homepage loads -->
+{% if session.profile_image %}
+<img src="{{ url_for('get_encrypted_image', filename=session.profile) }}" alt="Profile" style="display: none;">
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+<h2>New Arrivals</h2>
+<div class="product-scroll" id="productsList">
+  {% if products %} 
+    {% for product in products[:10] %}
+      <div class="product" data-id="{{ product.product_id }}"
+           data-description="{{ product.description }}"  
+           data-stock_quantity="{{ product.stock_quantity }}">
+           
+           <img src="{{ url_for('static', filename='uploads/' + product.image) if product.image else url_for('static', filename='images/placeholder.png') }}" 
+                alt="{{ product.product_name }}">
+
+        <h3 class="product-name">{{ product.product_name }}</h3>
+        <p class="product-maker">{{ product.maker }}</p>
+        <p class="product-category">Category: {{ product.category }}</p>
+        <div class="product-rating">★★★★☆</div>
+        <p class="product-price">₱{{ "%.2f"|format(product.price) }}</p>
+      </div>
+    {% endfor %}
+  {% else %}
+    <p>No products found.</p>
+  {% endif %}
+</div>
+
+<h2>Recommended for You</h2>
+<div class="recommended-products">
+  {% if recommended %}
+    {% for product in recommended %}
+      <div class="product" data-id="{{ product.product_id }}"
+           data-description="{{ product.description }}" 
+           data-stock_quantity="{{ product.stock_quantity }}">
+
+          <img src="{{ url_for('static', filename='uploads/' + product.image) if product.image else url_for('static', filename='images/placeholder.png') }}" 
+           alt="{{ product.product_name }}">
+
+
+        <h3 class="product-name">{{ product.product_name }}</h3>
+        <p class="product-maker">{{ product.maker }}</p>
+        <p class="product-category">Category: {{ product.category }}</p>
+        <div class="product-rating">★★★★☆</div>
+        <p class="product-price">₱{{ "%.2f"|format(product.price) }}</p>
+      </div>
+    {% endfor %}
+  {% else %}
+    <p>No recommended products yet.</p>
+  {% endif %}
+</div>
+
+{% include "product_detail_in.html" %}
+<script src="{{ url_for('static', filename='js/product_detail.js') }}"></script>
+{% endblock %}

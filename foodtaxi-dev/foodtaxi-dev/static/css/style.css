@@ -1,0 +1,700 @@
+/* ========== GLOBAL STYLES ========== */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: "Poppins", sans-serif;
+}
+
+body {
+  background-color: #f8fdf8;
+  color: #333;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+h2 {
+  text-align: center;
+  font-size: 2rem;
+  margin: 3rem 0 1.5rem;
+  color: #222;
+}
+
+a {
+  text-decoration: none;
+}
+
+/* ========== NAVIGATION BAR ========== */
+header {
+  width: 100%;
+  background-color: #ffffff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+nav {
+  max-width: 1300px;
+  margin: 0 auto;
+  padding: 1rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.title-btn {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #1fa14e;
+  text-decoration: none;
+  transition: 0.3s;
+}
+
+.title-btn:hover {
+  color: #158b42;
+}
+
+nav ul {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+nav ul li a {
+  color: #333;
+  font-weight: 500;
+  transition: color 0.3s ease;
+}
+
+nav ul li a:hover {
+  color: #1fa14e;
+}
+
+.signupbutton,
+.loginbutton {
+  padding: 0.5rem 1.2rem;
+  border-radius: 30px;
+  font-weight: 600;
+  border: 2px solid #1fa14e;
+  transition: 0.3s ease;
+}
+
+.signupbutton {
+  background: #1fa14e;
+  color: #fff;
+}
+
+.signupbutton:hover {
+  background: #158b42;
+  border-color: #158b42;
+}
+
+.loginbutton {
+  color: #1fa14e;
+  background: transparent;
+}
+
+.loginbutton:hover {
+  background: #e6f8ea;
+}
+
+.add-to-cart {
+  display: inline-block;
+  background-color: #1fa14e; /* same as your cart button */
+  color: white;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  margin-top: auto;
+  transition: background-color 0.25s ease, transform 0.15s ease;
+}
+
+.add-to-cart:hover {
+  background-color: #178c42;
+  transform: translateY(-2px);
+}
+
+.add-to-cart:active {
+  transform: translateY(0);
+}
+
+.nav-buttons {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.start-selling-btn {
+  padding: 0.5rem 1.2rem;
+  border-radius: 30px;
+  font-weight: 600;
+  border: 2px solid #1fa14e;
+  background-color: #1fa14e;
+  color: #fff;
+  transition: 0.3s ease;
+}
+
+.start-selling-btn:hover {
+  background-color: #158b42;
+  border-color: #158b42;
+}
+
+
+/* ========== HERO SECTION ========== */
+.hero {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: linear-gradient(135deg, #e8f9e9 0%, #d1ffd6 100%);
+  text-align: center;
+  padding: 6rem 2rem;
+  border-radius: 0 0 60px 60px;
+  position: relative;
+  overflow: hidden;
+}
+
+.hero::before {
+  content: "";
+  position: absolute;
+  width: 200px;
+  height: 200px;
+  background: #b5f3b3;
+  border-radius: 50%;
+  top: -50px;
+  left: -50px;
+  z-index: 0;
+  opacity: 0.3;
+}
+
+.hero::after {
+  content: "";
+  position: absolute;
+  width: 250px;
+  height: 250px;
+  background: #c4f5c5;
+  border-radius: 50%;
+  bottom: -70px;
+  right: -70px;
+  z-index: 0;
+  opacity: 0.3;
+}
+
+.hero h2 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #1c7c3a;
+  z-index: 1;
+}
+
+.hero p {
+  color: #4d4d4d;
+  margin-top: 1rem;
+  font-size: 1.1rem;
+  z-index: 1;
+}
+
+.hero .shop {
+  margin-top: 2rem;
+  padding: 0.9rem 2.2rem;
+  background: #1fa14e;
+  color: #fff;
+  font-weight: 600;
+  border-radius: 50px;
+  transition: 0.3s ease;
+  z-index: 1;
+}
+
+.hero .shop:hover {
+  background: #158b42;
+  transform: scale(1.05);
+}
+
+/* ========== PRODUCT SCROLL / GRID ========== */
+
+/* Horizontal scroll for New Arrivals */
+.product-scroll {
+  display: flex;
+  overflow-x: auto;
+  gap: 1.5rem;
+  padding: 1rem;
+  scroll-behavior: smooth;
+}
+
+.product-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.product-scroll::-webkit-scrollbar-thumb {
+  background-color: #1fa14e;
+  border-radius: 10px;
+}
+
+.product-scroll::-webkit-scrollbar-track {
+  background: #e6f8ea;
+}
+
+.product-scroll .product {
+  flex: 0 0 auto; /* keeps each product in one row */
+}
+
+/* Normal grid for other sections */
+.normal-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2rem;
+  margin-top: 1rem;
+}
+
+/* ========== PRODUCT CARD ========== */
+.product {
+  flex: 0 0 auto; /* Prevents expansion/shrinking */
+  width: 210px;
+  height: 360px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  padding: 0.5rem;
+  text-align: center;
+  font-family: Arial, sans-serif;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.product:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.product img {
+  width: 150px;
+  height: 150px;
+  object-fit: auto; /* Keeps image from stretching */
+  border-radius: 8px;
+}
+
+/* ===== Text Styles ===== */
+.product-name {
+  font-size: 18px;
+  font-weight: bold;
+  color: #333;
+  margin: 10px 0 5px;
+}
+
+.product-category {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 6px;
+}
+
+.product-rating {
+  color: #f5b50a;
+  font-size: 16px;
+  margin-bottom: 6px;
+}
+
+.product-price {
+  font-size: 17px;
+  color: #222;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.product h3 {
+  font-size: 1rem;
+  margin: 0.5rem 0 0.2rem;
+}
+
+/* ========== WHY CHOOSE US SECTION ========== */
+.why-choose {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 2rem;
+  padding: 3rem 2rem;
+  flex-wrap: wrap;
+}
+
+.why-card {
+  background: #fff;
+  border-radius: 20px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+  text-align: center;
+  width: 250px;
+}
+
+.why-card h4 {
+  color: #1fa14e;
+  margin-bottom: 0.5rem;
+}
+
+/* ========== FOOTER ========== */
+footer {
+  text-align: center;
+  padding: 1.5rem;
+  margin-top: 3rem;
+  background: #f5fdf7;
+  color: #555;
+  font-size: 0.9rem;
+}
+
+/* ========== RESPONSIVE NAVIGATION ========== */
+@media (max-width: 768px) {
+  nav {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  nav ul {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .title-btn {
+    font-size: 1.4rem;
+  }
+
+  .signupbutton,
+  .loginbutton {
+    padding: 0.4rem 1rem;
+    font-size: 0.9rem;
+  }
+
+  .hero h2 {
+    font-size: 2rem;
+  }
+
+  .product img {
+    height: 150px;
+  }
+
+  h2 {
+    font-size: 1.8rem;
+  }
+}
+
+/* ========== Buy Button ========== */
+.buy-now {
+  display: inline-block;
+  background-color: #1fa14e;
+  color: white;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 6px;
+  margin-right: 555px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  margin-top: auto;
+  transition: background-color 0.25s ease, transform 0.15s ease;
+}
+
+.buy-now:hover {
+  background-color: #178c42;
+  transform: translateY(-2px);
+}
+
+.buy-now:active {
+  transform: translateY(0);
+}
+
+/* =========== Product_details =========== */
+/* testing part no body moves this please */
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  z-index: 9999;
+  overflow-y: auto; /* ✅ allows overall scroll if modal too tall */
+}
+
+.modal-overlay.active {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.modal {
+  background-color: #fff;
+  border-radius: 10px 10px 0 0;
+  padding: 1.5rem;
+  width: 90%;
+  max-width: 800px;
+  height: auto; /* ✅ let height grow dynamically */
+  max-height: 90vh; /* ✅ prevents overflowing off screen */
+  overflow-y: auto; /* ✅ internal scroll inside modal */
+  transform: translateY(100%);
+  transition: transform 0.3s ease;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.modal-overlay.active .modal {
+  transform: translateY(0);
+}
+.star-rating {
+  display: flex;
+  gap: 0.3rem;
+  font-size: 1.8rem;
+  color: #ccc;
+  cursor: pointer;
+  margin-bottom: 0.8rem;
+  user-select: none;
+}
+
+.star-rating .star.selected,
+.star-rating .star.hovered {
+  color: #f5b50a; /* gold color when hovered or selected */
+}
+
+.review .stars {
+  color: #f5b50a;
+  font-size: 1.6rem;
+  margin-bottom: 0.4rem;
+}
+.close-btn {
+  cursor: pointer;
+  font-size: 2rem;
+  text-align: center;
+  display: block;
+  width: 100%;
+  margin-bottom: 1rem;
+  padding: 0.5rem 0;
+  background-color: none;
+  border-radius: 8px;
+  transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+#modalImage {
+  width: 100%;
+  max-height: 200px;
+  object-fit: contain;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.modal-rating {
+  color: #f5b50a;
+  font-size: 1.2rem;
+  margin: 0.5rem 0;
+  text-align: left;
+}
+
+.profile-container {
+  max-width: 700px;
+  margin: 3rem auto;
+  background: #fff;
+  padding: 2rem;
+  border-radius: 15px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+}
+
+.profile-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.profile-info p {
+  font-size: 1.1rem;
+  color: #333;
+  margin-bottom: 0.5rem;
+}
+
+.profile-actions {
+  margin-top: 1.5rem;
+}
+
+.profile-actions .btn {
+  background: #1fa14e;
+  color: #fff;
+  padding: 0.7rem 1.5rem;
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 600;
+  margin-right: 1rem;
+  transition: background 0.3s ease;
+}
+
+.profile-actions .btn:hover {
+  background: #158b42;
+}
+
+.profile-actions .logout {
+  background: #e74c3c;
+}
+
+.profile-actions .logout:hover {
+  background: #c0392b;
+}
+
+.user-menu {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  position: relative;
+}
+
+.dropdown {
+  position: relative;
+}
+
+.dropdown-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #1fa14e;
+  font-size: 1.2rem;
+  transition: color 0.3s ease;
+}
+
+.dropdown-btn:hover {
+  color: #158b42;
+}
+
+.dropdown-content {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  background-color: #fff;
+  min-width: 150px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  z-index: 100;
+  padding: 0.3rem 0;
+}
+
+.dropdown-content li {
+  list-style: none;
+}
+
+.dropdown-content a {
+  display: block;
+  padding: 10px 16px;
+  color: #333;
+  text-decoration: none;
+  transition: background 0.2s ease;
+}
+
+.dropdown-content a:hover {
+  background-color: #f1f1f1;
+}
+
+.dropdown.active .dropdown-content {
+  display: block;
+}
+
+.settings-container {
+  max-width: 700px;
+  margin: 3rem auto;
+  background: #fff;
+  padding: 2rem;
+  border-radius: 15px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+}
+
+.settings-container h2 {
+  text-align: center;
+  color: #1fa14e;
+  margin-bottom: 1.5rem;
+}
+
+.settings-form .form-group {
+  margin-bottom: 1rem;
+}
+
+.settings-form label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+  color: #333;
+}
+
+.settings-form input {
+  width: 100%;
+  padding: 0.7rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 1rem;
+}
+
+.btn-save {
+  background-color: #1fa14e;
+  color: #fff;
+  border: none;
+  padding: 0.7rem 1.5rem;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.btn-save:hover {
+  background-color: #158b42;
+}
+
+.btn-cancel {
+  display: inline-block;
+  margin-left: 1rem;
+  text-decoration: none;
+  color: #555;
+}
+
+.flash.success {
+  background-color: #dfffe3;
+  border-left: 5px solid #1fa14e;
+  padding: 0.6rem 1rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  color: #333;
+}
+
+.recommended-products {
+  display: flex; /* horizontal row */
+  flex-wrap: wrap; /* wrap to next line if not enough space */
+  gap: 20px; /* space between products */
+}
+
+.recommended-products .product {
+  flex: 0 0 200px; /* width of each product card */
+  box-sizing: border-box;
+}
+/* inside your modal CSS */
+#reviewsContainer {
+  margin-top: 20px;
+  max-height: 200px;
+  overflow-y: auto;
+  border-top: 1px solid #ddd;
+  padding-top: 10px;
+}
+
+.reviews-list {
+  margin-bottom: 10px;
+}
+
+.review {
+  background: #f8f9fa;
+  border-radius: 6px;
+  padding: 8px;
+  margin-bottom: 6px;
+}
+
+.review strong {
+  display: block;
+  color: #ff9800;
+}

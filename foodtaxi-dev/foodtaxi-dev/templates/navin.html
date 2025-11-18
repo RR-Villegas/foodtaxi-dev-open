@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Food Taxi - Your Online Food Marketplace">
+  <title>{% block title %}Food Taxi{% endblock %}</title>
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/cart.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/notification.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/category.css') }}">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto&display=swap">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+</head>
+<body>
+  <div id="notification-container" class="notification-container"></div>
+
+  <script src="{{ url_for('static', filename='js/notification.js') }}"></script>
+
+  <header>
+      <nav>
+        <a href="{{ url_for('reload') }}" class="title-btn">Food Taxi</a>
+
+        <ul>
+          {% if session.user_type == 'seller' %}
+          <li class="nav-item">
+            <a href="{{ url_for('seller_products') }}" class="nav-link">My Products</a>
+          </li>
+          {% endif %}
+
+          <li class="cart-link">
+            <a href="{{ url_for('cart') }}" class="cartbutton">
+              <i class="fas fa-shopping-cart"></i>
+              <span class="cart-badge">{{ cart_quantity }}</span>
+            </a>
+          </li>
+
+          {% if session.first_name %}
+          <div class="user-menu">
+            <span class="user-greeting">Hello, <strong>{{ session['first_name'] }}</strong>!</span>
+            <div class="dropdown">
+              <button class="dropdown-btn" id="dropdownToggle">
+                <img src="{{ url_for('get_encrypted_image', filename=session.profile_image) if session.profile_image else url_for('static', filename='images/default-profile.png') }}" alt="Profile" style="width: 30px; height: 30px; border-radius: 50%; object-fit: cover;">
+              </button>
+              <ul class="dropdown-content" id="dropdownMenu">
+                <li><a href="{{ url_for('profile') }}">Profile</a></li>
+                <li><a href="{{ url_for('settings') }}">Settings</a></li>
+                <li><a href="{{ url_for('orders') }}">My Orders</a></li>
+                
+               
+                <li>
+                    <form action="{{ url_for('logout') }}" method="POST">
+                      <button type="submit">Logout</button>
+                    </form>
+                </li>
+              </ul>
+            </div>
+          </div>
+          {% endif %}
+        </ul>
+      </nav>
+    </header>
+
+    {% block preload %}{% endblock %}
+
+    <main>{% block content %}{% endblock %}</main>
+
+    <footer>
+      <p>&copy; 2025 Food Taxi. All rights reserved.</p>
+    </footer>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const toggleBtn = document.getElementById("dropdownToggle");
+      const dropdown = document.querySelector(".dropdown");
+
+      toggleBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        dropdown.classList.toggle("active");
+      });
+
+      // Close dropdown if user clicks outside
+      document.addEventListener("click", function (e) {
+        if (!dropdown.contains(e.target)) {
+          dropdown.classList.remove("active");
+        }
+      });
+    });
+  </script>
+
+  <div id="notification-container" style="position: fixed; top: 20px; right: 20px; z-index: 9999;"></div>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      // Safely get flashed messages as JSON
+      const flashMessages = JSON.parse('{{ get_flashed_messages(with_categories=true) | tojson | safe }}');
+
+      flashMessages.forEach(([type, message]) => {
+        showNotification(message, type); // type = "success", "error", etc.
+      });
+    });
+  </script>
+ 
+
+ </body>
+</html>

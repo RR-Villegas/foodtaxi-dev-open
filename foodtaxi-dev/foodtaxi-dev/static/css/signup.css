@@ -1,0 +1,218 @@
+/* ======================= */
+/* Food App Signup Form CSS */
+/* ======================= */
+
+/* Body */
+body {
+  margin: 0;
+  font-family: "Poppins", sans-serif;
+  background: linear-gradient(135deg, #04210d, #093a1a);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+/* Container */
+.container {
+  width: 100%;
+  max-width: 950px;
+  display: flex;
+  justify-content: center;
+}
+
+/* Main login box */
+.login-box {
+  display: flex;
+  background: #0b1f12;
+  border-radius: 15px;
+  box-shadow: 0 0 30px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+  width: 850px;
+  max-width: 90%;
+}
+
+/* Left side image section */
+.image-section {
+  flex: 1;
+  background: #14532d;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  padding: 50px 30px;
+  color: #fff;
+}
+
+.image-section img {
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background: #fff;
+  padding: 10px;
+  object-fit: cover;
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+}
+
+.image-section h2 {
+  color: #ffc107;
+  font-weight: 600;
+  margin-top: 20px;
+}
+
+/* Right side form section */
+.form-section {
+  flex: 1;
+  background: #112a18;
+  padding: 60px 50px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.form-section h2 {
+  text-align: center;
+  margin-bottom: 25px;
+  color: #ffc107;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+/* Inputs & Dropdowns */
+.form-section input,
+.form-section select {
+  width: 100%;
+  padding: 12px;
+  margin: 10px 0;
+  border-radius: 8px;
+  border: 2px solid #14532d;
+  background: #0f2415;
+  color: #fff;
+  font-size: 15px;
+  outline: none;
+  transition: 0.3s;
+  -webkit-appearance: none; /* Remove default arrow on some browsers */
+  -moz-appearance: none;
+  appearance: none;
+}
+
+.form-section input:focus,
+.form-section select:focus {
+  border-color: #ffc107;
+  box-shadow: 0 0 8px rgba(255, 193, 7, 0.6);
+}
+
+/* Dropdown placeholder opacity */
+.form-section select option[disabled] {
+  color: #aaa;
+}
+
+/* Location fields group */
+.location-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 15px;
+}
+
+.location-fields div {
+  display: flex;
+  flex-direction: column;
+}
+
+.location-fields label {
+  margin-bottom: 4px;
+  font-size: 14px;
+  color: #fff;
+}
+
+.location-fields input[type="hidden"] {
+  display: none;
+}
+
+/* Password field eye icon */
+.password-field {
+  position: relative;
+}
+
+.password-field i {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  color: #aaa;
+  cursor: pointer;
+}
+
+.password-field i:hover {
+  color: #ffc107;
+}
+
+/* Buttons */
+button {
+  width: 100%;
+  padding: 12px;
+  background: #ffc107;
+  color: #0b1f12;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+button:hover {
+  background: #ffda47;
+}
+
+/* Register text */
+.register-text {
+  text-align: center;
+  margin-top: 15px;
+  color: #ccc;
+}
+
+.register-text a {
+  color: #66bb6a;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.register-text a:hover {
+  color: #81c784;
+}
+
+/* Flash messages */
+.flash-message {
+  text-align: center;
+  margin-bottom: 15px;
+  padding: 10px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.flash-message.success {
+  color: #ffffff;
+}
+
+.flash-message.error {
+  color: #ffffff;
+}
+
+.flash-message.info {
+  color: #ef5350;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .login-box {
+    flex-direction: column;
+  }
+
+  .image-section,
+  .form-section {
+    width: 100%;
+    padding: 30px 20px;
+  }
+}

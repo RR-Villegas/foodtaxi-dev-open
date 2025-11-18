@@ -1,0 +1,153 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sign Up | Food App</title>
+
+  <!-- JQuery -->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script src="{{ url_for('static', filename='js/ph-address-selector.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/notification.js') }}"></script>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/signup.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/signup-steps.css') }}">
+</head>
+
+<body>
+  <div class="container">
+    <div class="login-box">
+
+      <!-- Left Section -->
+      <div class="image-section">
+        <img src="{{ url_for('static', filename='images/logo.jpg') }}" alt="Food App Logo" />
+        <h2>Welcome to Food App</h2>
+      </div>
+
+      <!-- Right Section -->
+      <div class="form-section">
+        <h2>Sign Up</h2>
+
+        <div class="step-indicator">
+          <div class="active"></div>
+          <div></div>
+          <div></div>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="flash-message {{ category }}">{{ message }}</div>
+          {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('signup') }}" autocomplete="off">
+          
+          <!-- STEP 1: Account Info -->
+          <div class="form-step active" id="step1">
+            <h3>Account Info</h3>
+            <input type="text" name="first_name" placeholder="First Name" required>
+            <input type="text" name="last_name" placeholder="Last Name" required>
+            <input type="email" name="email" placeholder="Email" required pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$" title="Enter a valid email address">
+            
+            <input type="password" id="password" name="password" placeholder="Password" required>
+            <input type="password" id="confirm_password" name="confirm_password" placeholder="Confirm Password" required>
+            <small id="password-strength" style="display:block; margin:5px 0; font-size:0.9em;"></small>
+
+            <div class="step-buttons">
+              <button type="button" class="next-btn" data-next="2">Next</button>
+            </div>
+          </div>
+
+          <!-- STEP 2: User Type -->
+          <div class="form-step" id="step2">
+            <h3>User Type</h3>
+            <select name="user_type" id="user_type" required>
+              <option value="" disabled selected>Select Role</option>
+              <option value="buyer">Buyer</option>
+              <option value="seller">Seller</option>
+              <option value="rider">Rider</option>
+            </select>
+
+            <div class="step-buttons">
+              <button type="button" class="back-btn" data-prev="1">Back</button>
+              <button type="button" class="next-btn" data-next="3">Next</button>
+            </div>
+          </div>
+
+          <!-- STEP 3: Address -->
+          <div class="form-step" id="step3">
+            <h3>Address</h3>
+            <select id="region" name="region"></select>
+            <select id="province" name="province"></select>
+            <select id="city" name="city"></select>
+            <select id="barangay" name="barangay"></select>
+
+            <input type="hidden" id="region-text" name="region_text" required>
+            <input type="hidden" id="province-text" name="province_text" required>
+            <input type="hidden" id="city-text" name="city_text" required>
+            <input type="hidden" id="barangay-text" name="barangay_text" required>
+
+            <div class="step-buttons">
+              <button type="button" class="back-btn" data-prev="2">Back</button>
+              <button type="submit">Finish</button>
+            </div>
+          </div>
+        </form>
+
+        <p class="register-text">
+          Already have an account? <a href="{{ url_for('login') }}">Login here</a>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step JS -->
+  <script src="{{ url_for('static', filename='js/signup-steps.js') }}"></script>
+
+  <!-- Password strength script -->
+  <script>
+    const passwordInput = document.getElementById('password');
+    const strengthText = document.getElementById('password-strength');
+    const confirmInput = document.getElementById('confirm_password');
+
+    passwordInput.addEventListener('input', () => {
+      const val = passwordInput.value;
+      let strength = 'Weak';
+      let color = 'red';
+
+      const checks = [
+        /[A-Z]/.test(val),
+        /[0-9]/.test(val),
+        /[\W]/.test(val),
+        val.length >= 8
+      ];
+
+      const passed = checks.filter(Boolean).length;
+      if (passed === 4) { strength = 'Strong'; color = 'green'; }
+      else if (passed >= 2) { strength = 'Medium'; color = 'orange'; }
+
+      strengthText.textContent = `Password Strength: ${strength}`;
+      strengthText.style.color = color;
+    });
+
+    // Confirm password match
+    confirmInput.addEventListener('input', () => {
+      if (confirmInput.value !== passwordInput.value) {
+        strengthText.textContent = 'Passwords do not match';
+        strengthText.style.color = 'red';
+      } else {
+        strengthText.style.color = '';
+        passwordInput.dispatchEvent(new Event('input')); // refresh strength
+      }
+    });
+
+
+  </script>
+
+
+</body>
+</html>

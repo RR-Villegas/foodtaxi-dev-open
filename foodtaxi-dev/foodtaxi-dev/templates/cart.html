@@ -1,0 +1,288 @@
+{% extends "navin.html" %}
+{% block title %}Shopping Cart{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/cart.css') }}">
+
+
+{% endblock %}
+
+{% block content %}
+<h2>Your Shopping Cart</h2>
+
+{% if cart %}
+<div class="cart-container">
+
+  <!-- LEFT SIDE: Product List -->
+  <div class="cart-left">
+
+    <div class="select-all-container">
+    <input type="checkbox" id="selectAllCheckbox" checked>
+    <label for="selectAllCheckbox">Select All</label>
+  </div>
+    {% for item in cart %}
+    <div class="cart-item">
+      <input type="checkbox" class="checkout-checkbox" data-price="{{ item.subtotal }}" name="item_ids" value="{{ item.item_id }}" checked>
+      <!-- Image Wrapper -->
+      <div class="cart-image-wrapper">
+        <img src="{{ url_for('static', filename='uploads/' ~ item.image) }}"
+             alt="{{ item.product_name }}"
+             class="cart-image"
+             width="150"
+             height="150" />
+      </div>
+
+      <!-- Details -->
+      <div class="cart-details">
+        <h3>{{ item.product_name }}</h3>
+        <p>Price:  ₱{{ "%.2f"|format(item.price_each) }}</p>
+
+        <!-- Quantity Controls -->
+        <div class="quantity-controls" data-stock="{{ item.stock_quantity }}">
+          <form action="{{ url_for('update_cart') }}" method="post" style="display:inline;">
+            <input type="hidden" name="product_id" value="{{ item.product_id }}">
+            <input type="hidden" name="action" value="decrease">
+            <button type="submit" class="qty-btn">-</button>
+          </form>
+
+          <span class="quantity-display">{{ item.quantity }}</span>
+
+          <form action="{{ url_for('update_cart') }}" method="post" style="display:inline;">
+            <input type="hidden" name="product_id" value="{{ item.product_id }}">
+            <input type="hidden" name="action" value="increase">
+            <button type="submit" class="qty-btn">+</button>
+          </form>
+
+          <!-- Remove Button -->
+          <form action="{{ url_for('update_cart') }}" method="post" style="display:inline;">
+            <input type="hidden" name="product_id" value="{{ item.product_id }}">
+            <input type="hidden" name="action" value="remove">
+            <button type="submit" class="remove-btn">Remove</button>
+          </form>
+        </div>
+
+        <p class="item-subtotal">Subtotal: ₱{{ "%.2f"|format(item.subtotal) }}</p>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="cart-summary">
+    <h3>Order Summary</h3>
+
+    <!-- Subtotal -->
+    <div class="summary-item">
+        <span>Subtotal:</span>
+        <span id="summary-subtotal">₱{{ "%.2f"|format(total) }}</span>
+    </div>
+
+    <!-- Delivery Fee -->
+    <div class="summary-item">
+        <span>Delivery Fee:</span>
+        <span id="summary-delivery">₱0.00</span>
+    </div>
+
+    <!-- Total -->
+    <div class="summary-item total">
+        <span>Total:</span>
+        <span id="summary-total">₱{{ "%.2f"|format(total) }}</span>
+    </div>
+
+    <!-- Payment Method Selection -->
+    <div class="summary-item">
+        <label for="payment_method">Payment Method:</label>
+        <select id="payment_method" name="payment_method" required>
+            <option value="" disabled selected>Select Payment Method</option>
+            <option value="cod">Cash on Delivery (COD)</option>
+            <option value="gcash">GCash</option>
+            <option value="credit_card">Credit Card</option>
+            <option value="bank">Bank Transfer</option>
+        </select>
+    </div>
+
+    <!-- Payment Notice -->
+    <p id="paymentNotice" style="font-weight:bold; color:blue;"></p>
+
+    <form id="checkoutForm" action="{{ url_for('checkout') }}" method="POST">
+        <input type="hidden" id="latitude" name="latitude">
+        <input type="hidden" id="longitude" name="longitude">
+        <input type="hidden" id="delivery_address" name="delivery_address">
+        <!-- item_ids and payment_method will be injected dynamically by JS -->
+        <button type="button" class="checkout-btn" id="checkoutBtn">Proceed to Checkout</button>
+    </form>
+</div>
+
+</div>
+<!-- Map Picker Modal -->
+<div id="mapPickerModal" class="map-modal">
+  <div class="map-modal-content">
+    <span id="closeMapPicker" class="close-btn">&times;</span>
+    <h3>Select Delivery Location</h3>
+    <div id="mapPicker" style="height:400px; width:100%;"></div>
+    <button id="confirmDeliveryBtn">Confirm Delivery Location</button>
+  </div>
+</div>
+<style>
+.map-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 9999;
+  align-items: center;
+  justify-content: center;
+}
+
+.map-modal-content {
+  background: white;
+  width: 90%;
+  max-width: 600px;
+  height: 500px; /* fixed height */
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+#mapPicker {
+  flex: 1; /* fill remaining modal content */
+}
+
+
+</style>
+
+
+
+
+{% block scripts %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@maptiler/sdk@1.0.0/dist/maptiler.css" />
+<script src="https://cdn.jsdelivr.net/npm/@maptiler/sdk@1.0.0/dist/maptiler.min.js"></script>
+<link href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css" rel="stylesheet" />
+<script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const checkboxes = document.querySelectorAll(".checkout-checkbox");
+  const summarySubtotal = document.getElementById("summary-subtotal");
+  const summaryDelivery = document.getElementById("summary-delivery");
+  const summaryTotal = document.getElementById("summary-total");
+  const checkoutForm = document.getElementById("checkoutForm");
+  const checkoutBtn = document.getElementById("checkoutBtn");
+  const selectAllCheckbox = document.getElementById("selectAllCheckbox");
+  const paymentSelect = document.getElementById("payment_method");
+  const paymentNotice = document.getElementById("paymentNotice");
+
+  // ---------------- Summary logic ----------------
+  function updateSummary() {
+    let subtotal = 0;
+    checkboxes.forEach(cb => { 
+      if (cb.checked) subtotal += parseFloat(cb.dataset.price); 
+    });
+    const deliveryFee = parseFloat(summaryDelivery.dataset.fee || 0);
+    summarySubtotal.textContent = `₱${subtotal.toFixed(2)}`;
+    summaryTotal.textContent = `₱${(subtotal + deliveryFee).toFixed(2)}`;
+  }
+
+  checkboxes.forEach(cb => cb.addEventListener("change", updateSummary));
+
+  selectAllCheckbox.addEventListener("change", () => {
+    checkboxes.forEach(cb => cb.checked = selectAllCheckbox.checked);
+    updateSummary();
+  });
+
+  checkboxes.forEach(cb => cb.addEventListener("change", () => {
+    selectAllCheckbox.checked = Array.from(checkboxes).every(c => c.checked);
+    updateSummary();
+  }));
+
+  updateSummary();
+
+  // ---------------- Payment notice logic ----------------
+  paymentSelect.addEventListener("change", () => {
+    const method = paymentSelect.value;
+    if (method === "cod") {
+      paymentNotice.textContent = "Payment will be collected upon delivery.";
+    } else if (method) {
+      paymentNotice.textContent = "After checkout, you will be redirected to confirm your payment.";
+    } else {
+      paymentNotice.textContent = "";
+    }
+  });
+
+  // ---------------- Checkout button ----------------
+  checkoutBtn.addEventListener("click", () => {
+    const selectedItems = Array.from(checkboxes).filter(cb => cb.checked);
+    if (selectedItems.length === 0) {
+      alert("Please select at least one product to checkout.");
+      return;
+    }
+
+    const savedLoc = localStorage.getItem("deliveryLocation");
+    if (!savedLoc) {
+      const confirmOpen = confirm("No delivery location found. Would you like to set it now?");
+      if (confirmOpen) window.location.href = "/location_picker";
+      return;
+    }
+    const loc = JSON.parse(savedLoc);
+
+    // Ensure payment method is selected
+    if (!paymentSelect.value) {
+      alert("Please select a payment method.");
+      return;
+    }
+
+    // Clear old hidden fields
+    checkoutForm.querySelectorAll('input[name="item_ids"], input[name="latitude"], input[name="longitude"], input[name="delivery_address"], input[name="payment_method"]').forEach(i => i.remove());
+
+    // Add selected items
+    selectedItems.forEach(cb => {
+      const hidden = document.createElement("input");
+      hidden.type = "hidden";
+      hidden.name = "item_ids";
+      hidden.value = cb.value;
+      checkoutForm.appendChild(hidden);
+    });
+
+    // Add delivery location
+    const latInput = document.createElement("input");
+    latInput.type = "hidden";
+    latInput.name = "latitude";
+    latInput.value = loc.lat;
+    checkoutForm.appendChild(latInput);
+
+    const lngInput = document.createElement("input");
+    lngInput.type = "hidden";
+    lngInput.name = "longitude";
+    lngInput.value = loc.lng;
+    checkoutForm.appendChild(lngInput);
+
+    const addrInput = document.createElement("input");
+    addrInput.type = "hidden";
+    addrInput.name = "delivery_address";
+    addrInput.value = loc.address;
+    checkoutForm.appendChild(addrInput);
+
+    // Add payment method
+    const paymentInput = document.createElement("input");
+    paymentInput.type = "hidden";
+    paymentInput.name = "payment_method";
+    paymentInput.value = paymentSelect.value;
+    checkoutForm.appendChild(paymentInput);
+
+    // Submit form
+    checkoutForm.submit();
+  });
+});
+
+
+</script>
+
+
+
+
+
+{% endblock %}
+
+{% else %}
+<p class="empty-cart">Your cart is empty.</p>
+{% endif %}
+{% endblock %}

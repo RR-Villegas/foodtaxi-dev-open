@@ -1,0 +1,332 @@
+{% extends "navin.html" %}
+
+{% block title %}My Orders{% endblock %}
+
+{% block preload %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/orders.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="orders-header">
+  <h2>My Orders</h2>
+  <p class="muted">Track your purchases and order activity</p>
+</div>
+
+<!-- ====== Tabs Navigation ====== -->
+<div class="orders-tabs">
+  <button class="tab-btn active" data-status="all">All</button>
+  <button class="tab-btn" data-status="pending">To Pay</button>
+  <button class="tab-btn" data-status="processing">To Ship</button>
+  <button class="tab-btn" data-status="shipped">To Receive</button>
+  <button class="tab-btn" data-status="delivered">Completed</button>
+  <button class="tab-btn" data-status="cancelled">Cancelled</button>
+</div>
+
+<!-- Map Modal -->
+<div id="mapModal" class="map-modal">
+  <div class="map-modal-content">
+    <span id="closeMapModal" class="close-btn">&times;</span>
+    <h3>Delivery Tracking</h3>
+    <p id="deliveryStatus"></p>
+    <div id="map" style="height: 400px; border-radius: 10px;"></div>
+  </div>
+</div>
+<!-- ====== Container for dynamically loaded orders ====== -->
+<div id="ordersContainer" class="orders-list"></div>
+
+
+<script>
+async function loadOrders(statusFilter = "all") {
+  const container = document.getElementById("ordersContainer");
+  if (!container) return;
+
+  container.innerHTML = "<p class='muted'>Loading orders...</p>";
+
+  try {
+    const res = await fetch("/orders_data", { credentials: "include" });
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+
+    const orders = await res.json();
+
+    if (!orders.length) {
+      container.innerHTML = "<p class='empty-orders'>You have no orders yet.</p>";
+      return;
+    }
+
+    // ✅ Sort and filter orders properly (Shopee-like behavior)
+ let filtered;
+
+ if (statusFilter === "all") {
+  // For "All" tab → show active first, cancelled last
+  filtered = [...orders].sort((a, b) => {
+    const orderA = a.order_status.toLowerCase() === "cancelled" ? 1 : 0;
+    const orderB = b.order_status.toLowerCase() === "cancelled" ? 1 : 0;
+    if (orderA !== orderB) return orderA - orderB;
+    return new Date(b.order_date) - new Date(a.order_date);
+   });
+ }  else {
+  // For specific tabs → just filter + sort by date
+  filtered = orders
+    .filter(o => o.order_status.toLowerCase() === statusFilter)
+    .sort((a, b) => new Date(b.order_date) - new Date(a.order_date));
+ }
+
+    if (!filtered.length) {
+      container.innerHTML = `<p class='empty-orders'>No orders under "${statusFilter}"</p>`;
+      return;
+    }
+
+    container.innerHTML = filtered.map(order => {
+      // Build product list for this order
+      const productsHTML = (order.order_products || []).map(item => `
+        <div class="item">
+          <img src="${item.image ? '/static/uploads/' + item.image : '/static/images/placeholder.png'}"
+               alt="${item.product_name}">
+          <div class="info">
+            <h4>${item.product_name}</h4>
+            ${item.maker ? `<p class="maker">by ${item.maker}</p>` : ''}
+            <p>₱${parseFloat(item.price_each).toFixed(2)} × ${item.quantity}</p>
+            <p class="subtotal">Subtotal: ₱${parseFloat(item.subtotal).toFixed(2)}</p>
+          </div>
+        </div>
+      `).join("");
+
+      // Cancel button if order is processing
+      const cancelButton = order.order_status.toLowerCase() === "processing" ? `
+        <form action="/cancel_order/${order.order_id}" method="POST" class="cancel-form">
+          <button type="submit" class="cancel-btn">Cancel Order</button>
+        </form>
+      ` : "";
+
+       const trackButton = `<button class="track-btn" data-order-id="${order.order_id}">Track Delivery</button>`;
+
+
+
+
+      return `
+        <div class="order-card">
+          <div class="order-header">
+            <div>
+              <span class="order-id">#${order.order_id}</span>
+              <span class="order-status ${order.order_status.toLowerCase()}">${order.order_status}</span>
+            </div>
+            <div class="order-info">
+              <p>Payment: ${order.payment_method.toUpperCase()}</p>
+              <p>Date: ${new Date(order.order_date).toLocaleString()}</p>
+            </div>
+          </div>
+
+          <div class="order-items">${productsHTML}</div>
+
+          <div class="order-footer">
+            <p>Total: ₱${parseFloat(order.total_price).toFixed(2)}</p>
+             ${cancelButton}
+             ${trackButton}
+          </div>
+        </div>
+      `;
+    }).join("");
+
+  } catch (err) {
+    console.error(err);
+    container.innerHTML = "<p class='empty-orders'>Failed to load orders.</p>";
+  }
+}
+
+// ====== Handle tab clicks ======
+document.querySelectorAll(".tab-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    const status = btn.getAttribute("data-status");
+    loadOrders(status);
+  });
+});
+
+
+document.addEventListener("DOMContentLoaded", () => {
+  loadOrders(); // your existing function to load orders
+
+  const mapModal = document.getElementById("mapModal");
+  const closeMapModal = document.getElementById("closeMapModal");
+  const mapContainer = document.getElementById("map");
+  let orderMapInstance = null;
+  let riderMarker = null;
+  let destMarker = null;
+  let routeLine = null;
+
+  // Open map modal on track button click
+  document.addEventListener("click", async (e) => {
+    if (!e.target.classList.contains("track-btn")) return;
+
+    const orderId = e.target.dataset.orderId;
+    mapModal.style.display = "flex";
+
+    const res = await fetch(`/api/delivery_info/${orderId}`);
+    const data = await res.json();
+
+    const statusEl = document.getElementById("deliveryStatus");
+    if (data.error) {
+      statusEl.textContent = "No delivery info yet.";
+      return;
+    }
+
+    // Reinitialize map safely
+    if (orderMapInstance) {
+      orderMapInstance.remove();
+      orderMapInstance = null;
+    }
+    if (mapContainer && mapContainer._leaflet_id) {
+      mapContainer._leaflet_id = null;
+    }
+
+    // Initialize Leaflet map centered on destination
+    const destLat = parseFloat(data.dest_lat) || 14.5995;
+    const destLng = parseFloat(data.dest_lng) || 120.9842;
+    const riderLat = parseFloat(data.rider_lat) || destLat;
+    const riderLng = parseFloat(data.rider_lng) || destLng;
+
+    orderMapInstance = L.map(mapContainer).setView([destLat, destLng], 14);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap contributors",
+      maxZoom: 19
+    }).addTo(orderMapInstance);
+
+    // Destination marker
+    if (destMarker) orderMapInstance.removeLayer(destMarker);
+    destMarker = L.marker([destLat, destLng])
+      .addTo(orderMapInstance)
+      .bindPopup("Delivery Location")
+      .openPopup();
+
+    // Rider marker
+    if (data.rider_lat && data.rider_lng) {
+      if (riderMarker) orderMapInstance.removeLayer(riderMarker);
+
+      const riderIcon = L.divIcon({
+        html: '<div id="riderIcon" style="width:32px;height:32px;"><img src="https://cdn-icons-png.flaticon.com/512/684/684908.png" width="32" height="32"></div>',
+        className: "rider-icon",
+        iconSize: [32, 32],
+        iconAnchor: [16, 16]
+      });
+
+      riderMarker = L.marker([riderLat, riderLng], { icon: riderIcon })
+        .addTo(orderMapInstance)
+        .bindPopup(`Rider: ${data.rider_first || ""} ${data.rider_last || ""}`);
+
+      // Remove old route control if present
+      if (routeLine) {
+        try { orderMapInstance.removeControl(routeLine); } catch (err) { /* ignore */ }
+        routeLine = null;
+      }
+
+      // OSRM ROUTING (no directions UI)
+      routeLine = L.Routing.control({
+        waypoints: [
+          L.latLng(riderLat, riderLng),
+          L.latLng(destLat, destLng)
+        ],
+        router: L.Routing.osrmv1({
+          serviceUrl: "https://router.project-osrm.org/route/v1"
+        }),
+        lineOptions: {
+          styles: [{ color: "blue", opacity: 0.7, weight: 4 }]
+        },
+        addWaypoints: false,
+        draggableWaypoints: false,
+        fitSelectedRoutes: true,
+        createMarker: () => null,
+        show: false,
+        collapsible: false,
+        routeWhileDragging: false
+      }).addTo(orderMapInstance);
+
+      // Hide itinerary panel if it appears
+      setTimeout(() => {
+        const routingContainer = document.querySelector(".leaflet-routing-container");
+        if (routingContainer) routingContainer.style.display = "none";
+      }, 400);
+
+      // Get ETA from OSRM (travel time) and display minutes
+      try {
+        const etaRes = await fetch(
+          `https://router.project-osrm.org/route/v1/driving/${riderLng},${riderLat};${destLng},${destLat}?overview=false`
+        );
+        const etaJson = await etaRes.json();
+        if (etaJson.routes && etaJson.routes[0]) {
+          const seconds = etaJson.routes[0].duration;
+          const minutes = Math.max(1, Math.ceil(seconds / 60));
+          statusEl.textContent = `Status: ${data.delivery_status} | ETA: ${minutes} min`;
+        } else {
+          statusEl.textContent = `Status: ${data.delivery_status}`;
+        }
+      } catch (err) {
+        statusEl.textContent = `Status: ${data.delivery_status}`;
+      }
+
+      // Rotate rider icon to face destination
+      const dx = destLng - riderLng;
+      const dy = destLat - riderLat;
+      const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+      const riderEl = document.getElementById("riderIcon");
+      if (riderEl) riderEl.style.transform = `rotate(${angle}deg)`;
+    } else {
+      // If rider coords missing, just show status
+      statusEl.textContent = `Status: ${data.delivery_status}`;
+    }
+  });
+
+  // Close modal
+  closeMapModal.addEventListener("click", () => {
+    mapModal.style.display = "none";
+    if (orderMapInstance) orderMapInstance.remove();
+    orderMapInstance = null;
+  });
+
+  window.addEventListener("click", (e) => {
+    if (e.target === mapModal) {
+      mapModal.style.display = "none";
+      if (orderMapInstance) orderMapInstance.remove();
+      orderMapInstance = null;
+    }
+  });
+});
+</script>
+
+
+<!-- Leaflet -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+
+
+<style>
+.map-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 9999;
+  align-items: center;
+  justify-content: center;
+}
+.map-modal-content {
+  background: white;
+  padding: 20px;
+  width: 90%;
+  max-width: 600px;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+}
+.close-btn {
+  float: right;
+  font-size: 22px;
+  cursor: pointer;
+}
+</style>
+
+
+
+{% endblock %}

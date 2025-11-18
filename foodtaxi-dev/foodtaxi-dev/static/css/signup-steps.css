@@ -1,0 +1,50 @@
+/* Step Form Enhancements */
+.step-indicator {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+  gap: 10px;
+}
+
+.step-indicator div {
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  background: #14532d;
+  transition: 0.3s;
+}
+
+.step-indicator .active {
+  background: #ffc107;
+  box-shadow: 0 0 10px rgba(255, 193, 7, 0.7);
+}
+
+.form-step {
+  display: none;
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+.form-step.active {
+  display: block;
+}
+
+.step-buttons {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 20px;
+}
+
+.step-buttons button {
+  width: 48%;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

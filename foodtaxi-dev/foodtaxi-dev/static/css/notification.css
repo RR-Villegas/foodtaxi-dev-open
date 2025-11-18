@@ -1,0 +1,42 @@
+/* Container centered at the top */
+#notification-container {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none; /* allows clicks to pass through */
+}
+
+/* Notification box */
+.notification {
+  min-width: 250px;
+  padding: 12px 20px;
+  border-radius: 6px;
+  color: #fff;
+  font-weight: 500;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+  opacity: 0.95;
+  pointer-events: auto; /* makes it clickable if needed */
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+/* Colors */
+.notification.success { background-color: #178b42; }   /* primary green */
+.notification.info    { background-color: #2fa05a; }   /* lighter green */
+.notification.warning { background-color: #e5b63a; }   /* yellow/orange */
+.notification.danger  { background-color: #c0392b; }   /* red */
+.notification.error { background-color: #f44336; }
+
+/* Slide down + fade effect */
+.notification {
+  transform: translateY(-20px);
+  animation: slideFadeIn 0.4s forwards;
+}
+
+@keyframes slideFadeIn {
+  to { transform: translateY(0); opacity: 1; }
+}

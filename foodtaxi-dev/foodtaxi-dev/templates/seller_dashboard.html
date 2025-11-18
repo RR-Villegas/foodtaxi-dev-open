@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Seller Dashboard — E‑commerce</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/seller_dashboard.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/notification.css') }}">
+</head>
+<body>
+  <div class="dashboard">
+
+    <!-- ===== 1. Sidebar ===== -->
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        
+        <span>Food<span class="opacity-low">Taxi</span></span>
+      </div>
+
+      <!-- Store Link -->
+      <a class="nav-item store-link" href="#store">🏪 My Store</a>
+
+      <!-- Navigation -->
+      <nav>
+        <a class="nav-item" href="#" data-target="homePanel">🏠 Home</a>
+        <a class="nav-item" href="#" data-target="productsPanel">📦 Products</a>
+        <a class="nav-item" href="#" data-target="ordersPanel">🛒 Orders</a>
+        <a class="nav-item" href="#" data-target="analyticsPanel">📊 Analytics</a>
+        <a class="nav-item" href="#" data-target="settingsPanel">⚙️ Settings</a>
+        <a class="nav-item" id="logoutPanel">🚪 Logout</a>
+
+        <form id="logoutForm" action="{{ url_for('logout') }}" method="post" style="display:none;"></form>
+
+      </nav>
+
+      
+    </aside>
+
+    <!-- ===== 2. Main Content ===== -->
+    <main class="main" id="mainContent">
+
+      <!-- Topbar -->
+      <div class="topbar">
+  
+  <!-- Search Bar -->
+  <div class="search">
+    <input placeholder="Search products, orders or customers..." id="searchInput" />
+  </div>
+
+  <!-- Right Section -->
+  <div class="top-actions">
+    <!-- Notification Bell -->
+   <!-- ===== Notification Section ===== -->
+<div class="notif-wrapper">
+  <button id="notifBell" class="notif-bell" title="Notifications" aria-label="Notifications">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22" height="22" stroke="black" fill="none" stroke-width="2">
+      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </svg>
+    <span id="notifCount" class="notif-count">3</span>
+  </button>
+
+   
+
+  <div id="notifDropdown" class="notif-dropdown">
+    <div class="notif-header">
+      <h4>Notifications</h4>
+      <button id="notifClear" class="notif-clear">Clear All</button>
+    </div>
+    <ul id="notifList">
+      <li>No notifications</li>
+    </ul>
+  </div>
+</div>
+
+
+    <!-- Profile -->
+    <div class="profile">
+      <div class="avatar" aria-hidden></div>
+      <div class="muted">Hi, {{ user.first_name }}</div>
+    </div>
+  </div>
+</div>
+
+
+      <!-- Dashboard Cards -->
+      <div class="cards">
+        <div class="card sales-card">
+          <h4>Today's Sales</h4>
+          <div class="value">₱12,480</div>
+          <div class="muted">+8% from yesterday</div>
+        </div>
+        <div class="card orders-card">
+          <h4>Orders</h4>
+          <div class="value">42</div>
+          <div class="muted">3 new today</div>
+        </div>
+        <div class="card visitors-card">
+          <h4>Visitors</h4>
+          <div class="value">1,254</div>
+          <div class="muted">Conversion 2.1%</div>
+        </div>
+      </div>
+
+      <!-- Content Panels -->
+      <section class="content-panels">
+        <!-- Home Panel -->
+        <div class="panel" id="homePanel" style="display:block">
+          <h2>Welcome!</h2>
+          <p>Select a panel from the sidebar.</p>
+        </div>
+
+       <!-- Products Panel -->
+<div class="panel" id="productsPanel" style="display:none">
+  <section class="products-section">
+    <div class="products-header">
+      <h3>Products</h3>
+      <div class="products-actions">
+        <span class="muted">Total: <strong>{{ products|length }}</strong></span>
+        <button class="btn primary" id="btnAddProduct">+ Add Product</button>
+      </div>
+    </div>
+
+    <div class="products-filters">
+      <select id="filterCategory">
+        <option value="">All Categories</option>
+        <option value="Baking Supplies & Ingredients">Baking Supplies & Ingredients</option>
+        <option value="Coffee, Tea & Beverages">Coffee, Tea & Beverages</option>
+        <option value="Snacks & Candy">Snacks & Candy</option>
+        <option value="Specialty Foods & International Cuisine">Specialty Foods & International Cuisine</option>
+        <option value="Organic and Health Foods">Organic and Health Foods</option>
+        <option value="Meal Kits & Prepped Foods">Meal Kits & Prepped Foods</option>
+      </select>
+      <input type="text" id="searchProducts" placeholder="Search product..." />
+    </div>
+
+    <!-- Table for JS to populate -->
+    <table class="products-table">
+      <thead>
+        <tr>
+          <th>Image</th>
+          <th>Name</th>
+          <th>Maker</th>
+          <th>Category</th>
+          <th>Price</th>
+          <th>Stock</th>
+          <th>Sizes</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="productsList">
+        <!-- JS will append <tr> rows here dynamically -->
+      </tbody>
+    </table>
+  </section>
+</div>
+
+
+<!-- Add Product Modal -->
+<div id="editProductModal" class="modal" style="display: none;">
+  <div class="modal-content">
+    <h3>Edit Product</h3>
+    <form id="editProductForm">
+      <input type="text" name="product_name" placeholder="Product Name" required />
+      <input type="text" name="maker" placeholder="Maker / Brand" />
+      <textarea name="description" placeholder="Description"></textarea>
+      <input type="number" name="price" step="0.01" placeholder="Price" required />
+      <label id="uploadLabel" for="editProductImageInput">Choose Image</label>
+      <input type="file" name="image" accept="image/*" id="editProductImageInput">
+      <img id="editProductPreview" src="" alt="Image Preview"
+       style="display:none; max-width: 150px; margin-top: 10px;" />
+      <select name="category" required>
+        <option value="">Select Category</option>
+        <option value="Baking Supplies & Ingredients">Baking Supplies & Ingredients</option>
+        <option value="Coffee, Tea & Beverages">Coffee, Tea & Beverages</option>
+        <option value="Snacks & Candy">Snacks & Candy</option>
+        <option value="Specialty Foods & International Cuisine">Specialty Foods & International Cuisine</option>
+        <option value="Organic and Health Foods">Organic and Health Foods</option>
+        <option value="Meal Kits & Prepped Foods">Meal Kits & Prepped Foods</option>
+        
+      </select>
+
+      <input type="number" name="stock_quantity" placeholder="Stock Quantity" min="0" />
+
+      <div class="modal-actions">
+        <button type="submit" class="btn primary">Save</button>
+        <button type="button" id="btnCancelProduct" class="btn ghost">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+<div id="addProductModal" class="modal" style="display: none;">
+  <div class="modal-content">
+    <h3>Add New Product</h3>
+    <form id="addProductForm">
+      <input type="text" name="product_name" placeholder="Product Name" required />
+      <input type="text" name="maker" placeholder="Maker / Brand" />
+      <textarea name="description" placeholder="Description"></textarea>
+      <input type="number" name="price" step="0.01" placeholder="Price" required />
+      <div class="file-input-wrapper">
+      <label id="uploadLabel" for="addProductImageInput">Choose Image</label>
+      <input type="file" name="image" accept="image/*" id="addProductImageInput">
+      <img id="addProductPreview" src="" alt="Image Preview" style="display:none; max-width: 150px; margin-top: 10px;" />
+
+      </div>
+
+      
+
+      <select name="category" required>
+        <option value="">Select Category</option>
+        <option value="Baking Supplies & Ingredients">Baking Supplies & Ingredients</option>
+        <option value="Coffee, Tea & Beverages">Coffee, Tea & Beverages</option>
+        <option value="Snacks & Candy">Snacks & Candy</option>
+        <option value="Specialty Foods & International Cuisine">Specialty Foods & International Cuisine</option>
+        <option value="Organic and Health Foods">Organic and Health Foods</option>
+        <option value="Meal Kits & Prepped Foods">Meal Kits & Prepped Foods</option>
+        
+      </select>
+
+      <input type="number" name="stock_quantity" placeholder="Stock Quantity" min="0" />
+
+      <div class="modal-actions">
+        <button type="submit" class="btn primary">Save</button>
+        <button type="button" id="btnCancelProduct" class="btn ghost">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+
+        <!-- Orders Panel -->
+<div class="panel" id="ordersPanel" style="display:none">
+  <h3>Orders from Your Buyers</h3>
+  <table class="orders-table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Buyer</th>
+        <th>Items</th>
+        <th>Total</th>
+        <th>Payment</th>
+        <th>Status</th>
+        <th>Date</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody id="ordersList"></tbody>
+  </table>
+</div>
+
+
+        <!-- Analytics Panel -->
+        <div class="panel" id="analyticsPanel" style="display:none">
+          <h3>Analytics</h3>
+          <!-- Charts Here -->
+        </div>
+
+        <!-- Settings Panel -->
+        <div class="panel" id="settingsPanel" style="display:none">
+          <h3>Settings</h3>
+          <!-- Settings Form -->
+        </div>
+
+        <div class="panel" id="logoutPanel" style="display:none;">
+   <div class="panel-content">
+    <h3>Confirm Logout</h3>
+    <p>Are you sure you want to log out?</p>
+
+    <form action="{{ url_for('logout') }}" method="post">
+      <div class="panel-buttons">
+        <button type="submit" class="btn btn-danger">Yes, Logout</button>
+        <button type="button" id="cancelLogout" class="btn btn-secondary">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+      
+
+    </main>
+
+  </div>
+
+  <!-- Modal -->
+  <div class="modal-backdrop" id="modalBackdrop">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <h3 id="modalTitle">Add Product</h3>
+      <!-- Add Product Form -->
+    </div>
+  </div>
+
+  <!-- JS: Panel Switching -->
+  <script>
+    const sidebarItems = document.querySelectorAll(".sidebar .nav-item[data-target]");
+   const panels = document.querySelectorAll(".panel");
+   const toggleBtn = document.getElementById("btnToggle");
+   const sidebar = document.querySelector(".sidebar");
+   const main = document.querySelector(".main");
+   document.getElementById("logoutPanel").addEventListener("click", function (event) {
+   event.preventDefault(); // prevent default navigation
+   document.getElementById("logoutForm").submit(); // submit the hidden form
+ });
+
+  
+
+  // Sidebar navigation click
+   sidebarItems.forEach(item => {
+    item.addEventListener("click", e => {
+      e.preventDefault();
+      const targetId = item.dataset.target;
+
+      // Highlight active sidebar item
+      sidebarItems.forEach(i => i.classList.remove("active"));
+      item.classList.add("active");
+
+      // Hide all panels
+      panels.forEach(panel => (panel.style.display = "none"));
+
+      // Show clicked panel
+      const targetPanel = document.getElementById(targetId);
+      if (targetPanel) targetPanel.style.display = "block";
+    });
+  });
+
+  // Show default panel on load
+     const firstPanel = panels[0];
+     if (firstPanel) firstPanel.style.display = "block";
+
+
+     // === LOAD PRODUCTS FOR BUYER HOMEPAGE ===
+async function loadProducts() {
+  const list = document.getElementById("productsList");
+  if (!list) return;
+
+  list.innerHTML = `<tr><td colspan="8" class="muted">Loading products...</td></tr>`;
+
+  try {
+    const res = await fetch("/seller/products_data", { // or a dedicated buyer route
+      method: "GET",
+      headers: { "Accept": "application/json" },
+      credentials: "include"
+    });
+
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+
+    const data = await res.json();
+
+    if (!Array.isArray(data)) {
+      console.error("Invalid response format:", data);
+      list.innerHTML = `<tr><td colspan="8" class="muted">Failed to load products.</td></tr>`;
+      return;
+    }
+
+    list.innerHTML = "";
+
+    if (data.length === 0) {
+      list.innerHTML = `<tr><td colspan="8" class="muted">No products found.</td></tr>`;
+      return;
+    }
+
+    data.forEach(p => {
+      const row = document.createElement("tr");
+
+      const imageUrl = p.image
+        ? `/static/uploads/${p.image}`
+        : "/static/images/placeholder.png";
+
+      let sizesHTML = "";
+      try {
+        if (p.sizes) {
+          const sizes = JSON.parse(p.sizes);
+          sizesHTML = sizes.map(s => `<span>${s}</span>`).join(", ");
+        }
+      } catch {
+        sizesHTML = "";
+      }
+
+      row.innerHTML = `
+        <td><div class="product-thumb" style="background-image:url('${imageUrl}')"></div></td>
+        <td>${p.product_name}</td>
+        <td>${p.maker || ""}</td>
+        <td>${p.category || ""}</td>
+        <td>₱${p.price}</td>
+        <td class="${p.stock_quantity < 5 ? 'low' : ''}">${p.stock_quantity}</td>
+        <td>${sizesHTML}</td>
+        <td>
+          <button class="btn ghost edit" data-id="${p.product_id}">Edit</button>
+          <button class="btn danger delete" data-id="${p.product_id}">Delete</button>
+          <button class="btn accent gallery" data-id="${p.product_id}">Gallery</button>
+        </td>
+      `;
+
+      list.appendChild(row);
+    });
+
+  } catch (err) {
+    console.error("❌ Fetch error:", err);
+    list.innerHTML = `<tr><td colspan="8" class="muted">Failed to load products.</td></tr>`;
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  loadProducts();
+});
+
+  
+    
+
+
+
+ 
+  
+</script>
+
+
+<script>
+ document.addEventListener("DOMContentLoaded", () => {
+  const btnAddProduct = document.getElementById("btnAddProduct");
+  const addProductModal = document.getElementById("addProductModal");
+  const editProductModal = document.getElementById("editProductModal");
+
+  const btnCancelAdd = addProductModal.querySelector("#btnCancelProduct");
+  const btnCancelEdit = editProductModal.querySelector("#btnCancelProduct");
+
+  const addProductForm = document.getElementById("addProductForm");
+  const editProductForm = document.getElementById("editProductForm");
+
+  const editProductPreview = document.getElementById("editProductPreview");
+  const editImageInput = document.getElementById("editProductImageInput");
+  const addImageInput = document.getElementById("addProductImageInput");
+  const addProductPreview = document.getElementById("addProductPreview");
+
+  // 🟢 Open Add Product Modal
+  btnAddProduct.addEventListener("click", () => {
+    addProductModal.style.display = "flex";
+  });
+
+  // 🟠 Cancel buttons
+btnCancelAdd.addEventListener("click", () => {
+  addProductModal.style.display = "none";
+  resetAddProductModal();
+});
+
+btnCancelEdit.addEventListener("click", () => {
+  editProductModal.style.display = "none";
+  resetEditProductModal();
+});
+
+// 🟣 Close when clicking outside
+[addProductModal, editProductModal].forEach((modal) => {
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) {
+      modal.style.display = "none";
+      if (modal === addProductModal) resetAddProductModal();
+      if (modal === editProductModal) resetEditProductModal();
+    }
+  });
+});
+
+// 🔹 Helper functions to reset modals
+function resetAddProductModal() {
+  addProductForm.reset();               // Reset all form fields
+  addProductPreview.style.display = "none"; // Hide image preview
+  addProductPreview.src = "";           // Clear image
+  addImageInput.value = "";             // Reset file input
+}
+
+function resetEditProductModal() {
+  editProductForm.reset();
+  editProductPreview.style.display = "none";
+  editProductPreview.src = "";
+  editImageInput.value = "";
+}
+
+  
+  // 🟩 ADD PRODUCT FORM SUBMIT
+  addProductForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const formData = new FormData(addProductForm);
+
+    try {
+      const res = await fetch("/seller/add_product", {
+        method: "POST",
+        body: formData,
+        credentials: "same-origin",
+      });
+
+      if (!res.ok) throw new Error("Failed to add product");
+      const json = await res.json();
+      alert("✅ Product added successfully!");
+      addProductModal.style.display = "none";
+      addProductForm.reset();
+
+      if (typeof loadProducts === "function") loadProducts();
+    } catch (err) {
+      console.error(err);
+      alert("❌ Error adding product");
+    }
+  });
+
+  // 🟦 EDIT PRODUCT CLICK HANDLER
+  document.getElementById("productsList").addEventListener("click", async (e) => {
+    if (!e.target.classList.contains("edit")) return;
+
+    const productId = e.target.dataset.id;
+
+    try {
+      const res = await fetch(`/seller/get_product/${productId}`, {
+        method: "GET",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch product");
+      const product = await res.json();
+
+      // Fill form fields
+      const form = editProductForm;
+      form.querySelector('[name="product_name"]').value = product.product_name || "";
+      form.querySelector('[name="maker"]').value = product.maker || "";
+      form.querySelector('[name="description"]').value = product.description || "";
+      form.querySelector('[name="price"]').value = product.price || "";
+      form.querySelector('[name="category"]').value = product.category || "";
+      form.querySelector('[name="stock_quantity"]').value = product.stock_quantity || "";
+
+      form.dataset.productId = productId;
+
+      // 🟩 Show existing image
+   if (product.image) {
+   editProductPreview.src = `/static/uploads/${product.image}`;
+   editProductPreview.dataset.oldImage = `/static/uploads/${product.image}`; // store old image path
+   editProductPreview.style.display = "block";
+}  else {
+   editProductPreview.dataset.oldImage = "";
+   editProductPreview.style.display = "none";
+}
+
+      // Reset file input
+      editImageInput.value = "";
+
+      // Open modal
+      editProductModal.style.display = "flex";
+    } catch (err) {
+      console.error(err);
+      alert("❌ Failed to load product for editing.");
+    }
+  });
+
+
+  // 🟨 LIVE PREVIEW FOR IMAGE INPUT
+editImageInput.addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      editProductPreview.src = reader.result;
+      editProductPreview.style.display = "block";
+    };
+    reader.readAsDataURL(file);
+  } else {
+    // If input cleared, show old image if exists
+    if (editProductPreview.dataset.oldImage) {
+      editProductPreview.src = editProductPreview.dataset.oldImage;
+      editProductPreview.style.display = "block";
+    } else {
+      editProductPreview.style.display = "none";
+    }
+  }
+ });
+
+  if (addImageInput && addProductPreview) {
+  addImageInput.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        addProductPreview.src = reader.result;
+        addProductPreview.style.display = "block";
+      };
+      reader.readAsDataURL(file);
+    } else {
+      // Hide preview if input cleared
+      addProductPreview.style.display = "none";
+      addProductPreview.src = "";
+    }
+  });
+}
+
+  // 🟨 EDIT PRODUCT FORM SUBMIT
+  editProductForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const productId = editProductForm.dataset.productId;
+    const formData = new FormData(editProductForm);
+
+    try {
+      const res = await fetch(`/seller/edit_product/${productId}`, {
+        method: "POST",
+        body: formData,
+        credentials: "same-origin",
+      });
+
+      if (!res.ok) throw new Error("Failed to update product");
+      const json = await res.json();
+
+      alert(json.message || "✅ Product updated successfully!");
+      editProductModal.style.display = "none";
+      editProductForm.reset();
+      editProductPreview.style.display = "none";
+
+      if (typeof loadProducts === "function") loadProducts();
+    } catch (err) {
+      console.error(err);
+      alert("❌ Error updating product");
+    }
+  });
+});
+
+
+document.getElementById("productsList").addEventListener("click", async (e) => {
+  if (!e.target.classList.contains("delete")) return;
+
+  const productId = e.target.dataset.id;
+  if (!confirm("Are you sure you want to delete this product?")) return;
+
+  try {
+    const res = await fetch(`/seller/product/remove/${productId}`, {
+      method: "POST",
+      credentials: "same-origin"
+    });
+    if (!res.ok) throw new Error("Failed to delete product");
+
+    // Remove card from DOM
+    e.target.closest(".product-card").remove();
+  } catch (err) {
+    console.error(err);
+    alert("❌ Failed to delete product");
+  }
+});
+
+async function loadSellerOrders() {
+  const tbody = document.getElementById("ordersList");
+  tbody.innerHTML = `<tr><td colspan="8">Loading orders...</td></tr>`;
+
+  try {
+    const res = await fetch("/seller/orders_data");
+    if (!res.ok) throw new Error("Failed to load orders");
+
+    const orders = await res.json();
+
+    if (!orders.length) {
+      tbody.innerHTML = `<tr><td colspan="8">No orders yet.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = orders.map(o => `
+      <tr>
+        <td>#${o.order_id}</td>
+        <td>${o.buyer_name} ${o.buyer_lastname}</td>
+        <td>${o.total_items}</td>
+        <td>₱${parseFloat(o.total_price).toLocaleString()}</td>
+        <td>${o.payment_method.toUpperCase()}</td>
+        <td><span class="status-badge status-${o.order_status}">${o.order_status}</span></td>
+        <td>${new Date(o.order_date).toLocaleString()}</td>
+        <td>
+          <select class="status-select" data-id="${o.order_id}">
+            <option value="">Change</option>
+            <option value="processing">Processing</option>
+            <option value="shipped">Shipped</option>
+            <option value="delivered">Delivered</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </td>
+      </tr>
+    `).join("");
+
+    // Add event listeners for status change
+    document.querySelectorAll(".status-select").forEach(select => {
+      select.addEventListener("change", async e => {
+        const orderId = e.target.dataset.id;
+        const newStatus = e.target.value;
+        if (!newStatus) return;
+
+        const res = await fetch("/seller/update_order_status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ order_id: orderId, order_status: newStatus })
+        });
+
+        const result = await res.json();
+        showNotification(result.message, "success");
+
+        // Reload orders to reflect changes
+        loadSellerOrders();
+      });
+    });
+
+  } catch (err) {
+    console.error("Error:", err);
+    tbody.innerHTML = `<tr><td colspan="8">Failed to load orders.</td></tr>`;
+  }
+}
+
+document.addEventListener("DOMContentLoaded", loadSellerOrders);
+
+
+
+</script>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const bell = document.getElementById("notifBell");
+  const dropdown = document.getElementById("notifDropdown");
+  const clearBtn = document.getElementById("notifClear");
+  const notifCount = document.getElementById("notifCount");
+  const notifList = document.getElementById("notifList");
+
+  // Toggle dropdown
+  bell.addEventListener("click", (e) => {
+    e.stopPropagation();
+    dropdown.classList.toggle("show");
+  });
+
+  // Close if clicking outside
+  document.addEventListener("click", (e) => {
+    if (!dropdown.contains(e.target) && !bell.contains(e.target)) {
+      dropdown.classList.remove("show");
+    }
+  });
+
+  // Load notifications from server
+  async function loadNotifications() {
+    try {
+      console.log("Fetching notifications..."); // debug
+      const res = await fetch("/notifications", { credentials: "same-origin" }); // ensures cookies sent
+
+      if (!res.ok) {
+        console.error("Fetch failed with status:", res.status, res.statusText);
+        notifList.innerHTML = `<li>Error loading notifications (status ${res.status})</li>`;
+        return;
+      }
+
+      const data = await res.json();
+      console.log("Notifications received:", data); // debug
+
+      notifList.innerHTML = "";
+      if (!data.notifications || data.notifications.length === 0) {
+        notifList.innerHTML = "<li>No notifications</li>";
+        notifCount.textContent = "0";
+        return;
+      }
+
+      // Unread count
+      const unreadCount = data.notifications.filter(n => !n.is_read).length;
+      notifCount.textContent = unreadCount > 0 ? unreadCount : "";
+
+      data.notifications.forEach(n => {
+        const li = document.createElement("li");
+
+        // Seller pending order
+        if (n.type === "order_pending" && n.user_type === "seller") {
+          li.innerHTML = `
+            <strong>${n.message}</strong>
+            <button class="approve-btn" data-id="${n.order_id}">✅ Approve</button>
+            <button class="reject-btn" data-id="${n.order_id}">❌ Reject</button>
+          `;
+        } else {
+          li.innerHTML = n.link ? `<a href="${n.link}">${n.message}</a>` : n.message;
+        }
+
+        if (!n.is_read) li.style.fontWeight = "bold";
+
+        // Approve button
+        const approveBtn = li.querySelector(".approve-btn");
+        if (approveBtn) {
+          approveBtn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            const orderId = approveBtn.dataset.id;
+            try {
+              const res = await fetch(`/seller/orders/${orderId}/approve`, { method: "POST", credentials: "same-origin" });
+              if (!res.ok) console.error("Approve failed:", res.status);
+              li.remove();
+              notifCount.textContent = parseInt(notifCount.textContent) - 1 || "";
+            } catch (err) {
+              console.error("Approve error:", err);
+            }
+          });
+        }
+
+        // Reject button
+        const rejectBtn = li.querySelector(".reject-btn");
+        if (rejectBtn) {
+          rejectBtn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            const orderId = rejectBtn.dataset.id;
+            try {
+              const res = await fetch(`/seller/orders/${orderId}/reject`, { method: "POST", credentials: "same-origin" });
+              if (!res.ok) console.error("Reject failed:", res.status);
+              li.remove();
+              notifCount.textContent = parseInt(notifCount.textContent) - 1 || "";
+            } catch (err) {
+              console.error("Reject error:", err);
+            }
+          });
+        }
+
+        notifList.appendChild(li);
+      });
+
+    } catch (err) {
+      console.error("Failed to load notifications:", err);
+      notifList.innerHTML = "<li>Error loading notifications</li>";
+    }
+  }
+
+  // Clear notifications
+  clearBtn.addEventListener("click", async () => {
+    try {
+      const res = await fetch("/notifications/clear", { method: "POST", credentials: "same-origin" });
+      if (!res.ok) console.error("Clear notifications failed:", res.status);
+      loadNotifications();
+    } catch (err) {
+      console.error("Failed to clear notifications:", err);
+    }
+  });
+
+  // Initial load
+  loadNotifications();
+
+  // Refresh every 10 seconds
+  setInterval(loadNotifications, 10000);
+});
+
+</script>
+
+
+  
+  <script src="{{ url_for('static', filename='js/notification.js') }}"></script>
+</body>
+</html>

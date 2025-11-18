@@ -1,0 +1,52 @@
+<!-- product_detail_in.html -->
+<div class="modal-overlay" id="productOverlay">
+  <div class="modal" id="productModal">
+    <span class="close-btn">V</span>
+    <img id="modalImage" src="" alt="Product Image" />
+    <h3 id="modalName"></h3>
+    <p id="modalStock"></p>
+    <p id="modalCategory"></p>
+    <p id="modalPrice"></p>
+    <div class="modal-rating" id="modalRating">★★★★☆</div>
+    <p id="modalDescription"></p>
+
+    <form id="addToCartForm" action="{{ url_for('add_to_cart') }}" method="POST">
+      <input type="hidden" name="product_id" id="modalProductId" value="" />
+      <input
+        type="number"
+        name="quantity"
+        id="modalQuantity"
+        value="1"
+        min="1"
+        class="quantity-input"
+      />
+      <button type="submit" class="add-to-cart">Add to Cart</button>
+    </form>
+
+    <!-- 🧩 REVIEWS SECTION -->
+<div id="reviewsContainer">
+  <h4>Customer Reviews</h4>
+
+  <div id="reviewsList" class="reviews-list">
+    <p>Loading reviews...</p>
+  </div>
+
+  <form id="reviewForm">
+    <label for="starRating">Your Rating:</label>
+    <div class="star-rating" id="starRating">
+      <span data-value="1">★</span>
+      <span data-value="2">★</span>
+      <span data-value="3">★</span>
+      <span data-value="4">★</span>
+      <span data-value="5">★</span>
+    </div>
+
+    <label for="reviewComment">Your Comment:</label>
+    <textarea id="reviewComment" required></textarea>
+
+    <button type="submit" class="submit-review">Submit Review</button>
+  </form>
+</div>
+</div>
+</div>
+
