@@ -1,0 +1,63 @@
+<div class="product-card horizontal">
+    
+    <div class="product-info-horizontal">
+        
+        {# A. ENLARGED IMAGE SECTION #}
+        <a href="{{ url_for('view_product', product_id=product.product_id) }}" class="product-image-link large">
+            <img 
+                src="{{ url_for('uploaded_file', folder='product', filename=product.main_image_url) }}" 
+                alt="Image of {{ product.name }}"
+                class="product-image"
+                loading="lazy"
+            >
+        </a>
+
+        {# B. TIGHTER DETAILS SECTION #}
+        <div class="product-details-vertical">
+            
+            {# Wrapper to control spacing of inner text elements #}
+            <div class="product-details-content"> 
+                
+                {# Product Name #}
+                <h3 class="product-name">
+                    <a href="{{ url_for('view_product', product_id=product.product_id) }}">
+                        {{ product.name }}
+                    </a>
+                </h3>
+
+                {# Category #}
+                <p class="product-category-small">
+                    {{ product.category }}
+                </p>
+                
+                {# Rating Placeholder #}
+                <div class="product-rating">
+                    <span class="rating-stars">★★★★★</span> (0) 
+                </div>
+            </div>
+
+            {# Price (Often kept separate for distinct styling) #}
+            <p class="product-price">
+                ₱ {{ "{:,.2f}".format(product.price) }}
+            </p>
+            
+            {# Description (Optional) #}
+            {% if product.description %}
+                <p class="product-description-short">
+                    {{ product.description | truncate(40, True) }}
+                </p>
+            {% endif %}
+
+        </div>
+    </div>
+    
+    {# Product Actions #}
+    <div class="product-actions">
+        <form action="{{ url_for('add_to_cart') }}" method="POST">
+            <input type="hidden" name="product_id" value="{{ product.product_id }}">
+            <button type="submit" class="btn-add-to-cart">
+                🛒 Add to Cart
+            </button>
+        </form>
+    </div>
+</div>

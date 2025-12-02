@@ -1,0 +1,297 @@
+<style>
+/* --- STYLES OMITTED FOR BREVITY --- */
+#product-list-container {
+    background: #ffffff;
+    padding: 1.5rem;
+    border-radius: 16px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+    margin-bottom: 2rem;
+}
+
+#product-form-area {
+    display: none;
+    background: #ffffff;
+    padding: 2rem 10.5rem;
+    border-radius: 20px;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+    max-width: 650px;
+    margin: 2rem auto;
+    animation: fadeIn 0.25s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+#product-form-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #333;
+    margin-bottom: 1.3rem;
+}
+
+#product-crud-form label {
+    display: block;
+    margin-top: 1rem;
+    font-weight: 600;
+    color: #444;
+}
+
+#product-crud-form input,
+#product-crud-form select,
+#product-crud-form textarea {
+    width: 100%;
+    padding: 0.7rem 0.9rem;
+    margin-top: 0.35rem;
+    border-radius: 10px;
+    border: 1px solid #ccc;
+    background: #fafafa;
+    font-size: 0.95rem;
+    transition: 0.2s;
+}
+
+#product-crud-form input:focus,
+#product-crud-form select:focus,
+#product-crud-form textarea:focus {
+    border-color: #6c63ff;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(108,99,255,0.2);
+    outline: none;
+}
+
+#product-crud-form button {
+    padding: 0.8rem 1.4rem;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 600;
+    margin-top: 1.3rem;
+}
+
+#product-crud-form button[type="submit"] {
+    background: #6c63ff;
+    color: white;
+    box-shadow: 0 4px 12px rgba(108,99,255,0.35);
+    transition: 0.2s;
+}
+
+#product-crud-form button[type="submit"]:hover {
+    background: #554ef0;
+}
+
+#product-crud-form button[type="button"] {
+    background: #ddd;
+    margin-left: .5rem;
+}
+
+#product-crud-form button[type="button"]:hover {
+    background: #c6c6c6;
+}
+
+#current-image-status {
+    font-size: 0.9rem;
+    color: #555;
+    margin-top: .5rem;
+}
+
+textarea {
+    width: 100%;
+    min-height: 120px;
+    resize: vertical; 
+    overflow-y: auto; 
+    overflow-x: hidden;
+}
+/* --- END STYLES OMITTED FOR BREVITY --- */
+</style>
+
+<div id="product-list-container">
+    <p>Loading Product Data...</p>
+</div>
+
+<div id="product-form-area">
+</div>
+
+<template id="product-form-template-markup">
+    <h3 id="product-form-title"></h3>
+    <form id="product-crud-form" enctype="multipart/form-data">
+        
+        <label for="name">Product Name:</label>
+        <input type="text" name="name" required><br>
+
+        <label for="category">Category:</label>
+        <select name="category" required>
+            <option value="">-- Select Category --</option>
+            <option value="Baking Supplies & Ingredients">Baking Supplies & Ingredients</option>
+            <option value="Coffee, Tea & Beverages">Coffee, Tea & Beverages</option>
+            <option value="Snacks & Candy">Snacks & Candy</option>
+            <option value="Specialty Foods & International Cuisine">Specialty Foods & International Cuisine</option>
+            <option value="Organic and Health Foods">Organic and Health Foods</option>
+            <option value="Meal Kits & Prepped Foods">Meal Kits & Prepped Foods</option>
+        </select><br>
+
+        <label for="price">Price (PHP):</label>
+        <input type="number" name="price" step="0.01" min="0" required><br>
+
+        <label for="stock_quantity">Stock Quantity:</label>
+        <input type="number" name="stock_quantity" min="0" required><br>
+
+        <label for="description">Description:</label>
+        <textarea name="description" rows="5"></textarea><br>
+
+        <p id="current-image-status"></p>
+        <label for="main_image">Product Image (JPG/PNG):</label>
+        <input type="file" name="main_image" accept=".jpg, .jpeg, .png"><br>
+
+        <label>
+            <input type="checkbox" name="is_active" id="is_active"> 
+            Is Active (Visible to Buyers)
+        </label>
+        <br><br>
+        
+        <div>
+            <button type="submit">Save Product</button>
+            <button type="button" onclick="document.getElementById('product-form-area').style.display='none';">Cancel</button>
+        </div>
+    </form>
+</template>
+
+<script>
+// --- ESSENTIAL API COMMUNICATION FUNCTIONS ---
+
+/**
+ * Fetches product details from the Flask API for pre-filling the edit form.
+ */
+async function fetchProductDetails(productId, sellerId) {
+    const apiUrl = `/api/seller/${sellerId}/products?product_id=${productId}`;
+    try {
+        const response = await fetch(apiUrl);
+        if (response.ok) {
+            return await response.json();
+        } else if (response.status === 404) {
+            console.error("Error: Product not found.");
+        } else {
+            const errorData = await response.json();
+            console.error(`Error fetching product details: ${errorData.message}`);
+        }
+    } catch (error) {
+        console.error('Fetch error:', error);
+    }
+    return null;
+}
+
+/**
+ * Handles the form submission for both creating (POST) and updating (PUT) a product.
+ */
+async function handleProductSubmit(event, sellerId, productId) {
+    event.preventDefault();
+    const form = event.target;
+    const formData = new FormData(form);
+
+    // Explicitly set is_active field (1 for checked, 0 for unchecked)
+    formData.set('is_active', form.elements['is_active'].checked ? 1 : 0);
+    
+    // Determine method and URL
+    const method = productId ? 'PUT' : 'POST';
+    const apiUrl = productId 
+        ? `/api/seller/${sellerId}/product/${productId}` 
+        : `/api/seller/${sellerId}/product`;
+    
+    // Crucial step for PUT: If the file input is empty, remove it from formData
+    // to prevent the backend from overwriting the existing image URL with NULL/empty string.
+    if (method === 'PUT') {
+        const fileInput = form.elements['main_image'];
+        if (fileInput.files.length === 0) {
+            formData.delete('main_image');
+        }
+    }
+
+    try {
+        const response = await fetch(apiUrl, {
+            method: method,
+            // Do NOT set Content-Type: 'multipart/form-data'; fetch handles the boundary.
+            body: formData, 
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            alert(`${result.message}. Product ID: ${result.product_id || productId}`);
+            
+            // Success: Hide form and refresh product list (assuming this function exists)
+            document.getElementById('product-form-area').style.display = 'none';
+            if (typeof loadSellerProducts === 'function') {
+                loadSellerProducts(sellerId);
+            }
+        } else {
+            const errorData = await response.json();
+            alert(`Failed to save product: ${errorData.message}`);
+        }
+    } catch (error) {
+        console.error('Submission error:', error);
+        alert('An unexpected error occurred during submission.');
+    }
+}
+
+// --- FORM DISPLAY LOGIC (showProductForm) ---
+
+/**
+ * Populates the form with product data for editing or clears it for creation.
+ */
+async function showProductForm(productId, sellerId) {
+    const formArea = document.getElementById('product-form-area');
+    
+    // 1. Get and clone the template
+    const template = document.getElementById('product-form-template-markup');
+    if (!template) {
+        formArea.innerHTML = '<p>Error: Product form template not found.</p>';
+        return;
+    }
+    
+    // Clear and append cloned content
+    formArea.innerHTML = '';
+    const clonedContent = template.content.cloneNode(true);
+    formArea.appendChild(clonedContent);
+    
+    const formTitle = productId ? '✏️ Edit Product' : '➕ Add New Product';
+    document.getElementById('product-form-title').textContent = formTitle;
+
+    const form = document.getElementById('product-crud-form');
+    // Attach the submission handler
+    form.addEventListener('submit', (e) => handleProductSubmit(e, sellerId, productId));
+
+    if (productId) {
+        document.querySelector('#product-crud-form button[type="submit"]').textContent = 'Update Product';
+        
+        // Fetch data and populate form
+        const product = await fetchProductDetails(productId, sellerId);
+        if (product) {
+            form.elements['name'].value = product.name;
+            form.elements['description'].value = product.description || '';
+            form.elements['category'].value = product.category;
+            form.elements['price'].value = product.price;
+            form.elements['stock_quantity'].value = product.stock_quantity;
+            
+            // Checkbox logic: is_active is 1 (True) or 0 (False) from DB
+            form.elements['is_active'].checked = product.is_active === 1; 
+            
+            // Show link to current image - *** FIXED PATH HERE ***
+            if (product.main_image_url) {
+                document.getElementById('current-image-status').innerHTML = 
+                    `Current Image: <strong><a href="/uploads/product/${product.main_image_url}" target="_blank">View Current Image</a></strong>`;
+            } else {
+                document.getElementById('current-image-status').innerHTML = `No image uploaded.`;
+            }
+        }
+    } else {
+        // State for Add New Product
+        document.querySelector('#product-crud-form button[type="submit"]').textContent = 'Create Product';
+        form.elements['is_active'].checked = true; // Default to active for new products
+        document.getElementById('current-image-status').innerHTML = ``;
+    }
+
+    // Show form and scroll to it
+    formArea.style.display = 'block'; 
+    window.scrollTo(0, formArea.offsetTop);
+}
+</script>

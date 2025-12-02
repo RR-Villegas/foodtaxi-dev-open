@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}Search Results for "{{ query }}"{% endblock %}
+
+{% block head_extras %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/search.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/searchcard.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="search-results-page">
+    
+    <header class="search-header">
+        <h1>Search Results</h1>
+        <p class="search-summary">
+            Showing **{{ results|length }}** results for: 
+            <span class="query-term">"{{ query }}"</span>
+        </p>
+    </header>
+    
+    <hr>
+
+    <div class="search-content-grid">
+        
+        <aside class="search-filters">
+            <h2>Filter Results</h2>
+            <form action="{{ url_for('search') }}" method="GET" class="filter-form">
+                <input type="hidden" name="q" value="{{ query }}">
+                <input type="hidden" name="page" value="1"> 
+                
+                <fieldset class="filter-group">
+                    <legend>Category</legend>
+                    <div class="checkbox-list">
+                        <label>
+                            <input type="checkbox" name="category" value="baking" 
+                                {% if 'baking' in category_filter %}checked{% endif %}> Baking Supplies & Ingredients
+                        </label>
+                        <label>
+                            <input type="checkbox" name="category" value="coffee"
+                                {% if 'coffee' in category_filter %}checked{% endif %}> Coffee, Tea & Beverages
+                        </label>
+                        <label>
+                            <input type="checkbox" name="category" value="snacks" 
+                                {% if 'snacks' in category_filter %}checked{% endif %}> Snacks & Candy
+                        </label>
+
+                        <label>
+                            <input type="checkbox" name="category" value="specialty" 
+                                {% if 'specialty' in category_filter %}checked{% endif %}> Specialty Foods & International Cuisine
+                        </label>
+                        <label>
+                            <input type="checkbox" name="category" value="organic" 
+                                {% if 'organic' in category_filter %}checked{% endif %}> Organic and Health Foods
+                        </label>
+                        <label>
+                            <input type="checkbox" name="category" value="mealkits" 
+                                {% if 'mealkits' in category_filter %}checked{% endif %}> Meal Kits & Prepped Foods
+                        </label>
+
+                    </div>
+                </fieldset>
+
+                <fieldset class="filter-group">
+                    <legend>Price Range</legend>
+                    <label for="min_price">Min Price:</label>
+                    <input type="number" id="min_price" name="min_price" min="0" placeholder="0"
+                        value="{{ min_price if min_price is not none }}">
+                    
+                    <label for="max_price">Max Price:</label>
+                    <input type="number" id="max_price" name="max_price" min="0" placeholder="1000"
+                        value="{{ max_price if max_price is not none }}">
+                </fieldset>
+                
+                <button type="submit" class="apply-filters-btn">Apply Filters</button>
+                
+                {% if category_filter or min_price or max_price %}
+                    <div class="clear-filters-container">
+                        <a href="{{ url_for('search', q=query) }}" class="clear-filters-btn">
+                            Clear Filters (X)
+                        </a>
+                    </div>
+                {% endif %}
+            </form>
+        </aside>
+        
+        <div class="product-grid">
+    
+            {% if results %}
+                {% for product in results %}
+                    {# UPDATED THE INCLUDED FILE NAME HERE #}
+                    {% include '_partials/search_card.html' with context %} 
+                {% endfor %}
+            {% else %}
+                <div class="no-results">
+                    <h2>😔 No Products Found</h2>
+                    <p>We couldn't find any results matching **"{{ query }}"**. Try searching for broader terms or check your spelling.</p>
+                    <a href="{{ url_for('shop') }}" class="btn-primary">Browse All Products</a>
+                </div>
+            {% endif %}
+
+        </div>
+        
+    </div>
+    
+    {% if has_next_page or has_prev_page %}
+        <div class="pagination">
+            {% if has_prev_page %}
+                <a href="{{ url_for('search', q=query, page=page - 1, **request.args) }}" class="page-link">&laquo; Previous</a>
+            {% else %}
+                <span class="page-link disabled">&laquo; Previous</span>
+            {% endif %}
+            
+            <span class="current-page">Page {{ page }}</span>
+
+            {% if has_next_page %}
+                <a href="{{ url_for('search', q=query, page=page + 1, **request.args) }}" class="page-link">Next &raquo;</a>
+            {% else %}
+                <span class="page-link disabled">Next &raquo;</span>
+            {% endif %}
+        </div>
+    {% endif %}
+
+</section>
+{% endblock %}
