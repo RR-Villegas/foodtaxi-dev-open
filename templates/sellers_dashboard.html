@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta-name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seller Dashboard | FoodTaxi</title>
+
+    <!-- Link your existing theme CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    
+    <style>
+        /* --- CONTAINER --- */
+        .dashboard-wrapper {
+            display: flex;
+            gap: 20px;
+            padding: 20px;
+            min-height: 100vh;
+            background-color: var(--bg-color);
+        }
+
+        /* --- SIDEBAR --- */
+        .sidebar {
+            width: 260px;
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            height: fit-content;
+        }
+
+        .sidebar h2 {
+            color: var(--primary-color);
+            margin-top: 0;
+            font-size: 20px;
+        }
+
+        .nav-link {
+            display: block;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 6px;
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            text-decoration: none;
+            color: var(--text-color);
+            transition: 0.2s ease;
+        }
+
+        .nav-link:hover {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .nav-link.active {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .sidebar-bottom {
+            margin-top: 20px;
+        }
+
+        .sidebar-btn {
+            display: block;
+            text-align: center;
+            padding: 10px;
+            border-radius: 6px;
+            background: var(--primary-color);
+            color: white;
+            margin-bottom: 10px;
+            text-decoration: none;
+        }
+
+        .sidebar-btn.logout {
+            background: #d9534f;
+        }
+
+        /* --- MAIN CONTENT --- */
+        main {
+            flex: 1;
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+        }
+
+        #view-title {
+            color: var(--primary-color);
+            margin-top: 0;
+        }
+
+        header {
+            background: #000;
+            padding: 20px;
+        }
+
+    </style>
+</head>
+
+<body>
+
+<header>
+    <h1>Seller Dashboard</h1>
+    <p>Welcome, {{ current_user.firstname }}! | <a href="{{ url_for('logout') }}">Logout</a></p>
+    <hr>
+</header>
+
+<div class="dashboard-wrapper">
+
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+        <h2>Navigation</h2>
+
+        <a href="#" class="nav-link active" data-view="products">📦 Product Management</a>
+        <a href="#" class="nav-link" data-view="orders">🛍️ Orders</a>
+        <a href="#" class="nav-link" data-view="sales">📈 Sales & Analytics</a>
+        <a href="#" class="nav-link" data-view="reviews">⭐ Reviews</a>
+
+        <hr>
+
+        <div class="sidebar-bottom">
+            <a href="{{ url_for('index') }}" class="sidebar-btn">🏠 Homepage</a>
+            <a href="{{ url_for('logout') }}" class="sidebar-btn logout">Logout</a>
+        </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <main>
+        <h2 id="view-title">Dashboard Overview</h2>
+        <div id="dashboard-content"></div>
+    </main>
+
+</div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const contentArea = document.getElementById('dashboard-content');
+            const titleElement = document.getElementById('view-title');
+            const navLinks = document.querySelectorAll('.nav-link');
+            const sellerId = {{ current_user.get('account_id', 'null') }}; 
+            
+            if (sellerId === 'null') {
+                contentArea.innerHTML = '<p>Error: Seller ID not found. Please log in again.</p>';
+                return;
+            }
+
+            // --- VIEW LOADER ---
+            async function loadView(viewName) {
+                navLinks.forEach(link => link.classList.remove('active'));
+                const activeLink = document.querySelector(`[data-view="${viewName}"]`);
+                if (activeLink) {
+                    activeLink.classList.add('active');
+                    titleElement.textContent = activeLink.textContent;
+                }
+
+                try {
+                    const response = await fetch(`/seller/partial/${viewName}`);
+                    if (!response.ok) throw new Error('Failed to load partial: ' + response.statusText);
+                    const html = await response.text();
+                    contentArea.innerHTML = html;
+                    
+                    const initFunc = window[`init${viewName.charAt(0).toUpperCase() + viewName.slice(1)}View`];
+                    if (initFunc) {
+                        initFunc(sellerId);
+                    }
+                } catch (error) {
+                    contentArea.innerHTML = `<p>Error loading ${viewName} content: ${error.message}</p>`;
+                }
+            }
+
+            // Attach event listeners
+            navLinks.forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const view = link.getAttribute('data-view');
+                    history.pushState(null, '', `?view=${view}`);
+                    loadView(view);
+                });
+            });
+
+            // Initial load
+            const urlParams = new URLSearchParams(window.location.search);
+            const initialView = urlParams.get('view') || 'products';
+            loadView(initialView);
+        });
+
+        // --- COMMON FUNCTIONS ---
+
+        function refreshProductList(sellerId) {
+            document.getElementById('product-list-container').innerHTML = 'Loading products...';
+            fetchProducts(sellerId);
+        }
+
+        // --- PRODUCTS CRUD LOGIC ---
+        
+        async function fetchProducts(sellerId) {
+            try {
+                const response = await fetch(`/api/seller/${sellerId}/products`);
+                if (!response.ok) throw new Error('Failed to fetch products');
+                const products = await response.json();
+                renderProductTable(products, sellerId);
+            } catch (error) {
+                document.getElementById('product-list-container').innerHTML = `<p>${error.message}</p>`;
+            }
+        }
+
+        function renderProductTable(products, sellerId) {
+            const container = document.getElementById('product-list-container');
+            
+            // Check for empty list and render fallback message
+            if (products.length === 0) {
+                container.innerHTML = `
+                    <div><button onclick="showProductForm(null, ${sellerId})">➕ Add New Product</button></div>
+                    <p>You have no products listed. Click "Add New Product" to start selling!</p>
+                `;
+                return; // Exit the function
+            }
+            
+            let html = `
+                <div>
+                    <button onclick="showProductForm(null, ${sellerId})">➕ Add New Product</button>
+                </div>
+                <h3>Your Product Listings (${products.length})</h3>
+                <table border="1">
+                    <thead>
+                        <tr>
+                            <th>ID</th><th>Name</th><th>Price</th><th>Stock</th><th>Status</th><th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            products.forEach(p => {
+                // --- FIX IS HERE: Convert p.price to a float using parseFloat() ---
+                const priceDisplay = parseFloat(p.price).toFixed(2);
+                
+                html += `
+                    <tr>
+                        <td>${p.product_id}</td>
+                        <td>${p.name}</td>
+                        <td>₱${priceDisplay}</td>
+                        <td>${p.stock_quantity}</td>
+                        <td>${p.is_active ? 'Active' : 'Draft'}</td>
+                        <td>
+                            <button onclick="showProductForm(${p.product_id}, ${sellerId})">✏️ Edit</button>
+                            <button onclick="deleteProduct(${p.product_id}, ${sellerId})">🗑️ Delete</button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                    </tbody>
+                </table>
+            `;
+            container.innerHTML = html;
+        }
+
+        async function showProductForm(productId, sellerId) {
+            const formArea = document.getElementById('product-form-area');
+            
+            // Check if the template exists in the DOM
+            const template = document.getElementById('product-form-template-markup');
+            if (!template) {
+                formArea.innerHTML = '<p>🛑 Error: Product form template not found. Please ensure the template ID is correct.</p>';
+                return;
+            }
+            
+            // 1. Clear previous content and clone the template content
+            formArea.innerHTML = '';
+            const clonedContent = template.content.cloneNode(true);
+            
+            // 2. Append the cloned content to the form area
+            formArea.appendChild(clonedContent);
+            
+            // 3. Set the form title and attach the submit handler
+            const formTitle = productId ? '✏️ Edit Product' : '➕ Add New Product';
+            document.getElementById('product-form-title').textContent = formTitle;
+
+            const form = document.getElementById('product-crud-form');
+            // Attach the submit handler
+            form.addEventListener('submit', (e) => handleProductSubmit(e, sellerId, productId));
+
+            // 4. Handle Edit vs. Create (Populating data)
+            if (productId) {
+                document.querySelector('#product-crud-form button[type="submit"]').textContent = 'Update Product';
+                const product = await fetchProductDetails(productId, sellerId);
+                if (product) {
+                    form.elements['name'].value = product.name;
+                    form.elements['description'].value = product.description || '';
+                    form.elements['category'].value = product.category;
+                    form.elements['price'].value = product.price;
+                    form.elements['stock_quantity'].value = product.stock_quantity;
+                    // The is_active field must check for 1 (True) from DB
+                    form.elements['is_active'].checked = product.is_active === 1; 
+                    
+                    if (product.main_image_url) {
+                        document.getElementById('current-image-status').innerHTML = 
+                            `Current Image: <strong><a href="/uploads/${product.main_image_url}" target="_blank">View Current Image</a></strong>`;
+                    }
+                }
+            } else {
+                // Default state for Add Product
+                document.querySelector('#product-crud-form button[type="submit"]').textContent = 'Create Product';
+                form.elements['is_active'].checked = true; // Default to active for new products
+            }
+
+            // 5. Show the form and scroll to it
+            formArea.style.display = 'block'; 
+            window.scrollTo(0, formArea.offsetTop);
+        }
+
+        async function fetchProductDetails(productId, sellerId) {
+            try {
+                const response = await fetch(`/api/seller/${sellerId}/products?product_id=${productId}`);
+                if (!response.ok) throw new Error('Product not found.');
+                return await response.json();
+            } catch (error) {
+                alert(`Error fetching product details: ${error.message}`);
+                return null;
+            }
+        }
+
+        async function handleProductSubmit(e, sellerId, productId) {
+            e.preventDefault();
+            const form = e.target;
+            const formData = new FormData(form);
+            const method = productId ? 'PUT' : 'POST';
+            const url = productId 
+                ? `/api/seller/${sellerId}/product/${productId}`
+                : `/api/seller/${sellerId}/product`;
+            
+            formData.set('is_active', form.elements['is_active'].checked ? 1 : 0);
+            
+            if (formData.get('main_image') && formData.get('main_image').size === 0) {
+                formData.delete('main_image');
+            }
+
+            try {
+                const response = await fetch(url, { method: method, body: formData });
+                const result = await response.json();
+
+                if (response.ok) {
+                    alert(result.message);
+                    // Hide form (relying on default HTML behavior)
+                    document.getElementById('product-form-area').style.display = 'none'; 
+                    refreshProductList(sellerId);
+                } else {
+                    alert(`Error: ${result.message}`);
+                }
+            } catch (error) {
+                alert('A network error occurred.');
+            }
+        }
+
+        async function deleteProduct(productId, sellerId) {
+            if (!confirm(`Are you sure you want to delete product ID ${productId}? This action cannot be undone.`)) return;
+
+            try {
+                const response = await fetch(`/api/seller/${sellerId}/product/${productId}`, {
+                    method: 'DELETE'
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    alert(result.message);
+                    refreshProductList(sellerId);
+                } else {
+                    alert(`Error: ${result.message}`);
+                }
+            } catch (error) {
+                alert('A network error occurred.');
+            }
+        }
+
+        // --- INITIALIZER FUNCTIONS ---
+        function initProductsView(sellerId) {
+             refreshProductList(sellerId);
+        }
+
+        function initOrdersView(sellerId) {
+            document.getElementById('dashboard-content').innerHTML += '<p>Orders listing table and status updates will go here.</p>';
+        }
+
+        function initSalesView(sellerId) {
+            document.getElementById('dashboard-content').innerHTML += '<p>Monthly sales graph data fetched from /api/seller/X/sales/monthly will be charted here.</p>';
+        }
+
+        function initReviewsView(sellerId) {
+            document.getElementById('dashboard-content').innerHTML += '<p>Product and Seller reviews table will go here.</p>';
+        }
+    </script>
+</body>
+</html>

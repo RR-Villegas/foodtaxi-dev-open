@@ -1,0 +1,54 @@
+{% if items %}
+<div class="product-carousel-container" id="{{ carousel_id }}">
+    <h2 class="carousel-title">Featured Products</h2>
+    
+    <div class="carousel-wrapper">
+        
+        {# Start iterating over the list of products passed from the Flask route #}
+        {% for item in items %}
+        
+        <div class="product-card carousel-item">
+            {# Link to the product detail page #}
+            <a href="{{ url_for('product_detail', product_id=item.id) }}">
+                
+                {# Product Image #}
+                <div class="product-image-wrapper">
+                    {# Assuming the images are served from a static URL like /static/images/product_images/ITEM_NAME.EXT #}
+                    <img src="{{ url_for('uploaded_file', folder='product', filename=item.image_url) }}" 
+                         alt="{{ item.name }}" 
+                         loading="lazy"
+                         class="product-image">
+                </div>
+                
+                {# Product Info #}
+                <div class="item-info">
+                    <h3 class="product-name">{{ item.name }}</h3>
+                    <p class="store-name">Sold by: **{{ item.store_name }}**</p>
+                    <p class="price">₱{{ item.price | round(2) }}</p>
+                </div>
+            </a>
+            
+            {# Action Button: Add to Cart #}
+            {# Note: You will need a Flask route and JavaScript/form logic for this #}
+            <form action="{{ url_for('add_to_cart') }}" method="POST">
+                <input type="hidden" name="product_id" value="{{ item.id }}">
+                <input type="hidden" name="quantity" value="1">
+                <button type="submit" class="add-to-cart-btn" aria-label="Add {{ item.name }} to cart">
+                    🛒 Add to Cart
+                </button>
+            </form>
+        </div>
+        
+        {% endfor %}
+    </div>
+    
+    {# Navigation controls (optional: depends on your CSS/JS implementation) #}
+    <div class="carousel-nav">
+        <button class="prev-btn" aria-label="Previous"></button>
+        <button class="next-btn" aria-label="Next"></button>
+    </div>
+</div>
+
+{% else %}
+<p class="no-items-message">No featured products are available right now.</p>
+{% endif %}

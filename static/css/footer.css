@@ -1,0 +1,100 @@
+/* static/css/footer.css */
+
+:root {
+    --primary-color: #2d8f4e;
+    --text-color: #333;
+    --bg-color: #f8f9fa;
+    --border-color: #ddd;
+    --footer-bg: #333;
+    --footer-text: #fff;
+}
+
+body.dark-mode {
+    --text-color: #e0e0e0;
+    --bg-color: #1e1e1e;
+    --border-color: #444;
+    --footer-bg: #0a0a0a;
+    --footer-text: #e0e0e0;
+}
+
+/* Koishi Theme - Split Complementary Palette */
+body.koishi-mode {
+    --primary-color: #24DBB6; /* Cyan/Teal */
+    --text-color: #1a1a1a;
+    --bg-color: #f0fdf9;
+    --border-color: #c8f7f0;
+    --footer-bg: #B624DB; /* Magenta/Purple */
+    --footer-text: #fff;
+}
+
+/* --- FOOTER STYLES --- */
+.footer {
+    background-color: var(--footer-bg);
+    color: var(--footer-text);
+    padding: 40px 20px;
+    margin-top: 40px;
+    transition: background-color 0.3s, color 0.3s;
+}
+
+.footer-content {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 30px;
+    max-width: 1200px;
+    margin: 0 auto 30px;
+}
+
+.footer-column h3 {
+    font-size: 18px;
+    margin-bottom: 15px;
+    color: #2d8f4e;
+}
+
+body.koishi-mode .footer-column h3 {
+    color: #DBB624; /* Gold/Yellow for better contrast on magenta footer */
+}
+
+.footer-column p {
+    line-height: 1.6;
+    font-size: 14px;
+}
+
+.footer-column ul {
+    list-style: none;
+    padding: 0;
+}
+
+.footer-column ul li {
+    margin-bottom: 10px;
+}
+
+.footer-column ul li a {
+    color: #fff;
+    text-decoration: none;
+    font-size: 14px;
+    transition: color 0.3s;
+}
+
+.footer-column ul li a:hover {
+    color: #2d8f4e;
+}
+
+.footer-bottom {
+    text-align: center;
+    border-top: 1px solid #555;
+    padding-top: 20px;
+    font-size: 14px;
+    color: var(--footer-text);
+}
+
+/* Responsive design for mobile */
+@media (max-width: 768px) {
+    .footer-content {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+
+    .footer {
+        padding: 20px 10px;
+    }
+}

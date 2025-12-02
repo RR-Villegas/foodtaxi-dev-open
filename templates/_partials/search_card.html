@@ -1,0 +1,71 @@
+<div class="product-card horizontal">
+    
+    <div class="product-info-horizontal">
+        
+        {# A. ENLARGED IMAGE SECTION - CORRECTLY LINKS TO PRODUCT PAGE #}
+        <a href="{{ url_for('fetch_product', store_slug=product.store_slug, product_slug=product.product_slug) }}" class="product-image-link large">
+            <img 
+                src="{{ url_for('uploaded_file', folder='product', filename=product.main_image_url) }}" 
+                alt="Image of {{ product.name }}"
+                class="product-image"
+                loading="lazy"
+            >
+        </a>
+
+        {# B. TIGHTER DETAILS SECTION #}
+        <div class="product-details-vertical">
+            
+            <div class="product-details-content"> 
+                
+                {# Product Name - CORRECTLY LINKS TO PRODUCT PAGE #}
+                <h3 class="product-name">
+                    <a href="{{ url_for('fetch_product', store_slug=product.store_slug, product_slug=product.product_slug) }}">
+                        {{ product.name }}
+                    </a>
+                </h3>
+
+                {# Category #}
+                <p class="product-category-small">
+                    {{ product.category }}
+                </p>
+                
+                {# Rating Placeholder #}
+                <div class="product-rating">
+                    <span class="rating-stars">★★★★★</span> (0) 
+                </div>
+            </div>
+
+            {# Price #}
+            <p class="product-price">
+                ₱ {{ "{:,.2f}".format(product.price) }}
+            </p>
+            
+            {# Description (Optional) #}
+            {% if product.description %}
+                <p class="product-description-short">
+                    {{ product.description | truncate(40, True) }}
+                </p>
+            {% endif %}
+
+        </div>
+    </div>
+    
+    {# UPDATED: Product Actions - Now includes separate View and Add to Cart options #}
+    <div class="product-actions">
+        
+        {# 1. VIEW PRODUCT BUTTON (Anchor link) #}
+        <a href="{{ url_for('fetch_product', store_slug=product.store_slug, product_slug=product.product_slug) }}" class="btn-view-details">
+            View Details
+        </a>
+
+        {# 2. ADD TO CART FORM (POST action) #}
+        <form action="{{ url_for('add_to_cart') }}" method="POST" style="margin-top: 10px;">
+            <input type="hidden" name="product_id" value="{{ product.product_id }}">
+            <input type="hidden" name="quantity" value="1"> {# Defaults to adding 1 unit #}
+            
+            <button type="submit" class="btn-add-to-cart">
+                🛒 Add to Cart
+            </button>
+        </form>
+    </div>
+</div>

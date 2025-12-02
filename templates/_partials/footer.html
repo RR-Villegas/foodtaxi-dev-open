@@ -1,0 +1,30 @@
+<footer class="footer">
+    <div class="footer-content">
+        <div class="footer-column">
+            <h3>About Us</h3>
+            <p>Your local marketplace for specialty Filipino and international foods, delivered fresh to your door.</p>
+        </div>
+
+        <div class="footer-column">
+            <h3>Customer Service</h3>
+            <ul>
+                <li><a href="{{ url_for('faq') }}">FAQs</a></li>
+                <li><a href="{{ url_for('contact') }}">Contact Us</a></li>
+                <li><a href="{{ url_for('shipping') }}">Shipping & Returns</a></li>
+            </ul>
+        </div>
+
+        <div class="footer-column">
+            <h3>Partner With Us</h3>
+            <ul>
+                <li><a href="">Become a Seller</a></li>
+                <li><a href="{{ url_for('rider_application') }}">Become a Rider</a></li>
+                <li><a href="{{ url_for('privacy') }}">Privacy Policy</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="footer-bottom">
+        <p>&copy; {{ now.year }} FoodTaxi Omega. All rights reserved.</p>
+    </div>
+</footer>

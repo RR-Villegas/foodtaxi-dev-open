@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}Welcome to FoodTaxi Omega!{% endblock %}
+
+{% block content %}
+<style>
+    :root {
+        --primary: #31d67b;
+        --primary-dark: #25b062;
+        --glass-bg: rgba(255, 255, 255, 0.18);
+        --glass-border: rgba(255, 255, 255, 0.35);
+        --text-dark: #ffffff;
+        --text-light: #e8ffe9;
+        --radius: 22px;
+        --transition: 0.25s ease;
+    }
+
+    body {
+        font-family: "Inter", sans-serif;
+        background: #e8ffe8;
+        margin: 0;
+        padding: 0;
+    }
+
+    /* ================================
+       HERO SECTION — Glassmorphism
+    =================================*/
+    .hero-banner {
+        position: relative;
+        width: 100%;
+        min-height: 90vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 40px 20px;
+        background: url("/static/images/green-forest-blur.jpg") center/cover no-repeat;
+        overflow: hidden;
+    }
+
+    .hero-banner::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+            135deg,
+            rgba(69, 255, 147, 0.25),
+            rgba(21, 132, 82, 0.35)
+        );
+        backdrop-filter: blur(2px);
+    }
+
+    .hero-glass {
+        position: relative;
+        max-width: 900px;
+        padding: 70px 55px;
+        border-radius: 25px;
+        background: var(--glass-bg);
+        backdrop-filter: blur(18px);
+        border: 1px solid var(--glass-border);
+        box-shadow: 0 12px 60px rgba(0, 0, 0, 0.18);
+        z-index: 2;
+        text-align: center;
+    }
+
+    .hero-glass h1 {
+        font-size: 60px;
+        line-height: 1.05;
+        font-weight: 800;
+        color: #fff;
+        margin-bottom: 20px;
+        text-shadow: 0 3px 10px rgba(0,0,0,0.25);
+    }
+
+    .hero-glass p {
+        font-size: 20px;
+        max-width: 600px;
+        margin: 0 auto 28px auto;
+        color: var(--text-light);
+    }
+
+    .hero-buttons {
+        margin-top: 15px;
+    }
+
+    .hero-btn-primary {
+        background: var(--primary);
+        padding: 14px 32px;
+        border-radius: 50px;
+        color: #fff;
+        font-size: 19px;
+        font-weight: 600;
+        text-decoration: none;
+        margin-right: 14px;
+        transition: var(--transition);
+        box-shadow: 0 6px 18px rgba(34, 180, 110, 0.35);
+    }
+
+    .hero-btn-primary:hover {
+        background: var(--primary-dark);
+    }
+
+    .hero-btn-ghost {
+        padding: 14px 32px;
+        background: rgba(255,255,255,0.1);
+        border: 2px solid rgba(255,255,255,0.35);
+        border-radius: 50px;
+        color: #fff;
+        text-decoration: none;
+        font-size: 18px;
+        backdrop-filter: blur(4px);
+        transition: var(--transition);
+    }
+
+    .hero-btn-ghost:hover {
+        background: rgba(255,255,255,0.25);
+    }
+
+    /* ================================
+       CONTENT SECTION HEADERS
+    =================================*/
+    .content-section {
+        margin: 60px 0;
+        padding: 0 20px;
+    }
+
+    .content-section h2 {
+        font-size: 28px;
+        font-weight: 700;
+        color: #1f3b2c;
+        margin-bottom: 18px;
+    }
+
+    /* ================================
+       CTA SECTION
+    =================================*/
+    .cta-section {
+        background: linear-gradient(135deg, #31d67b, #25b062);
+        padding: 55px 30px;
+        border-radius: 22px;
+        text-align: center;
+        color: #fff;
+        margin-top: 80px;
+        box-shadow: 0 6px 25px rgba(0, 80, 40, 0.22);
+    }
+
+    .cta-section h2 {
+        font-size: 34px;
+        font-weight: 800;
+    }
+
+    .cta-section p {
+        margin-top: 8px;
+        font-size: 18px;
+        color: #eafff1;
+    }
+
+    .cta-btn {
+        display: inline-block;
+        margin-top: 20px;
+        background: #ffffff;
+        color: var(--primary-dark);
+        padding: 12px 26px;
+        font-size: 18px;
+        border-radius: 14px;
+        text-decoration: none;
+        font-weight: 600;
+        transition: var(--transition);
+    }
+
+    .cta-btn:hover {
+        background: #ecfff6;
+    }
+
+    /* ================================
+       RESPONSIVE
+    =================================*/
+    @media (max-width: 900px) {
+        .hero-glass {
+            padding: 50px 28px;
+        }
+
+        .hero-glass h1 {
+            font-size: 38px;
+        }
+    }
+</style>
+
+<!-- ================================
+     HERO SECTION
+================================ -->
+<section class="hero-banner">
+    <div class="hero-glass">
+        <h1>Your Philippine Marketplace for Gourmet & Specialty Foods</h1>
+        <p>Fresh, local, artisanal, and international goods — delivered with care.</p>
+
+        <div class="hero-buttons">
+            <a href="{{ url_for('search') }}" class="hero-btn-primary">Shop Now</a>
+            <a href="{{ url_for('seller_application') }}" class="hero-btn-ghost">Become a Seller</a>
+        </div>
+    </div>
+</section>
+
+<!-- ================================
+     FEATURED
+================================ -->
+<section class="content-section">
+    <h2>🌟 Featured Products</h2>
+    {% include '_partials/carousel.html' %}
+</section>
+
+<!-- ================================
+     TRENDING
+================================ -->
+<section class="content-section">
+    <h2>🔥 Trending Now</h2>
+    {% set items = trending_items %}
+    {% set carousel_id = 'trending-items' %}
+    {% include '_partials/carousel.html' %}
+</section>
+
+<!-- ================================
+     RECOMMENDED
+================================ -->
+<section class="content-section">
+    <h2>✨ You Might Also Like</h2>
+    {% set items = random_items %}
+    {% set carousel_id = 'random-items' %}
+    {% include '_partials/carousel.html' %}
+</section>
+
+<!-- ================================
+     CTA
+================================ -->
+<section class="cta-section">
+    <h2>Become a Seller</h2>
+    <p>Grow your business with FoodTaxi Omega. Apply now!</p>
+    <a href="{{ url_for('seller_application') }}" class="cta-btn">Start Selling</a>
+</section>
+
+{% endblock %}
+
+{% block body_scripts %}
+<script src="{{ url_for('static', filename='javascript/carousel.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeCarousel('featured-products');
+        initializeCarousel('trending-items');
+        initializeCarousel('random-items');
+    });
+</script>
+{% endblock %}

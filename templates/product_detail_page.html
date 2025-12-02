@@ -1,0 +1,351 @@
+{% extends "base.html" %}
+
+{% block title %}{{ product.name }} | FoodTaxi{% endblock %}
+
+{% block head_extras %}
+    {# Link CSS specific to the product detail page #}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/product_page.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<style>
+    .product-detail-page {
+    width: 100%;
+    max-width: 1300px;
+    margin: 0 auto;
+    padding: 20px;
+    font-family: "Inter", sans-serif;
+}
+
+.breadcrumbs {
+    font-size: 14px;
+    margin-bottom: 20px;
+    color: #777;
+}
+
+.breadcrumbs a {
+    color: #0077cc;
+    text-decoration: none;
+}
+
+.breadcrumbs a:hover {
+    text-decoration: underline;
+}
+
+.product-main-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+}
+
+.product-image-container {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.product-main-image {
+    width: 100%;
+    height: auto;
+    max-height: 500px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+}
+
+.product-thumbnail-gallery {
+    display: flex;
+    gap: 10px;
+}
+
+.product-thumbnail-gallery img {
+    width: 70px;
+    height: 70px;
+    border-radius: 5px;
+    object-fit: cover;
+    cursor: pointer;
+    border: 1px solid #ccc;
+    transition: 0.2s;
+}
+
+.product-thumbnail-gallery img:hover {
+    border-color: #0077cc;
+}
+
+.product-info-column {
+    display: flex;
+    flex-direction: column;
+}
+
+.product-category-detail {
+    color: #888;
+    font-size: 15px;
+    margin-bottom: 5px;
+}
+
+.product-title {
+    font-size: 30px;
+    font-weight: 700;
+    margin-bottom: 10px;
+}
+
+.product-seller-info {
+    font-size: 15px;
+    color: #555;
+    margin-bottom: 15px;
+}
+
+.price-and-stock-status {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-bottom: 20px;
+}
+
+.product-price-large {
+    font-size: 32px;
+    font-weight: 700;
+    color: #e63946;
+}
+
+.stock-status {
+    font-size: 16px;
+}
+
+.in-stock {
+    color: #4caf50;
+    font-weight: 600;
+}
+
+.out-of-stock {
+    color: #d32f2f;
+    font-weight: 600;
+}
+
+.review-summary {
+    margin: 15px 0;
+}
+
+.rating-stars {
+    color: gold;
+    font-size: 22px;
+}
+
+.review-summary a {
+    margin-left: 5px;
+    font-size: 14px;
+    color: #0077cc;
+}
+
+.purchase-actions {
+    margin: 20px 0;
+}
+
+.quantity-selector {
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.quantity-selector input {
+    width: 80px;
+    padding: 6px;
+    font-size: 16px;
+}
+
+.btn-primary,
+.btn-add-to-cart-large {
+    width: 100%;
+    background: #0077cc;
+    color: white;
+    padding: 14px;
+    border: none;
+    border-radius: 6px;
+    font-size: 18px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-primary:hover {
+    background: #005fa3;
+}
+
+.btn-primary:disabled {
+    background: #aaa;
+    cursor: not-allowed;
+}
+
+.out-of-stock-message {
+    color: #d32f2f;
+    margin-top: 10px;
+    font-size: 14px;
+}
+
+.product-details-extended {
+    margin-top: 50px;
+}
+
+.section-title {
+    font-size: 24px;
+    margin-bottom: 15px;
+}
+
+.full-description-content {
+    background: #fafafa;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #eee;
+}
+
+.reviews-section {
+    padding: 20px;
+    border-radius: 8px;
+    background: #fafafa;
+    border: 1px solid #eee;
+}
+
+@media (max-width: 900px) {
+    .product-main-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .product-main-image {
+        max-height: 350px;
+    }
+
+    .btn-primary,
+    .btn-add-to-cart-large {
+        font-size: 16px;
+    }
+}
+
+</style>
+<section class="product-detail-page">
+
+    {# 🍞 Breadcrumbs (Good Practice) #}
+    <div class="breadcrumbs">
+        <a href="{{ url_for('index') }}">Home</a>
+        &gt; <a href="{{ url_for('search', category=[product.category | lower | replace(' ', '-')]) }}">{{ product.category }}</a>
+        &gt; <span>{{ product.name }}</span>
+    </div>
+
+    <div class="product-main-grid">
+        
+        {# ---------------------------------------- #}
+        {# 1. IMAGE & GALLERY COLUMN #}
+        {# ---------------------------------------- #}
+        <div class="product-image-container">
+            <img 
+                src="{{ url_for('uploaded_file', folder='product', filename=product.main_image_url) }}" 
+                alt="Main image of {{ product.name }}"
+                class="product-main-image"
+            >
+            
+            {# Placeholder for secondary thumbnail images #}
+            <div class="product-thumbnail-gallery">
+                {# Future: Loop through product.secondary_images here #}
+            </div>
+        </div>
+
+        {# ---------------------------------------- #}
+        {# 2. DETAILS & PURCHASE COLUMN #}
+        {# ---------------------------------------- #}
+        <div class="product-info-column">
+            
+            <p class="product-category-detail">{{ product.category }}</p>
+
+            <h1 class="product-title">{{ product.name }}</h1>
+
+            {# Store Information (Fetched via JOIN in app.py) #}
+            <div class="product-seller-info">
+                Sold by: <strong>{{ product.store_name }}</strong>
+            </div>
+
+            <hr>
+
+            {# Price and Stock Status #}
+            <div class="price-and-stock-status">
+                <p class="product-price-large">
+                    ₱ {{ "{:,.2f}".format(product.price) }}
+                </p>
+                <p class="stock-status">
+                    {% if product.stock_quantity > 0 %}
+                        <span class="in-stock">In Stock ({{ product.stock_quantity }})</span>
+                    {% else %}
+                        <span class="out-of-stock">Out of Stock</span>
+                    {% endif %}
+                </p>
+            </div>
+
+            {# Rating and Reviews Summary Placeholder #}
+            <div class="review-summary">
+                <div class="product-rating-large">
+                    <span class="rating-stars">★★★★★</span> 
+                    <a href="#reviews">(0 Ratings & 0 Reviews)</a>
+                </div>
+            </div>
+
+            <hr>
+
+            {# Add to Cart Form (Uses the 'add_to_cart' Flask route) #}
+            <div class="purchase-actions">
+                {# The form points to the Flask route that handles cart addition #}
+                <form action="{{ url_for('add_to_cart') }}" method="POST" class="add-to-cart-form">
+                    
+                    {# Hidden input to send the unique product ID #}
+                    <input type="hidden" name="product_id" value="{{ product.product_id }}">
+                    
+                    <div class="quantity-selector">
+                        <label for="quantity">Quantity:</label>
+                        {# Input for selecting the quantity, linked to the 'quantity' field name #}
+                        <input type="number" 
+                            id="quantity" 
+                            name="quantity" 
+                            value="1" 
+                            min="1" 
+                            max="{{ product.stock_quantity }}" 
+                            required
+                            {% if product.stock_quantity == 0 %}disabled{% endif %}>
+                    </div>
+                    
+                    {# The button to submit the form #}
+                    <button type="submit" class="btn-primary btn-add-to-cart-large"
+                            {% if product.stock_quantity == 0 %}disabled{% endif %}>
+                        🛒 Add to Cart
+                    </button>
+                    
+                    {% if product.stock_quantity == 0 %}
+                        <p class="out-of-stock-message">This item is currently unavailable.</p>
+                    {% endif %}
+                    
+                </form>
+            </div>
+
+        </div>
+    </div>
+    
+    <hr>
+    
+    {# ---------------------------------------- #}
+    {# 3. DESCRIPTION & REVIEWS SECTION #}
+    {# ---------------------------------------- #}
+    <div class="product-details-extended">
+        <h2 class="section-title">Product Description</h2>
+        <div class="full-description-content">
+            {# The full description of the product #}
+            <p>{{ product.description | default("No extended description provided for this product.") }}</p>
+        </div>
+        
+        <hr id="reviews">
+
+        <h2 class="section-title">Customer Reviews</h2>
+        <div class="reviews-section">
+            {# Future: This section is where product reviews will be loaded/rendered #}
+            <p>Be the first to review this product!</p>
+        </div>
+    </div>
+    
+</section>
+{% endblock %}
