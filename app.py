@@ -52,26 +52,26 @@ app.config['UPLOAD_FOLDERS'] = {
 }
 app.config['ALLOWED_EXTENSIONS'] = ALLOWED_EXTENSIONS
 # -----------------------
-# DB POOL INITIALIZATION
+# DB POOL INITIALIZATION (migrated)
 # -----------------------
-db_pool = mysql.connector.pooling.MySQLConnectionPool(
-    pool_name=POOL_NAME,
-    pool_size=POOL_SIZE,
-    **DB_CONFIG
+# Use the centralized DB utilities in `foodtaxi.db`.
+from foodtaxi.db import init_db_pool, db, get_db_conn
+
+# Initialize the connection pool using the existing DB_CONFIG values.
+# This keeps the startup behavior identical while moving pool logic
+# into a dedicated module for easier maintenance.
+init_db_pool(DB_CONFIG, pool_name=POOL_NAME, pool_size=POOL_SIZE)
+
+# Import helper functions from the centralized helpers module
+from foodtaxi.helpers import (
+    create_slug,
+    allowed_file,
+    get_session_cart_count,
+    auto_approve_seller,
+    handle_image_upload,
+    delete_old_image,
+    get_cart_item_count,
 )
-
-class DB:
-    def query(self, sql, params=None):
-        conn, cur = get_db_conn()
-        cur.execute(sql, params or ())
-        return cur.fetchall()
-
-    def query_one(self, sql, params=None):
-        conn, cur = get_db_conn()
-        cur.execute(sql, params or ())
-        return cur.fetchone()
-
-db = DB()
 
 
 # -----------------------
@@ -79,93 +79,15 @@ db = DB()
 # -----------------------
 # app.py (Confirm your get_db_conn function matches this)
 
-def get_db_conn():
-    """
-    Returns the database connection and cursor, retrieving them from 
-    Flask's request-local global object 'g' or creating them if necessary.
-    """
-    if 'db_conn' not in g:
-        # 1. Get connection from the pool and store it on g
-        g.db_conn = db_pool.get_connection()
-        
-        # 2. Create the cursor and store it on g
-        # Using dictionary=True makes results easier to work with (e.g., row['column_name'])
-        g.db_cursor = g.db_conn.cursor(dictionary=True) 
-        
-    return g.db_conn, g.db_cursor
+# `get_db_conn` has been moved to `foodtaxi.db` and is imported above.
+# The implementation now lives in `foodtaxi/db.py` so the connection
+# pool and request-local cursor management are centralized.
 
-def create_slug(text):
-    """Converts text into a URL-friendly slug."""
-    text = text.lower()
-    # Replace non-alphanumeric characters (except space/hyphen) with nothing
-    text = ''.join(c if c.isalnum() or c in ' -' else '' for c in text)
-    # Replace spaces and multiple hyphens with a single hyphen
-    text = '-'.join(text.split())
-    return text
+# `create_slug` moved to `foodtaxi.helpers.create_slug` and is imported above.
 
-def get_session_cart_count():
-    """Calculates the total quantity of items in the session-based cart."""
-    # Session cart is stored as: {'product_id_1': quantity_1, 'product_id_2': quantity_2, ...}
-    session_cart = session.get('guest_cart', {})
-    
-    # Sum all quantities in the cart
-    return sum(session_cart.values())
+# `get_session_cart_count` moved to `foodtaxi.helpers.get_session_cart_count`.
 
-def auto_approve_seller(account_id, firstname, surname):
-    """
-    Creates a boilerplate SELLER_APPLICATION (approved) and STORE entry 
-    for a newly verified Seller account.
-    """
-    conn, cur = get_db_conn()
-    now = datetime.datetime.now()
-    store_name = f"{firstname}'s {surname} Shop"
-    # Create a URL-friendly slug (e.g., 'firstnames-surname-shop')
-    slug = store_name.lower().replace(" ", "-").replace("'", "")
-    
-    try:
-        # 1. Check if seller_application already exists
-        cur.execute("SELECT account_id FROM seller_application WHERE account_id = %s", (account_id,))
-        if cur.fetchone():
-            # Check if store exists (if application exists, store should exist, but check for safety)
-            cur.execute("SELECT owner_account_id FROM store WHERE owner_account_id = %s", (account_id,))
-            if cur.fetchone():
-                return "Seller application and store already exist."
-            
-        # 2. Create SELLER_APPLICATION entry (Pre-approved for testing)
-        if not cur.fetchone():
-            app_sql = """
-            INSERT INTO seller_application (
-                account_id, business_name, business_address, 
-                application_date, status, review_notes, date_approved,
-                otp_verified
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            """
-            app_values = (
-                account_id, store_name, "Seller Default Address",
-                now, 'Approved', 'Auto-approved on login for testing.', now,
-                True
-            )
-            cur.execute(app_sql, app_values)
-            # conn.commit() is done at the end of the entire function
-
-        # 3. Create STORE entry (Links product functionality)
-        store_sql = """
-        INSERT INTO store (
-            owner_account_id, store_name, slug, address_line, city, is_open
-        ) VALUES (%s, %s, %s, %s, %s, %s)
-        """
-        store_values = (
-            account_id, store_name, slug, "Seller Default Address", "Default City", True
-        )
-        cur.execute(store_sql, store_values)
-        
-        conn.commit()
-        return f"Seller store '{store_name}' created successfully."
-
-    except mysql.connector.Error as err:
-        conn.rollback()
-        print(f"Auto-approve Seller Error: {err}")
-        return f"Failed to auto-approve seller: {err.msg}"
+# `auto_approve_seller` moved to `foodtaxi.helpers.auto_approve_seller`.
 
 @app.teardown_appcontext
 def close_db_conn(exception):
@@ -183,8 +105,7 @@ def close_db_conn(exception):
 def send_static(path):
     return send_from_directory(os.path.join(os.path.dirname(__file__), 'static'), path)
 
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+# `allowed_file` moved to `foodtaxi.helpers.allowed_file` and is imported above.
 
 def require_json(f):
     @wraps(f)
@@ -599,21 +520,7 @@ def account():
 
 
 # --- 1. CART COUNT HELPER (Requires get_db_conn) ---
-def get_cart_item_count(buyer_account_id):
-    """Calculates the total quantity of items in the buyer's active cart."""
-    conn, cur = get_db_conn()
-    try:
-        cur.execute("""
-            SELECT SUM(ci.quantity) AS count
-            FROM cart_item ci
-            JOIN cart c ON ci.cart_id = c.cart_id
-            WHERE c.buyer_account_id = %s AND c.status = 'Active'
-        """, (buyer_account_id,))
-        count = cur.fetchone()['count']
-        return int(count) if count else 0
-    except Exception as e:
-        print(f"Error fetching cart count: {e}")
-        return 0
+# `get_cart_item_count` moved to `foodtaxi.helpers.get_cart_item_count`.
 
 # --- 2. CONTEXT PROCESSOR (Injects count for navbar) ---
 @app.context_processor
@@ -1211,25 +1118,7 @@ def seller_partial_view(view_name):
 # app.py (Around Line 605)
 
 # Use folder_key='product' to specify the target folder
-def handle_image_upload(file, product_name, folder_key='product'): # <-- ADDED folder_key
-    """Helper to save a file and return its path relative to /uploads/"""
-    
-    # 1. Get the target folder path
-    target_folder = app.config['UPLOAD_FOLDERS'].get(folder_key)
-    if not target_folder:
-        # Raise an error or handle it gracefully if the folder key is wrong
-        print(f"Error: Invalid upload folder key: {folder_key}")
-        return None
-        
-    if file and allowed_file(file.filename):
-        # Create a unique, secure filename
-        base, ext = os.path.splitext(secure_filename(file.filename))
-        unique_filename = f"{product_name.replace(' ', '_')}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}{ext.lower()}"
-        
-        # 2. Save to the correct folder
-        file.save(os.path.join(target_folder, unique_filename))
-        return unique_filename # Returns filename only
-    return None
+# `handle_image_upload` moved to `foodtaxi.helpers.handle_image_upload`.
 
 @app.route('/api/seller/<int:seller_id>/products', methods=['GET'])
 @require_seller
@@ -1490,31 +1379,7 @@ def uploaded_file(folder, filename):
     # Serve the file from the calculated full path
     return send_from_directory(base_dir, filename)
 
-def delete_old_image(filename, folder_key='product'):
-    """Deletes an image file from the specified upload folder."""
-    
-    if not filename:
-        return # Nothing to delete
-        
-    # FIX: Use the 'app' instance defined globally in app.py
-    target_folder = app.config['UPLOAD_FOLDERS'].get(folder_key)
-    
-    if not target_folder:
-        # Log this error or handle it as appropriate
-        print(f"Error: Invalid folder key '{folder_key}' provided for deletion.")
-        return
-        
-    file_path = os.path.join(target_folder, filename)
-    
-    try:
-        if os.path.exists(file_path):
-            os.remove(file_path)
-            print(f"Successfully deleted old file: {file_path}")
-        else:
-            # This is okay, maybe the file was already deleted or never existed
-            print(f"Warning: File not found for deletion: {file_path}")
-    except Exception as e:
-        print(f"Error deleting file {file_path}: {e}")
+# `delete_old_image` moved to `foodtaxi.helpers.delete_old_image`.
 
 
 
