@@ -5,13 +5,15 @@ import 'signup_page.dart';
 import 'profile_page.dart';
 import 'cart_page.dart';
 import 'search_page.dart';
+import 'buyer_dashboard.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Supabase.initialize(
     url: 'https://zsctswdvoknmdsimqrvr.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpzY3Rzd2R2b2tubWRzaW1xcnZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0MDkyMjgsImV4cCI6MjA5MTk4NTIyOH0.9AMczePav5ftvCbhhYWxBaquUFK1Nrmgx1FbUZKpci8',
+    anonKey:
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpzY3Rzd2R2b2tubWRzaW1xcnZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0MDkyMjgsImV4cCI6MjA5MTk4NTIyOH0.9AMczePav5ftvCbhhYWxBaquUFK1Nrmgx1FbUZKpci8',
   );
 
   runApp(const MyApp());
@@ -36,6 +38,7 @@ class MyApp extends StatelessWidget {
         '/profile': (context) => const ProfilePage(),
         '/cart': (context) => const CartPage(),
         '/search': (context) => const SearchPage(),
+        '/buyer-dashboard': (context) => const BuyerDashboard(),
       },
     );
   }
@@ -54,15 +57,41 @@ class _MyHomePageState extends State<MyHomePage> {
 
   String status = "Checking Supabase connection...";
 
-  final List<Map<String, String>> trendingItems = [
-    {"name": "Mango Sticky Rice", "image": "assets/images/food1.jpg"},
-    {"name": "Korean Kimchi", "image": "assets/images/food2.jpg"},
-  ];
-
-  final List<Map<String, String>> randomItems = [
-    {"name": "Takoyaki", "image": "assets/images/food3.jpg"},
-    {"name": "Matcha Cake", "image": "assets/images/food4.jpg"},
-  ];
+  // ✅ FOOD CATEGORIES
+  Map<String, List<Map<String, dynamic>>> get foodCategories => {
+        "🔥 Trending": [
+          {'name': 'Sushi', 'price': 320.00, 'main_image_url': 'assets/images/sushi.jpg'},
+          {'name': 'Tacos', 'price': 180.00, 'main_image_url': 'assets/images/tacos.jpg'},
+          {'name': 'Pad Thai', 'price': 220.00, 'main_image_url': 'assets/images/padthai.jpg'},
+          {'name': 'Pizza', 'price': 350.00, 'main_image_url': 'assets/images/pizza.jpg'},
+          {'name': 'Kebab', 'price': 250.00, 'main_image_url': 'assets/images/kebab.jpg'},
+          {'name': 'Burger', 'price': 200.00, 'main_image_url': 'assets/images/burger.jpg'},
+        ],
+        "🏆 Best Seller": [
+          {'name': 'Ramen', 'price': 260.00, 'main_image_url': 'assets/images/ramen.jpg'},
+          {'name': 'Dimsum', 'price': 230.00, 'main_image_url': 'assets/images/dimsum.jpg'},
+          {'name': 'Lasagna', 'price': 340.00, 'main_image_url': 'assets/images/lasagna.jpg'},
+          {'name': 'BBQ Ribs', 'price': 420.00, 'main_image_url': 'assets/images/bbqribs.jpg'},
+          {'name': 'Paella', 'price': 360.00, 'main_image_url': 'assets/images/paella.jpg'},
+          {'name': 'Falafel', 'price': 180.00, 'main_image_url': 'assets/images/falafel.jpg'},
+        ],
+        "🍝 Pasta": [
+          {'name': 'Carbonara', 'price': 280.00, 'main_image_url': 'assets/images/carbonara.jpg'},
+          {'name': 'Spaghetti Bolognese', 'price': 260.00, 'main_image_url': 'assets/images/spaghetti.jpg'},
+          {'name': 'Pesto Pasta', 'price': 240.00, 'main_image_url': 'assets/images/pesto.jpg'},
+          {'name': 'Seafood Pasta', 'price': 320.00, 'main_image_url': 'assets/images/seafood_pasta.jpg'},
+          {'name': 'Mac & Cheese', 'price': 180.00, 'main_image_url': 'assets/images/maccheese.jpg'},
+          {'name': 'Chicken Alfredo', 'price': 300.00, 'main_image_url': 'assets/images/alfredo.jpg'},
+        ],
+        "🍔 Burger": [
+          {'name': 'Cheeseburger', 'price': 180.00, 'main_image_url': 'assets/images/cheeseburger.jpg'},
+          {'name': 'Chicken Burger', 'price': 160.00, 'main_image_url': 'assets/images/chicken_burger.jpg'},
+          {'name': 'Double Burger', 'price': 220.00, 'main_image_url': 'assets/images/double_burger.jpg'},
+          {'name': 'Bacon Burger', 'price': 260.00, 'main_image_url': 'assets/images/bacon_burger.jpg'},
+          {'name': 'Veggie Burger', 'price': 150.00, 'main_image_url': 'assets/images/veggie_burger.jpg'},
+          {'name': 'Spicy Burger', 'price': 210.00, 'main_image_url': 'assets/images/spicy_burger.jpg'},
+        ],
+      };
 
   @override
   void initState() {
@@ -73,14 +102,9 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> testSupabase() async {
     try {
       await supabase.from('product').select().limit(1);
-
-      setState(() {
-        status = "✅ Supabase Connected";
-      });
+      setState(() => status = "");
     } catch (e) {
-      setState(() {
-        status = "❌ Connection Failed: $e";
-      });
+      setState(() => status = "❌ Connection Failed: $e");
     }
   }
 
@@ -93,21 +117,15 @@ class _MyHomePageState extends State<MyHomePage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
-            onPressed: () {
-              Navigator.pushNamed(context, '/search');
-            },
+            onPressed: () => Navigator.pushNamed(context, '/search'),
           ),
           IconButton(
             icon: const Icon(Icons.shopping_cart),
-            onPressed: () {
-              Navigator.pushNamed(context, '/cart');
-            },
+            onPressed: () => Navigator.pushNamed(context, '/cart'),
           ),
           IconButton(
             icon: const Icon(Icons.person),
-            onPressed: () {
-              Navigator.pushNamed(context, '/login');
-            },
+            onPressed: () => Navigator.pushNamed(context, '/login'),
           ),
         ],
       ),
@@ -116,18 +134,13 @@ class _MyHomePageState extends State<MyHomePage> {
         child: Column(
           children: [
 
-            // 🔥 STATUS (SUPABASE TEST)
+            // STATUS
             Padding(
               padding: const EdgeInsets.all(12),
-              child: Text(
-                status,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              child: Text(status, style: const TextStyle(fontWeight: FontWeight.bold)),
             ),
 
-            // 🔥 HERO BANNER
+            // HERO
             Container(
               height: 250,
               width: double.infinity,
@@ -146,43 +159,31 @@ class _MyHomePageState extends State<MyHomePage> {
                   Positioned.fill(
                     child: Opacity(
                       opacity: 0.1,
-                      child: Image.asset(
-                        'assets/images/food1.jpg',
-                        fit: BoxFit.cover,
-                      ),
+                      child: Image.asset('assets/images/tacos.jpg', fit: BoxFit.cover),
                     ),
                   ),
-                  Center(
+                  const Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
+                      children: [
                         Text(
                           "Your Philippine Marketplace",
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                          ),
+                              color: Colors.white,
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold),
                         ),
                         SizedBox(height: 8),
                         Text(
                           "for Specialty Foods",
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 24,
-                            fontWeight: FontWeight.w300,
-                          ),
+                          style: TextStyle(color: Colors.white, fontSize: 24),
                         ),
                         SizedBox(height: 16),
                         Text(
                           "Delivering fresh, local, and international goods right to your door.",
                           textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                          ),
+                          style: TextStyle(color: Colors.white, fontSize: 16),
                         ),
                       ],
                     ),
@@ -193,29 +194,30 @@ class _MyHomePageState extends State<MyHomePage> {
 
             const SizedBox(height: 20),
 
-            // 🔥 TRENDING
-            sectionTitle("🔥 Trending Now"),
-            horizontalList(trendingItems),
+            // ✅ FIXED FOOD CATEGORIES
+            Column(
+              children: foodCategories.entries.map((category) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 10),
+                    sectionTitle(category.key),
+                    horizontalFoodList(category.value),
+                  ],
+                );
+              }).toList(),
+            ),
 
             const SizedBox(height: 20),
 
-            // ✨ RANDOM
-            sectionTitle("✨ You Might Also Like"),
-            horizontalList(randomItems),
-
-            const SizedBox(height: 30),
-
-            // 📢 CTA SECTION
+            // CTA
             Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
                   const Text(
                     "Become a Seller",
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 10),
                   const Text(
@@ -225,14 +227,12 @@ class _MyHomePageState extends State<MyHomePage> {
                   const SizedBox(height: 15),
                   ElevatedButton(
                     onPressed: () {},
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.amber,
-                    ),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
                     child: const Text("Start Selling"),
                   )
                 ],
               ),
-            )
+            ),
           ],
         ),
       ),
@@ -246,41 +246,41 @@ class _MyHomePageState extends State<MyHomePage> {
         alignment: Alignment.centerLeft,
         child: Text(
           title,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
       ),
     );
   }
 
-  Widget horizontalList(List<Map<String, String>> items) {
+  Widget horizontalFoodList(List<Map<String, dynamic>> items) {
     return SizedBox(
-      height: 180,
+      height: 200,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         itemCount: items.length,
         itemBuilder: (context, index) {
           final item = items[index];
+
           return Container(
-            width: 140,
+            width: 150,
             margin: const EdgeInsets.all(10),
             child: Card(
-              elevation: 4,
               child: Column(
                 children: [
-                  Image.asset(
-                    item["image"]!,
-                    height: 100,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
+                  Expanded(
+                    child: Image.asset(
+                      item["main_image_url"],
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    item["name"]!,
-                    textAlign: TextAlign.center,
+                  Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: Text(item["name"],
+                        style: const TextStyle(fontWeight: FontWeight.bold)),
                   ),
+                  Text("₱${item["price"]}",
+                      style: const TextStyle(color: Colors.green)),
                 ],
               ),
             ),
