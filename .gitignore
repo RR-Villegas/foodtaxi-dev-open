@@ -1,3 +1,4 @@
 .lacretura
 build/
 .dart_tool/
+sql.sql
