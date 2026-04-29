@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'models/user_model.dart';
 import 'services/local_storage_service.dart';
 import 'services/database_service.dart';
@@ -210,46 +211,60 @@ class _SignupPageState extends State<SignupPage> {
     _signupData.street = _streetController.text.trim();
     _signupData.houseNumber = _houseNumberController.text.trim();
 
-    setState(() => _isLoading = true);
+setState(() => _isLoading = true);
     try {
-      // Sign up with Supabase Auth
+      // Sign up with Supabase Auth - include role as metadata
       final authResponse = await _supabase.auth.signUp(
         email: _signupData.email!,
         password: _signupData.password!,
+        data: {'role': _signupData.role},
       );
 
       // Get the user ID
       final userId = authResponse.user?.id;
       
       if (userId == null) {
-        throw Exception('Failed to get user ID from signup response');
+        throw Exception('Signup failed: No user returned');
       }
 
-      // Insert address into the database
+      // Insert user profile
+      await DatabaseService.insertUserProfile(
+        id: userId,
+        fullName: '${_signupData.firstName} ${_signupData.surname}',
+        phoneNumber: _signupData.phoneNumber,
+        role: _signupData.role,
+      );
+
+      // Insert address into the database - ensure houseNumber is not null
       await DatabaseService.insertAddress(
         accountId: userId,
         province: _signupData.province!,
         city: _signupData.municipality!,
         barangay: _signupData.barangay!,
         street: _signupData.street,
-        houseNumber: _signupData.houseNumber,
+        houseNumber: _signupData.houseNumber ?? '',
         isDefault: true, // Set first address as default
       );
 
-      // Save signup data locally for future reference
-      _signupData.email = authResponse.user?.email;
-      await LocalStorageService.saveSignupData(_signupData);
+      // Clear local signup data on success
+      await LocalStorageService.clearSignupData();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Sign up successful! Please check your email.')),
+          const SnackBar(
+            content: Text('Signup successful! Please check your email for confirmation.'),
+            backgroundColor: Colors.green,
+          ),
         );
-        Navigator.pop(context);
+        Navigator.pushNamed(context, '/login');
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(
+            content: Text('Signup failed: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -266,7 +281,7 @@ class _SignupPageState extends State<SignupPage> {
     _firstNameController.dispose();
     _surnameController.dispose();
     _phoneNumberController.dispose();
-    _provinceController.dispose();
+_provinceController.dispose();
     _municipalityController.dispose();
     _barangayController.dispose();
     _streetController.dispose();

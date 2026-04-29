@@ -23,7 +23,7 @@ class DatabaseService {
             'city': city,
             'barangay': barangay,
             'street': street,
-            'house_number': houseNumber,
+            'house_number': houseNumber ?? '',
             'is_default': isDefault,
           })
           .select()
@@ -32,6 +32,27 @@ class DatabaseService {
       return Address.fromJson(response);
     } catch (e) {
       throw Exception('Failed to insert address: $e');
+}
+  }
+
+  // Insert user profile after signup
+  static Future<void> insertUserProfile({
+    required String id,
+    required String fullName,
+    String? phoneNumber,
+    required String role,
+  }) async {
+    try {
+      await _supabase
+          .from('profiles')
+          .insert({
+            'id': id,
+            'full_name': fullName,
+            'phone_number': phoneNumber ?? '',
+            'role': role,
+          });
+    } catch (e) {
+      throw Exception('Failed to insert user profile: $e');
     }
   }
 
