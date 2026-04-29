@@ -19,6 +19,8 @@ class UserSignupData {
 
   // Account type (buyer/seller)
   String accountType = 'buyer';
+  // User role (buyer|admin)
+  String role = 'buyer';
 
   UserSignupData({
     this.email,
@@ -32,6 +34,7 @@ class UserSignupData {
     this.street,
     this.houseNumber,
     this.accountType = 'buyer',
+    this.role = 'buyer',
   });
 
   // Convert to JSON
@@ -48,6 +51,7 @@ class UserSignupData {
       'street': street,
       'houseNumber': houseNumber,
       'accountType': accountType,
+      'role': role,
     };
   }
 
@@ -65,6 +69,7 @@ class UserSignupData {
       street: json['street'],
       houseNumber: json['houseNumber'],
       accountType: json['accountType'] ?? 'buyer',
+      role: json['role'] ?? 'buyer',
     );
   }
 

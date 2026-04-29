@@ -6,6 +6,7 @@ import 'profile_page.dart';
 import 'cart_page.dart';
 import 'search_page.dart';
 import 'buyer_dashboard.dart';
+import 'admin_dashboard.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,6 +40,7 @@ class MyApp extends StatelessWidget {
         '/cart': (context) => const CartPage(),
         '/search': (context) => const SearchPage(),
         '/buyer-dashboard': (context) => const BuyerDashboard(),
+        '/admin-dashboard': (context) => const AdminDashboard(),
       },
     );
   }
@@ -126,6 +128,11 @@ class _MyHomePageState extends State<MyHomePage> {
           IconButton(
             icon: const Icon(Icons.person),
             onPressed: () => Navigator.pushNamed(context, '/login'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.admin_panel_settings, color: Colors.orange),
+            tooltip: 'DEMO Admin Dashboard',
+            onPressed: () => Navigator.pushNamed(context, '/admin-dashboard'),
           ),
         ],
       ),

@@ -44,12 +44,14 @@ class _LoginPageState extends State<LoginPage> {
 
     setState(() => _isLoading = true);
     try {
-      await _supabase.auth.signInWithPassword(
+      final response = await _supabase.auth.signInWithPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
+      final user = _supabase.auth.currentUser!;
+      final role = (user.userMetadata?['role'] as String?) ?? 'buyer';
       if (mounted) {
-        Navigator.pushReplacementNamed(context, '/buyer-dashboard');
+        Navigator.pushReplacementNamed(context, role == 'admin' ? '/admin-dashboard' : '/buyer-dashboard');
       }
     } catch (e) {
       if (mounted) {

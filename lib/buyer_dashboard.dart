@@ -12,7 +12,7 @@ class BuyerDashboard extends StatefulWidget {
 class _BuyerDashboardState extends State<BuyerDashboard> {
   final _supabase = Supabase.instance.client;
 
-  List<Map<String, dynamic>> _products = [];
+  final List<Map<String, dynamic>> _products = [];
 // _cart replaced by CartModel.cartItems
 
   bool _isLoading = true;
