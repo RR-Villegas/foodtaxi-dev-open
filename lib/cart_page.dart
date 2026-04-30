@@ -154,13 +154,8 @@ class _CartPageState extends State<CartPage> {
                   backgroundColor: const Color(0xFF2d8f4e),
                   foregroundColor: Colors.white,
                 ),
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Checkout coming soon!'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
+onPressed: () {
+                  Navigator.pushNamed(context, '/checkout');
                 },
                 child: const Text(
                   'Proceed to Checkout',

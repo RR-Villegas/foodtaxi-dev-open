@@ -118,7 +118,7 @@ class DatabaseService {
     }
   }
 
-  // Set address as default
+// Set address as default
   static Future<void> setDefaultAddress(String accountId, String addressId) async {
     try {
       // Set all addresses to not default
@@ -134,6 +134,56 @@ class DatabaseService {
           .eq('address_id', addressId);
     } catch (e) {
       throw Exception('Failed to set default address: $e');
+    }
+  }
+
+  // Insert order
+  static Future<String> insertOrder({
+    required String accountId,
+    required String addressId,
+    required double totalAmount,
+    required String paymentMethod,
+    required String status,
+  }) async {
+    try {
+      final response = await _supabase
+          .from('orders')
+          .insert({
+            'account_id': accountId,
+            'address_id': addressId,
+            'total_amount': totalAmount,
+            'payment_method': paymentMethod,
+            'status': status,
+          })
+          .select()
+          .single();
+
+      return response['order_id'] as String;
+    } catch (e) {
+      throw Exception('Failed to insert order: $e');
+    }
+  }
+
+  // Insert order item
+  static Future<void> insertOrderItem({
+    required String orderId,
+    required String productName,
+    required double price,
+    required int quantity,
+    required String imageUrl,
+  }) async {
+    try {
+      await _supabase
+          .from('order_items')
+          .insert({
+            'order_id': orderId,
+            'product_name': productName,
+            'price': price,
+            'quantity': quantity,
+            'image_url': imageUrl,
+          });
+    } catch (e) {
+      throw Exception('Failed to insert order item: $e');
     }
   }
 }

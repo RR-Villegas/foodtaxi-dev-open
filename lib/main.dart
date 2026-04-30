@@ -7,6 +7,7 @@ import 'cart_page.dart';
 import 'search_page.dart';
 import 'buyer_dashboard.dart';
 import 'admin_dashboard.dart';
+import 'checkout_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,7 +33,7 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
       ),
       initialRoute: '/',
-      routes: {
+routes: {
         '/': (context) => const MyHomePage(title: 'FoodTaxi Omega'),
         '/login': (context) => const LoginPage(),
         '/signup': (context) => const SignupPage(),
@@ -41,6 +42,7 @@ class MyApp extends StatelessWidget {
         '/search': (context) => const SearchPage(),
         '/buyer-dashboard': (context) => const BuyerDashboard(),
         '/admin-dashboard': (context) => const AdminDashboard(),
+        '/checkout': (context) => const CheckoutPage(),
       },
     );
   }
