@@ -216,7 +216,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     padding: EdgeInsets.all(20),
                     child: CircularProgressIndicator(),
                   )
-                : (foodCategories.isEmpty ?? true)
+                : foodCategories.isEmpty
                     ? const Padding(
                         padding: EdgeInsets.all(20),
                         child: Text('No products available'),
