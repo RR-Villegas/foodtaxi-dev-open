@@ -1,0 +1,301 @@
+import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'cart_model.dart';
+
+class BuyerDashboard extends StatefulWidget {
+  const BuyerDashboard({super.key});
+
+  @override
+  State<BuyerDashboard> createState() => _BuyerDashboardState();
+}
+
+class _BuyerDashboardState extends State<BuyerDashboard> {
+  final _supabase = Supabase.instance.client;
+
+  final List<Map<String, dynamic>> _products = [];
+// _cart replaced by CartModel.cartItems
+
+  bool _isLoading = true;
+  bool _hasError = false;
+
+  int get _cartLength => CartModel.length;
+
+  // FOOD CATEGORIES (6 items each)
+  Map<String, List<Map<String, dynamic>>> get demoProducts => {
+        "🔥 Trending": [
+          {'name': 'Sushi', 'price': 320.00, 'main_image_url': 'assets/images/sushi.jpg'},
+          {'name': 'Tacos', 'price': 180.00, 'main_image_url': 'assets/images/tacos.jpg'},
+          {'name': 'Pad', 'price': 220.00, 'main_image_url': 'assets/images/padthai.jpg'},
+          {'name': 'Pizza', 'price': 350.00, 'main_image_url': 'assets/images/pizza.jpg'},
+          {'name': 'Kebab', 'price': 250.00, 'main_image_url': 'assets/images/kebab.jpg'},
+          {'name': 'Burger', 'price': 200.00, 'main_image_url': 'assets/images/burger.jpg'},
+        ],
+
+        "🏆 Best Seller": [
+          {'name': 'Ramen', 'price': 260.00, 'main_image_url': 'assets/images/ramen.jpg'},
+          {'name': 'Dim', 'price': 230.00, 'main_image_url': 'assets/images/dimsum.jpg'},
+          {'name': 'Lasagna', 'price': 340.00, 'main_image_url': 'assets/images/lasagna.jpg'},
+          {'name': 'BBQ Ribs', 'price': 420.00, 'main_image_url': 'assets/images/bbqribs.jpg'},
+          {'name': 'Paella', 'price': 360.00, 'main_image_url': 'assets/images/paella.jpg'},
+          {'name': 'Falafel', 'price': 180.00, 'main_image_url': 'assets/images/falafel.jpg'},
+        ],
+
+        "🍝 Pasta": [
+          {'name': 'Carbonara', 'price': 280.00, 'main_image_url': 'assets/images/carbonara.jpg'},
+          {'name': 'Spaghetti Bolognese', 'price': 260.00, 'main_image_url': 'assets/images/spaghetti.jpg'},
+          {'name': 'Pesto Pasta', 'price': 240.00, 'main_image_url': 'assets/images/pesto.jpg'},
+          {'name': 'Seafood Pasta', 'price': 320.00, 'main_image_url': 'assets/images/seafood_pasta.jpg'},
+          {'name': 'Mac & Cheese USA', 'price': 180.00, 'main_image_url': 'assets/images/maccheese.jpg'},
+          {'name': 'Chicken Alfredo', 'price': 300.00, 'main_image_url': 'assets/images/alfredo.jpg'},
+        ],
+
+        "🍔 Burger": [
+          {'name': 'Cheeseburge', 'price': 180.00, 'main_image_url': 'assets/images/cheeseburger.jpg'},
+          {'name': 'Chicken Burger', 'price': 160.00, 'main_image_url': 'assets/images/chicken_burger.jpg'},
+          {'name': 'Double Burger', 'price': 220.00, 'main_image_url': 'assets/images/double_burger.jpg'},
+          {'name': 'Bacon Burger', 'price': 260.00, 'main_image_url': 'assets/images/bacon_burger.jpg'},
+          {'name': 'Veggie Burger', 'price': 150.00, 'main_image_url': 'assets/images/veggie_burger.jpg'},
+          {'name': 'Spicy Burger', 'price': 210.00, 'main_image_url': 'assets/images/spicy_burger.jpg'},
+        ],
+      };
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchProducts();
+  }
+
+  Future<void> _fetchProducts() async {
+    try {
+      await _supabase
+          .from('product')
+          .select('product_id, name, price, main_image_url, category')
+          .eq('is_active', true);
+
+      setState(() {
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _hasError = true;
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _addToCart(Map<String, dynamic> product) {
+    CartModel.addItem(product);
+    setState(() {}); // rebuild for badge
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${product['name']} added to cart!')),
+    );
+  }
+
+  Widget sectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          title,
+          style: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget horizontalList(List<Map<String, dynamic>> items) {
+    return SizedBox(
+      height: 190,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        itemCount: items.length,
+        itemBuilder: (context, index) {
+          final item = items[index];
+
+          return Container(
+            width: 150,
+            margin: const EdgeInsets.only(right: 12),
+            child: Card(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              elevation: 3,
+              child: Column(
+                children: [
+                  ClipRRect(
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(16),
+                    ),
+                    child: Image.asset(
+                      item['main_image_url'],
+                      height: 100,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: Column(
+                      children: [
+                        Text(
+                          item['name'],
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '₱${item['price']}',
+                          style: const TextStyle(
+                            color: Colors.green,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 28,
+                          child: ElevatedButton(
+                            onPressed: () => _addToCart(item),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              padding: EdgeInsets.zero,
+                            ),
+                            child: const Text('Add'),
+                          ),
+                        )
+                      ],
+                    ),
+                  )
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ✅ HERO (UNCHANGED EXACTLY)
+Widget heroSection() {
+  return Container(
+    height: 250,
+    width: double.infinity,
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          const Color(0xFF2d8f4e),
+          const Color(0xFF2d8f4e).withOpacity(0.85),
+        ],
+      ),
+    ),
+    child: Stack(
+      children: [
+        // faint background image (same style as main.dart)
+        Positioned.fill(
+          child: Opacity(
+            opacity: 0.10,
+            child: Image.asset(
+              'assets/images/tacos.jpg',
+              fit: BoxFit.cover,
+            ),
+          ),
+        ),
+
+        // centered content
+        Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: const [
+              Text(
+                "Your Philippine Marketplace",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                "for Specialty Foods",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w300,
+                ),
+              ),
+              SizedBox(height: 14),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20),
+                child: Text(
+                  "Order fresh meals, snacks, and fast food favorites delivered fast to your doorstep.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("FoodTaxi Omega"),
+        backgroundColor: const Color.fromARGB(255, 30, 83, 32),
+        actions: [
+          Center(child: Text(' $_cartLength ')),
+          IconButton(
+            icon: const Icon(Icons.shopping_cart),
+            onPressed: () => Navigator.pushNamed(context, '/cart'),
+          ),
+        ],
+      ),
+
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _hasError
+              ? const Center(child: Text("Error loading products"))
+              : SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      heroSection(),
+
+                      ...demoProducts.entries.map((entry) {
+                        return Column(
+                          children: [
+                            sectionTitle(entry.key),
+                            horizontalList(entry.value),
+                          ],
+                        );
+                      }),
+
+                      const SizedBox(height: 20),
+                    ],
+                  ),
+                ),
+
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: Colors.green,
+        onPressed: () => Navigator.pushNamed(context, '/cart'),
+        child: const Icon(Icons.shopping_cart),
+      ),
+    );
+  }
+}

@@ -1,0 +1,395 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../models/address_model.dart';
+
+class DatabaseService {
+  static final _supabase = Supabase.instance.client;
+
+  // Insert address for a user
+  static Future<Address?> insertAddress({
+    required String accountId,
+    required String province,
+    required String city,
+    required String barangay,
+    String? street,
+    String? houseNumber,
+    bool isDefault = false,
+  }) async {
+    try {
+      final response = await _supabase
+          .from('address')
+          .insert({
+            'account_id': accountId,
+            'province': province,
+            'city': city,
+            'barangay': barangay,
+            'street': street,
+            'house_number': houseNumber ?? '',
+            'is_default': isDefault,
+          })
+          .select()
+          .single();
+
+      return Address.fromJson(response);
+    } catch (e) {
+      print('DB Error: Failed to insert address: $e');
+      return null;
+    }
+  }
+
+  // Insert user profile after signup
+  static Future<void> insertUserProfile({
+    required String authId,
+    required String firstName,
+    required String surname,
+    required String email,
+    String? phoneNumber,
+    required String accountType,
+  }) async {
+    try {
+      await _supabase
+          .from('account')
+          .insert({
+            'auth_id': authId,
+            'firstname': firstName,
+            'surname': surname,
+            'email': email,
+            'phone_number': phoneNumber ?? '',
+            'account_type': accountType,
+          });
+    } catch (e) {
+      print('DB Error: Failed to insert user profile: $e');
+    }
+  }
+
+  // Get addresses for a user
+  static Future<List<Address>> getUserAddresses(String accountId) async {
+    try {
+      final response = await _supabase
+          .from('address')
+          .select()
+          .eq('account_id', accountId)
+          .order('is_default', ascending: false)
+          .order('created_at', ascending: false);
+
+      return (response as List)
+          .map((address) => Address.fromJson(address))
+          .toList();
+    } catch (e) {
+      print('DB Error: Failed to fetch addresses: $e');
+      return [];
+    }
+  }
+
+  // Update address
+  static Future<Address?> updateAddress({
+    required String addressId,
+    String? province,
+    String? city,
+    String? barangay,
+    String? street,
+    String? houseNumber,
+    bool? isDefault,
+  }) async {
+    try {
+      final updateData = <String, dynamic>{};
+      if (province != null) updateData['province'] = province;
+      if (city != null) updateData['city'] = city;
+      if (barangay != null) updateData['barangay'] = barangay;
+      if (street != null) updateData['street'] = street;
+      if (houseNumber != null) updateData['house_number'] = houseNumber;
+      if (isDefault != null) updateData['is_default'] = isDefault;
+
+      final response = await _supabase
+          .from('address')
+          .update(updateData)
+          .eq('address_id', addressId)
+          .select()
+          .single();
+
+      return Address.fromJson(response);
+    } catch (e) {
+      print('DB Error: Failed to update address: $e');
+      return null;
+    }
+  }
+
+  // Delete address
+  static Future<void> deleteAddress(String addressId) async {
+    try {
+      await _supabase
+          .from('address')
+          .delete()
+          .eq('address_id', addressId);
+    } catch (e) {
+      print('DB Error: Failed to delete address: $e');
+    }
+  }
+
+// Set address as default
+  static Future<void> setDefaultAddress(String accountId, String addressId) async {
+    try {
+      // Set all addresses to not default
+      await _supabase
+          .from('address')
+          .update({'is_default': false})
+          .eq('account_id', accountId);
+
+      // Set the selected address as default
+      await _supabase
+          .from('address')
+          .update({'is_default': true})
+          .eq('address_id', addressId);
+    } catch (e) {
+      print('DB Error: Failed to set default address: $e');
+    }
+  }
+
+  // Insert order
+  static Future<String> insertOrder({
+    required String accountId,
+    required String addressId,
+    required double totalAmount,
+    required String paymentMethod,
+    required String status,
+  }) async {
+    try {
+      final response = await _supabase
+          .from('orders')
+          .insert({
+            'account_id': accountId,
+            'address_id': addressId,
+            'total_amount': totalAmount,
+            'payment_method': paymentMethod,
+            'status': status,
+          })
+          .select()
+          .single();
+
+      return response['order_id'] as String;
+    } catch (e) {
+      print('DB Error: Failed to insert order: $e');
+      return '';
+    }
+  }
+
+  // Insert order item
+  static Future<void> insertOrderItem({
+    required String orderId,
+    required String productName,
+    required double price,
+    required int quantity,
+    required String imageUrl,
+  }) async {
+    try {
+      await _supabase
+          .from('order_items')
+          .insert({
+            'order_id': orderId,
+            'product_name': productName,
+            'price': price,
+            'quantity': quantity,
+            'image_url': imageUrl,
+          });
+    } catch (e) {
+      print('DB Error: Failed to insert order item: $e');
+    }
+  }
+
+  // Fetch all products
+  static Future<List<Map<String, dynamic>>> fetchProducts() async {
+    try {
+      final response = await _supabase
+          .from('product')
+          .select()
+          .eq('is_active', true);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      print('DB Error: Failed to fetch products: $e');
+      return [];
+    }
+  }
+
+  // Get product image URL from bucket
+  static String getProductImageUrl(String fileName) {
+    return _supabase.storage
+        .from('product-images/main-picture')
+        .getPublicUrl(fileName);
+  }
+
+  // Insert cart item
+  static Future<void> insertCartItem({
+    required String accountId,
+    required String productId,
+    required int quantity,
+    required double priceAtTime,
+  }) async {
+    try {
+      await _supabase.from('cart').insert({
+        'account_id': accountId,
+        'product_id': productId,
+        'quantity': quantity,
+        'price_at_time': priceAtTime,
+      });
+    } catch (e) {
+      print('DB Error: Failed to insert cart item: $e');
+    }
+  }
+
+  // Get cart items for user
+  static Future<List<Map<String, dynamic>>> getCartItems(
+      String accountId) async {
+    try {
+      final response = await _supabase
+          .from('cart')
+          .select()
+          .eq('account_id', accountId);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      print('DB Error: Failed to fetch cart items: $e');
+      return [];
+    }
+  }
+
+  // Update cart item quantity
+  static Future<void> updateCartItem({
+    required String cartId,
+    required int quantity,
+  }) async {
+    try {
+      await _supabase
+          .from('cart')
+          .update({'quantity': quantity}).eq('id', cartId);
+    } catch (e) {
+      print('DB Error: Failed to update cart item: $e');
+    }
+  }
+
+  // Delete cart item
+  static Future<void> deleteCartItem(String cartId) async {
+    try {
+      await _supabase.from('cart').delete().eq('id', cartId);
+    } catch (e) {
+      print('DB Error: Failed to delete cart item: $e');
+    }
+  }
+
+  // Clear all cart items for user
+  static Future<void> clearCart(String accountId) async {
+    try {
+      await _supabase.from('cart').delete().eq('account_id', accountId);
+    } catch (e) {
+      print('DB Error: Failed to clear cart: $e');
+    }
+  }
+
+  // Insert seller application
+  static Future<void> insertSellerApplication({
+    required String accountId,
+    required String storeName,
+    String? storeDescription,
+    required String businessAddress,
+    required String city,
+    String? province,
+    String? region,
+    required String contactPhone,
+  }) async {
+    try {
+      await _supabase.from('seller_application').insert({
+        'account_id': accountId,
+        'store_name': storeName,
+        'store_description': storeDescription ?? '',
+        'business_address': businessAddress,
+        'city': city,
+        'province': province ?? '',
+        'region': region ?? '',
+        'contact_phone': contactPhone,
+        'status': 'Pending Review',
+      });
+    } catch (e) {
+      print('DB Error: Failed to submit seller application: $e');
+    }
+  }
+
+  // Get all seller applications (for admin)
+  static Future<List<Map<String, dynamic>>> getSellerApplications() async {
+    try {
+      final response = await _supabase
+          .from('seller_application')
+          .select('*, account(firstname, surname, email)');
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      print('DB Error: Failed to fetch seller applications: $e');
+      return [];
+    }
+  }
+
+  // Get seller application by account_id
+  static Future<Map<String, dynamic>?> getSellerApplicationByAccountId(
+      String accountId) async {
+    try {
+      final response = await _supabase
+          .from('seller_application')
+          .select()
+          .eq('account_id', accountId)
+          .single();
+      return response;
+    } catch (e) {
+      print('DB Error: Failed to get seller application: $e');
+      return null;
+    }
+  }
+
+  // Approve seller application
+  static Future<void> approveSellerApplication({
+    required String applicationId,
+    required String accountId,
+    required String storeName,
+  }) async {
+    try {
+      // Update application status
+      await _supabase
+          .from('seller_application')
+          .update({
+            'status': 'Approved',
+            'date_approved': DateTime.now().toIso8601String(),
+          })
+          .eq('application_id', applicationId);
+
+      // Update account type to Seller
+      await _supabase
+          .from('account')
+          .update({'account_type': 'Seller', 'is_verified': true})
+          .eq('account_id', accountId);
+
+      // Create store for the seller
+      await _supabase.from('store').insert({
+        'owner_account_id': accountId,
+        'store_name': storeName,
+        'slug': storeName.toLowerCase().replaceAll(' ', '-'),
+        'address_line': '',
+        'city': '',
+        'is_open': true,
+      });
+    } catch (e) {
+      print('DB Error: Failed to approve seller application: $e');
+    }
+  }
+
+  // Reject seller application
+  static Future<void> rejectSellerApplication({
+    required String applicationId,
+    required String reviewNotes,
+  }) async {
+    try {
+      await _supabase
+          .from('seller_application')
+          .update({
+            'status': 'Rejected',
+            'review_notes': reviewNotes,
+          })
+          .eq('application_id', applicationId);
+    } catch (e) {
+      print('DB Error: Failed to reject seller application: $e');
+    }
+  }
+}
