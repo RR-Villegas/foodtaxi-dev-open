@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'services/database_service.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -9,6 +11,225 @@ class AdminDashboard extends StatefulWidget {
 
 class _AdminDashboardState extends State<AdminDashboard> {
   int _currentIndex = 0;
+  List<Map<String, dynamic>> _sellerApplications = [];
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+  }
+
+  Future<void> _loadSellerApplications() async {
+    setState(() => _isLoading = true);
+    try {
+      final applications = await DatabaseService.getSellerApplications();
+      setState(() => _sellerApplications = applications);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _approveSeller(Map<String, dynamic> app) async {
+    try {
+      await DatabaseService.approveSellerApplication(
+        applicationId: app['application_id'],
+        accountId: app['account_id'],
+        storeName: app['store_name'],
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Seller application approved!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      _loadSellerApplications();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  void _rejectSeller(Map<String, dynamic> app) {
+    final notesController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reject Application'),
+        content: TextField(
+          controller: notesController,
+          decoration: const InputDecoration(
+            labelText: 'Reason for rejection',
+            border: OutlineInputBorder(),
+          ),
+          maxLines: 3,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              try {
+                await DatabaseService.rejectSellerApplication(
+                  applicationId: app['application_id'],
+                  reviewNotes: notesController.text,
+                );
+
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Application rejected'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                  Navigator.pop(context);
+                  _loadSellerApplications();
+                }
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error: $e')),
+                );
+              }
+            },
+            child: const Text('Reject'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _viewApplicationDetails(Map<String, dynamic> app) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(app['store_name'] ?? 'Application'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _detailRow('Applicant',
+                  '${app['account']?['firstname'] ?? 'N/A'} ${app['account']?['surname'] ?? ''}'),
+              _detailRow('Email', app['account']?['email'] ?? 'N/A'),
+              _detailRow('Store Name', app['store_name'] ?? 'N/A'),
+              _detailRow('Phone', app['contact_phone'] ?? 'N/A'),
+              _detailRow('Business Address', app['business_address'] ?? 'N/A'),
+              _detailRow('City', app['city'] ?? 'N/A'),
+              _detailRow('Province', app['province'] ?? 'N/A'),
+              _detailRow('Region', app['region'] ?? 'N/A'),
+              _detailRow('Status', app['status'] ?? 'N/A'),
+              _detailRow('Submitted', app['submission_date'] ?? 'N/A'),
+              if (app['store_description'] != null && app['store_description'].isNotEmpty)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 8),
+                    const Text('Description:',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text(app['store_description']),
+                  ],
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          if (app['status'] == 'Pending Review')
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _rejectSeller(app);
+              },
+              child: const Text('Reject', style: TextStyle(color: Colors.red)),
+            ),
+          if (app['status'] == 'Pending Review')
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _approveSeller(app);
+              },
+              child:
+                  const Text('Approve', style: TextStyle(color: Colors.green)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text(value),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSellerApplicationsTab() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_sellerApplications.isEmpty) {
+      return const Center(
+        child: Text('No seller applications'),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _sellerApplications.length,
+      itemBuilder: (context, index) {
+        final app = _sellerApplications[index];
+        final statusColor = app['status'] == 'Approved'
+            ? Colors.green
+            : app['status'] == 'Rejected'
+                ? Colors.red
+                : Colors.orange;
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: ListTile(
+            title: Text(app['store_name'] ?? 'Store'),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                    '${app['account']?['firstname'] ?? 'Unknown'} ${app['account']?['surname'] ?? ''}'),
+                Text(app['contact_phone'] ?? ''),
+                Chip(
+                  label: Text(app['status'] ?? 'Pending'),
+                  backgroundColor: statusColor.withOpacity(0.3),
+                  labelStyle: TextStyle(color: statusColor),
+                ),
+              ],
+            ),
+            trailing: IconButton(
+              icon: const Icon(Icons.arrow_forward),
+              onPressed: () => _viewApplicationDetails(app),
+            ),
+            onTap: () => _viewApplicationDetails(app),
+          ),
+        );
+      },
+    );
+  }
 
   // Mock sales data (replace with real Supabase 'orders' table later)
   final List<Map<String, dynamic>> _mockOrders = [
@@ -222,7 +443,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    final tabs = [_buildDashboardTab(), _buildSalesReportTab()];
+    final tabs = [_buildDashboardTab(), _buildSalesReportTab(), _buildSellerApplicationsTab()];
 
     return Scaffold(
       appBar: AppBar(
@@ -232,22 +453,33 @@ class _AdminDashboardState extends State<AdminDashboard> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: () => setState(() {}),
+            onPressed: () {
+              if (_currentIndex == 2) {
+                _loadSellerApplications();
+              } else {
+                setState(() {});
+              }
+            },
           ),
         ],
       ),
       body: tabs[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
+        onTap: (index) {
+          setState(() => _currentIndex = index);
+          if (index == 2) {
+            _loadSellerApplications();
+          }
+        },
         type: BottomNavigationBarType.fixed,
         selectedItemColor: Theme.of(context).colorScheme.primary,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Dashboard'),
           BottomNavigationBarItem(icon: Icon(Icons.analytics), label: 'Sales'),
+          BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Sellers'),
         ],
       ),
     );
   }
-}
 

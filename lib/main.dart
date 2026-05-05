@@ -7,7 +7,9 @@ import 'cart_page.dart';
 import 'search_page.dart';
 import 'buyer_dashboard.dart';
 import 'admin_dashboard.dart';
+import 'seller_dashboard.dart';
 import 'checkout_page.dart';
+import 'services/database_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -41,6 +43,7 @@ routes: {
         '/cart': (context) => const CartPage(),
         '/search': (context) => const SearchPage(),
         '/buyer-dashboard': (context) => const BuyerDashboard(),
+        '/seller-dashboard': (context) => const SellerDashboard(),
         '/admin-dashboard': (context) => const AdminDashboard(),
         '/checkout': (context) => const CheckoutPage(),
       },
@@ -60,47 +63,24 @@ class _MyHomePageState extends State<MyHomePage> {
   final supabase = Supabase.instance.client;
 
   String status = "Checking Supabase connection...";
+  Map<String, List<Map<String, dynamic>>> foodCategories = {};
+  bool isLoadingProducts = true;
 
-  // ✅ FOOD CATEGORIES
-  Map<String, List<Map<String, dynamic>>> get foodCategories => {
-        "🔥 Trending": [
-          {'name': 'Sushi', 'price': 320.00, 'main_image_url': 'assets/images/sushi.jpg'},
-          {'name': 'Tacos', 'price': 180.00, 'main_image_url': 'assets/images/tacos.jpg'},
-          {'name': 'Pad Thai', 'price': 220.00, 'main_image_url': 'assets/images/padthai.jpg'},
-          {'name': 'Pizza', 'price': 350.00, 'main_image_url': 'assets/images/pizza.jpg'},
-          {'name': 'Kebab', 'price': 250.00, 'main_image_url': 'assets/images/kebab.jpg'},
-          {'name': 'Burger', 'price': 200.00, 'main_image_url': 'assets/images/burger.jpg'},
-        ],
-        "🏆 Best Seller": [
-          {'name': 'Ramen', 'price': 260.00, 'main_image_url': 'assets/images/ramen.jpg'},
-          {'name': 'Dimsum', 'price': 230.00, 'main_image_url': 'assets/images/dimsum.jpg'},
-          {'name': 'Lasagna', 'price': 340.00, 'main_image_url': 'assets/images/lasagna.jpg'},
-          {'name': 'BBQ Ribs', 'price': 420.00, 'main_image_url': 'assets/images/bbqribs.jpg'},
-          {'name': 'Paella', 'price': 360.00, 'main_image_url': 'assets/images/paella.jpg'},
-          {'name': 'Falafel', 'price': 180.00, 'main_image_url': 'assets/images/falafel.jpg'},
-        ],
-        "🍝 Pasta": [
-          {'name': 'Carbonara', 'price': 280.00, 'main_image_url': 'assets/images/carbonara.jpg'},
-          {'name': 'Spaghetti Bolognese', 'price': 260.00, 'main_image_url': 'assets/images/spaghetti.jpg'},
-          {'name': 'Pesto Pasta', 'price': 240.00, 'main_image_url': 'assets/images/pesto.jpg'},
-          {'name': 'Seafood Pasta', 'price': 320.00, 'main_image_url': 'assets/images/seafood_pasta.jpg'},
-          {'name': 'Mac & Cheese', 'price': 180.00, 'main_image_url': 'assets/images/maccheese.jpg'},
-          {'name': 'Chicken Alfredo', 'price': 300.00, 'main_image_url': 'assets/images/alfredo.jpg'},
-        ],
-        "🍔 Burger": [
-          {'name': 'Cheeseburger', 'price': 180.00, 'main_image_url': 'assets/images/cheeseburger.jpg'},
-          {'name': 'Chicken Burger', 'price': 160.00, 'main_image_url': 'assets/images/chicken_burger.jpg'},
-          {'name': 'Double Burger', 'price': 220.00, 'main_image_url': 'assets/images/double_burger.jpg'},
-          {'name': 'Bacon Burger', 'price': 260.00, 'main_image_url': 'assets/images/bacon_burger.jpg'},
-          {'name': 'Veggie Burger', 'price': 150.00, 'main_image_url': 'assets/images/veggie_burger.jpg'},
-          {'name': 'Spicy Burger', 'price': 210.00, 'main_image_url': 'assets/images/spicy_burger.jpg'},
-        ],
-      };
+  // Product categories mapping
+  static const Map<String, String> categoryNames = {
+    'Baking Supplies & Ingredients': '🧁 Baking',
+    'Coffee, Tea & Beverages': '☕ Beverages',
+    'Snacks & Candy': '🍬 Snacks',
+    'Specialty Foods & International Cuisine': '🌍 Specialty',
+    'Organic and Health Foods': '🥗 Health Foods',
+    'Meal Kits & Prepped Foods': '🍱 Meal Kits',
+  };
 
   @override
   void initState() {
     super.initState();
     testSupabase();
+    _loadProductsFromDatabase();
   }
 
   Future<void> testSupabase() async {
@@ -109,6 +89,33 @@ class _MyHomePageState extends State<MyHomePage> {
       setState(() => status = "");
     } catch (e) {
       setState(() => status = "❌ Connection Failed: $e");
+    }
+  }
+
+  Future<void> _loadProductsFromDatabase() async {
+    try {
+      final products = await DatabaseService.fetchProducts();
+      
+      // Group products by category
+      Map<String, List<Map<String, dynamic>>> grouped = {};
+      
+      for (var product in products) {
+        final category = product['category'] ?? 'Other';
+        final displayName = categoryNames[category] ?? category;
+        
+        if (!grouped.containsKey(displayName)) {
+          grouped[displayName] = [];
+        }
+        grouped[displayName]!.add(product);
+      }
+
+      setState(() {
+        foodCategories = grouped;
+        isLoadingProducts = false;
+      });
+    } catch (e) {
+      print('Error loading products: $e');
+      setState(() => isLoadingProducts = false);
     }
   }
 
@@ -203,19 +210,29 @@ class _MyHomePageState extends State<MyHomePage> {
 
             const SizedBox(height: 20),
 
-            // ✅ FIXED FOOD CATEGORIES
-            Column(
-              children: foodCategories.entries.map((category) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 10),
-                    sectionTitle(category.key),
-                    horizontalFoodList(category.value),
-                  ],
-                );
-              }).toList(),
-            ),
+            // ✅ FETCHED FOOD CATEGORIES FROM DATABASE
+            isLoadingProducts
+                ? const Padding(
+                    padding: EdgeInsets.all(20),
+                    child: CircularProgressIndicator(),
+                  )
+                : (foodCategories?.isEmpty ?? true)
+                    ? const Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Text('No products available'),
+                      )
+                    : Column(
+                        children: (foodCategories?.entries ?? <MapEntry>[]).map((category) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 10),
+                              sectionTitle(category.key),
+                              horizontalFoodList(category.value),
+                            ],
+                          );
+                        }).toList(),
+                      ),
 
             const SizedBox(height: 20),
 
@@ -269,6 +286,7 @@ class _MyHomePageState extends State<MyHomePage> {
         itemCount: items.length,
         itemBuilder: (context, index) {
           final item = items[index];
+          final imageUrl = item['main_image_url'] as String?;
 
           return Container(
             width: 150,
@@ -277,18 +295,29 @@ class _MyHomePageState extends State<MyHomePage> {
               child: Column(
                 children: [
                   Expanded(
-                    child: Image.asset(
-                      item["main_image_url"],
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                    ),
+                    child: imageUrl != null
+                        ? Image.network(
+                            DatabaseService.getProductImageUrl(imageUrl),
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                color: Colors.grey[300],
+                                child: const Icon(Icons.image_not_supported),
+                              );
+                            },
+                          )
+                        : Container(
+                            color: Colors.grey[300],
+                            child: const Icon(Icons.image),
+                          ),
                   ),
                   Padding(
                     padding: const EdgeInsets.all(6),
-                    child: Text(item["name"],
+                    child: Text(item['name'] ?? 'Product',
                         style: const TextStyle(fontWeight: FontWeight.bold)),
                   ),
-                  Text("₱${item["price"]}",
+                  Text("₱${item['price']?.toStringAsFixed(2) ?? 'N/A'}",
                       style: const TextStyle(color: Colors.green)),
                 ],
               ),

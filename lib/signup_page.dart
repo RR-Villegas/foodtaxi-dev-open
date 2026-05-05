@@ -229,10 +229,12 @@ setState(() => _isLoading = true);
 
       // Insert user profile
       await DatabaseService.insertUserProfile(
-        id: userId,
-        fullName: '${_signupData.firstName} ${_signupData.surname}',
+        authId: userId,
+        firstName: _signupData.firstName ?? '',
+        surname: _signupData.surname ?? '',
+        email: _signupData.email ?? '',
         phoneNumber: _signupData.phoneNumber,
-        role: _signupData.role,
+        accountType: _signupData.role,
       );
 
       // Insert address into the database - ensure houseNumber is not null
@@ -268,6 +270,8 @@ setState(() => _isLoading = true);
         );
       }
     } finally {
+      // Clear local signup data regardless of success or failure
+      await LocalStorageService.clearSignupData();
       setState(() => _isLoading = false);
     }
   }

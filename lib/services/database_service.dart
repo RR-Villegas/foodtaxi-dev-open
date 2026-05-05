@@ -37,19 +37,23 @@ class DatabaseService {
 
   // Insert user profile after signup
   static Future<void> insertUserProfile({
-    required String id,
-    required String fullName,
+    required String authId,
+    required String firstName,
+    required String surname,
+    required String email,
     String? phoneNumber,
-    required String role,
+    required String accountType,
   }) async {
     try {
       await _supabase
-          .from('profiles')
+          .from('account')
           .insert({
-            'id': id,
-            'full_name': fullName,
+            'auth_id': authId,
+            'firstname': firstName,
+            'surname': surname,
+            'email': email,
             'phone_number': phoneNumber ?? '',
-            'role': role,
+            'account_type': accountType,
           });
     } catch (e) {
       throw Exception('Failed to insert user profile: $e');
@@ -184,6 +188,200 @@ class DatabaseService {
           });
     } catch (e) {
       throw Exception('Failed to insert order item: $e');
+    }
+  }
+
+  // Fetch all products
+  static Future<List<Map<String, dynamic>>> fetchProducts() async {
+    try {
+      final response = await _supabase
+          .from('product')
+          .select()
+          .eq('is_active', true);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      throw Exception('Failed to fetch products: $e');
+    }
+  }
+
+  // Get product image URL from bucket
+  static String getProductImageUrl(String fileName) {
+    return _supabase.storage
+        .from('product-images/main-picture')
+        .getPublicUrl(fileName);
+  }
+
+  // Insert cart item
+  static Future<void> insertCartItem({
+    required String accountId,
+    required String productId,
+    required int quantity,
+    required double priceAtTime,
+  }) async {
+    try {
+      await _supabase.from('cart').insert({
+        'account_id': accountId,
+        'product_id': productId,
+        'quantity': quantity,
+        'price_at_time': priceAtTime,
+      });
+    } catch (e) {
+      throw Exception('Failed to insert cart item: $e');
+    }
+  }
+
+  // Get cart items for user
+  static Future<List<Map<String, dynamic>>> getCartItems(
+      String accountId) async {
+    try {
+      final response = await _supabase
+          .from('cart')
+          .select()
+          .eq('account_id', accountId);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      throw Exception('Failed to fetch cart items: $e');
+    }
+  }
+
+  // Update cart item quantity
+  static Future<void> updateCartItem({
+    required String cartId,
+    required int quantity,
+  }) async {
+    try {
+      await _supabase
+          .from('cart')
+          .update({'quantity': quantity}).eq('id', cartId);
+    } catch (e) {
+      throw Exception('Failed to update cart item: $e');
+    }
+  }
+
+  // Delete cart item
+  static Future<void> deleteCartItem(String cartId) async {
+    try {
+      await _supabase.from('cart').delete().eq('id', cartId);
+    } catch (e) {
+      throw Exception('Failed to delete cart item: $e');
+    }
+  }
+
+  // Clear all cart items for user
+  static Future<void> clearCart(String accountId) async {
+    try {
+      await _supabase.from('cart').delete().eq('account_id', accountId);
+    } catch (e) {
+      throw Exception('Failed to clear cart: $e');
+    }
+  }
+
+  // Insert seller application
+  static Future<void> insertSellerApplication({
+    required String accountId,
+    required String storeName,
+    String? storeDescription,
+    required String businessAddress,
+    required String city,
+    String? province,
+    String? region,
+    required String contactPhone,
+  }) async {
+    try {
+      await _supabase.from('seller_application').insert({
+        'account_id': accountId,
+        'store_name': storeName,
+        'store_description': storeDescription ?? '',
+        'business_address': businessAddress,
+        'city': city,
+        'province': province ?? '',
+        'region': region ?? '',
+        'contact_phone': contactPhone,
+        'status': 'Pending Review',
+      });
+    } catch (e) {
+      throw Exception('Failed to submit seller application: $e');
+    }
+  }
+
+  // Get all seller applications (for admin)
+  static Future<List<Map<String, dynamic>>> getSellerApplications() async {
+    try {
+      final response = await _supabase
+          .from('seller_application')
+          .select('*, account(firstname, surname, email)');
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      throw Exception('Failed to fetch seller applications: $e');
+    }
+  }
+
+  // Get seller application by account_id
+  static Future<Map<String, dynamic>?> getSellerApplicationByAccountId(
+      String accountId) async {
+    try {
+      final response = await _supabase
+          .from('seller_application')
+          .select()
+          .eq('account_id', accountId)
+          .single();
+      return response as Map<String, dynamic>;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Approve seller application
+  static Future<void> approveSellerApplication({
+    required String applicationId,
+    required String accountId,
+    required String storeName,
+  }) async {
+    try {
+      // Update application status
+      await _supabase
+          .from('seller_application')
+          .update({
+            'status': 'Approved',
+            'date_approved': DateTime.now().toIso8601String(),
+          })
+          .eq('application_id', applicationId);
+
+      // Update account type to Seller
+      await _supabase
+          .from('account')
+          .update({'account_type': 'Seller', 'is_verified': true})
+          .eq('account_id', accountId);
+
+      // Create store for the seller
+      await _supabase.from('store').insert({
+        'owner_account_id': accountId,
+        'store_name': storeName,
+        'slug': storeName.toLowerCase().replaceAll(' ', '-'),
+        'address_line': '',
+        'city': '',
+        'is_open': true,
+      });
+    } catch (e) {
+      throw Exception('Failed to approve seller application: $e');
+    }
+  }
+
+  // Reject seller application
+  static Future<void> rejectSellerApplication({
+    required String applicationId,
+    required String reviewNotes,
+  }) async {
+    try {
+      await _supabase
+          .from('seller_application')
+          .update({
+            'status': 'Rejected',
+            'review_notes': reviewNotes,
+          })
+          .eq('application_id', applicationId);
+    } catch (e) {
+      throw Exception('Failed to reject seller application: $e');
     }
   }
 }
