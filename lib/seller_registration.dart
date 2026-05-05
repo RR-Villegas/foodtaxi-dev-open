@@ -45,9 +45,14 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
         throw Exception('User not authenticated');
       }
 
+      final accountId = await DatabaseService.getCurrentAccountId();
+      if (accountId == null) {
+        throw Exception('Account profile not found');
+      }
+
       // Submit seller application
       await DatabaseService.insertSellerApplication(
-        accountId: currentUser.id,
+        accountId: accountId,
         storeName: _storeNameController.text,
         storeDescription: _storeDescriptionController.text,
         businessAddress: _businessAddressController.text,

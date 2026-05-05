@@ -16,6 +16,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
   
   List<Address> _addresses = [];
   Address? _selectedAddress;
+  String? _accountId;
   String _selectedPaymentMethod = 'cash_on_delivery';
   bool _isLoading = false;
   bool _isLoadingAddresses = true;
@@ -23,12 +24,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
   // Delivery fee in PHP
   static const double _deliveryFee = 50.0;
   
-  // Get user ID - in demo mode, we'll use a placeholder
-  String get _userId {
-    final user = _supabase.auth.currentUser;
-    return user?.id ?? 'demo-user-id';
-  }
-
   @override
   void initState() {
     super.initState();
@@ -37,8 +32,14 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   Future<void> _loadAddresses() async {
     try {
-      final addresses = await DatabaseService.getUserAddresses(_userId);
+      final accountId = await DatabaseService.getCurrentAccountId();
+      if (accountId == null) {
+        throw Exception('Account profile not found');
+      }
+
+      final addresses = await DatabaseService.getUserAddresses(accountId);
       setState(() {
+        _accountId = accountId;
         _addresses = addresses;
         _isLoadingAddresses = false;
         // Auto-select default address
@@ -130,7 +131,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     try {
       // Create order in database
       final orderId = await DatabaseService.insertOrder(
-        accountId: _userId,
+        accountId: _accountId!,
         addressId: _selectedAddress!.addressId!,
         totalAmount: _total,
         paymentMethod: _selectedPaymentMethod,
@@ -271,7 +272,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
               try {
                 await DatabaseService.insertAddress(
-                  accountId: _userId,
+                  accountId: _accountId!,
                   province: provinceController.text,
                   city: cityController.text,
                   barangay: barangayController.text,

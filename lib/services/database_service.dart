@@ -37,7 +37,7 @@ class DatabaseService {
   }
 
   // Insert user profile after signup
-  static Future<void> insertUserProfile({
+  static Future<String?> insertUserProfile({
     required String authId,
     required String firstName,
     required String surname,
@@ -46,7 +46,7 @@ class DatabaseService {
     required String accountType,
   }) async {
     try {
-      await _supabase
+      final response = await _supabase
           .from('account')
           .insert({
             'auth_id': authId,
@@ -55,9 +55,32 @@ class DatabaseService {
             'email': email,
             'phone_number': phoneNumber ?? '',
             'account_type': accountType,
-          });
+          })
+          .select('account_id')
+          .single();
+
+      return response['account_id'] as String?;
     } catch (e) {
       print('DB Error: Failed to insert user profile: $e');
+      return null;
+    }
+  }
+
+  static Future<String?> getCurrentAccountId() async {
+    try {
+      final authId = _supabase.auth.currentUser?.id;
+      if (authId == null) return null;
+
+      final response = await _supabase
+          .from('account')
+          .select('account_id')
+          .eq('auth_id', authId)
+          .single();
+
+      return response['account_id'] as String?;
+    } catch (e) {
+      print('DB Error: Failed to fetch current account ID: $e');
+      return null;
     }
   }
 

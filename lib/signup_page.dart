@@ -227,19 +227,25 @@ setState(() => _isLoading = true);
         throw Exception('Signup failed: No user returned');
       }
 
+      await _waitForAuthSession();
+
       // Insert user profile
-      await DatabaseService.insertUserProfile(
+      final accountId = await DatabaseService.insertUserProfile(
         authId: userId,
         firstName: _signupData.firstName ?? '',
         surname: _signupData.surname ?? '',
         email: _signupData.email ?? '',
         phoneNumber: _signupData.phoneNumber,
-        accountType: _signupData.role,
+        accountType: _toDatabaseAccountType(_signupData.accountType),
       );
 
+      if (accountId == null) {
+        throw Exception('Failed to create user profile');
+      }
+
       // Insert address into the database - ensure houseNumber is not null
-      await DatabaseService.insertAddress(
-        accountId: userId,
+      final address = await DatabaseService.insertAddress(
+        accountId: accountId,
         province: _signupData.province!,
         city: _signupData.municipality!,
         barangay: _signupData.barangay!,
@@ -247,6 +253,10 @@ setState(() => _isLoading = true);
         houseNumber: _signupData.houseNumber ?? '',
         isDefault: true, // Set first address as default
       );
+
+      if (address == null) {
+        throw Exception('Failed to create delivery address');
+      }
 
       // Clear local signup data on success
       await LocalStorageService.clearSignupData();
@@ -270,9 +280,32 @@ setState(() => _isLoading = true);
         );
       }
     } finally {
-      // Clear local signup data regardless of success or failure
-      await LocalStorageService.clearSignupData();
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _waitForAuthSession() async {
+    if (_supabase.auth.currentSession != null) return;
+
+    for (var attempt = 0; attempt < 10; attempt++) {
+      await Future.delayed(const Duration(milliseconds: 200));
+      if (_supabase.auth.currentSession != null) return;
+    }
+
+    throw Exception('Signup created the auth user, but no active session is available yet. Please confirm your email, then sign in.');
+  }
+
+  String _toDatabaseAccountType(String accountType) {
+    switch (accountType.toLowerCase()) {
+      case 'seller':
+        return 'Seller';
+      case 'rider':
+        return 'Rider';
+      case 'buyer':
+      default:
+        return 'Buyer';
     }
   }
 
