@@ -337,30 +337,43 @@ class DatabaseService {
   }
 
   // Insert seller application
-  static Future<void> insertSellerApplication({
+  static Future<bool> insertSellerApplication({
     required String accountId,
     required String storeName,
     String? storeDescription,
-    required String businessAddress,
+    required String province,
     required String city,
-    String? province,
-    String? region,
+    required String barangay,
+    String? street,
+    String? houseNumber,
     required String contactPhone,
   }) async {
     try {
+      final businessAddress = [
+        _blankToNull(houseNumber),
+        _blankToNull(street),
+        barangay.trim(),
+        city.trim(),
+        province.trim(),
+      ].whereType<String>().join(', ');
+
       await _supabase.from('seller_application').insert({
         'account_id': accountId,
-        'store_name': storeName,
-        'store_description': storeDescription ?? '',
+        'store_name': storeName.trim(),
+        'store_description': _blankToNull(storeDescription),
         'business_address': businessAddress,
-        'city': city,
-        'province': province ?? '',
-        'region': region ?? '',
-        'contact_phone': contactPhone,
+        'province': province.trim(),
+        'city': city.trim(),
+        'barangay': barangay.trim(),
+        'street': _blankToNull(street),
+        'house_number': _blankToNull(houseNumber),
+        'contact_phone': contactPhone.trim(),
         'status': 'Pending Review',
       });
+      return true;
     } catch (e) {
       print('DB Error: Failed to submit seller application: $e');
+      return false;
     }
   }
 
@@ -394,10 +407,13 @@ class DatabaseService {
   }
 
   // Approve seller application
-  static Future<void> approveSellerApplication({
+  static Future<bool> approveSellerApplication({
     required String applicationId,
     required String accountId,
     required String storeName,
+    required String addressLine,
+    required String city,
+    String? contactPhone,
   }) async {
     try {
       // Update application status
@@ -420,12 +436,15 @@ class DatabaseService {
         'owner_account_id': accountId,
         'store_name': storeName,
         'slug': storeName.toLowerCase().replaceAll(' ', '-'),
-        'address_line': '',
-        'city': '',
+        'address_line': addressLine,
+        'city': city,
+        'contact_phone': _blankToNull(contactPhone),
         'is_open': true,
       });
+      return true;
     } catch (e) {
       print('DB Error: Failed to approve seller application: $e');
+      return false;
     }
   }
 

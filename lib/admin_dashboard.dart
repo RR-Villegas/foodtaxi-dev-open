@@ -53,11 +53,19 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   Future<void> _approveSeller(Map<String, dynamic> app) async {
     try {
-      await DatabaseService.approveSellerApplication(
-        applicationId: app['application_id'],
-        accountId: app['account_id'],
-        storeName: app['store_name'],
+      final approved = await DatabaseService.approveSellerApplication(
+        applicationId: app['application_id'].toString(),
+        accountId: app['account_id'].toString(),
+        storeName: app['store_name']?.toString() ?? 'Store',
+        addressLine: _formatSellerAddress(app),
+        city: app['city']?.toString() ?? '',
+        contactPhone: app['contact_phone']?.toString(),
       );
+
+      if (!approved) {
+        throw Exception('Seller application could not be approved');
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -142,10 +150,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
               _detailRow('Email', app['account']?['email'] ?? 'N/A'),
               _detailRow('Store Name', app['store_name'] ?? 'N/A'),
               _detailRow('Phone', app['contact_phone'] ?? 'N/A'),
-              _detailRow('Business Address', app['business_address'] ?? 'N/A'),
-              _detailRow('City', app['city'] ?? 'N/A'),
+              _detailRow('Business Address', _formatSellerAddress(app)),
               _detailRow('Province', app['province'] ?? 'N/A'),
-              _detailRow('Region', app['region'] ?? 'N/A'),
+              _detailRow('Municipality/City', app['city'] ?? 'N/A'),
+              _detailRow('Barangay', app['barangay'] ?? 'N/A'),
+              _detailRow('Street', app['street'] ?? 'N/A'),
+              _detailRow('House Number', app['house_number'] ?? 'N/A'),
               _detailRow('Status', app['status'] ?? 'N/A'),
               _detailRow('Submitted', app['submission_date'] ?? 'N/A'),
               if (app['store_description'] != null && app['store_description'].isNotEmpty)
@@ -182,6 +192,24 @@ class _AdminDashboardState extends State<AdminDashboard> {
         ],
       ),
     );
+  }
+
+  String _formatSellerAddress(Map<String, dynamic> app) {
+    final parts = [
+      app['house_number'],
+      app['street'],
+      app['barangay'],
+      app['city'],
+      app['province'],
+    ]
+        .whereType<String>()
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty)
+        .toList();
+
+    if (parts.isNotEmpty) return parts.join(', ');
+
+    return app['business_address']?.toString() ?? 'N/A';
   }
 
   Widget _detailRow(String label, String value) {

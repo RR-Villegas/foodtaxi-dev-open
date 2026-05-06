@@ -16,20 +16,22 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
 
   final _storeNameController = TextEditingController();
   final _storeDescriptionController = TextEditingController();
-  final _businessAddressController = TextEditingController();
-  final _cityController = TextEditingController();
   final _provinceController = TextEditingController();
-  final _regionController = TextEditingController();
+  final _cityController = TextEditingController();
+  final _barangayController = TextEditingController();
+  final _streetController = TextEditingController();
+  final _houseNumberController = TextEditingController();
   final _contactPhoneController = TextEditingController();
 
   @override
   void dispose() {
     _storeNameController.dispose();
     _storeDescriptionController.dispose();
-    _businessAddressController.dispose();
-    _cityController.dispose();
     _provinceController.dispose();
-    _regionController.dispose();
+    _cityController.dispose();
+    _barangayController.dispose();
+    _streetController.dispose();
+    _houseNumberController.dispose();
     _contactPhoneController.dispose();
     super.dispose();
   }
@@ -51,16 +53,21 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
       }
 
       // Submit seller application
-      await DatabaseService.insertSellerApplication(
+      final submitted = await DatabaseService.insertSellerApplication(
         accountId: accountId,
-        storeName: _storeNameController.text,
-        storeDescription: _storeDescriptionController.text,
-        businessAddress: _businessAddressController.text,
-        city: _cityController.text,
-        province: _provinceController.text,
-        region: _regionController.text,
-        contactPhone: _contactPhoneController.text,
+        storeName: _storeNameController.text.trim(),
+        storeDescription: _storeDescriptionController.text.trim(),
+        province: _provinceController.text.trim(),
+        city: _cityController.text.trim(),
+        barangay: _barangayController.text.trim(),
+        street: _streetController.text.trim(),
+        houseNumber: _houseNumberController.text.trim(),
+        contactPhone: _contactPhoneController.text.trim(),
       );
+
+      if (!submitted) {
+        throw Exception('Seller application could not be submitted');
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -83,7 +90,9 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
         );
       }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -152,15 +161,15 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
               ),
               const SizedBox(height: 16),
               TextFormField(
-                controller: _businessAddressController,
+                controller: _provinceController,
                 decoration: const InputDecoration(
-                  labelText: 'Business Address *',
+                  labelText: 'Province *',
                   border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.location_on),
+                  prefixIcon: Icon(Icons.map),
                 ),
                 validator: (value) {
                   if (value?.isEmpty ?? true) {
-                    return 'Business address is required';
+                    return 'Province is required';
                   }
                   return null;
                 },
@@ -169,30 +178,48 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
               TextFormField(
                 controller: _cityController,
                 decoration: const InputDecoration(
-                  labelText: 'City *',
+                  labelText: 'Municipality/City *',
                   border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.location_city),
                 ),
                 validator: (value) {
                   if (value?.isEmpty ?? true) {
-                    return 'City is required';
+                    return 'Municipality or city is required';
                   }
                   return null;
                 },
               ),
               const SizedBox(height: 12),
               TextFormField(
-                controller: _provinceController,
+                controller: _barangayController,
                 decoration: const InputDecoration(
-                  labelText: 'Province',
+                  labelText: 'Barangay *',
                   border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.place),
+                ),
+                validator: (value) {
+                  if (value?.isEmpty ?? true) {
+                    return 'Barangay is required';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _streetController,
+                decoration: const InputDecoration(
+                  labelText: 'Street',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.location_on_outlined),
                 ),
               ),
               const SizedBox(height: 12),
               TextFormField(
-                controller: _regionController,
+                controller: _houseNumberController,
                 decoration: const InputDecoration(
-                  labelText: 'Region',
+                  labelText: 'House Number',
                   border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.home),
                 ),
               ),
               const SizedBox(height: 24),
