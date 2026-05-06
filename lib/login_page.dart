@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../services/database_service.dart';
+import 'models/user_model.dart';
+import 'services/database_service.dart';
+import 'services/local_storage_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -48,16 +50,44 @@ class _LoginPageState extends State<LoginPage> {
       // Check/create account row
       var account = await DatabaseService.getCurrentAccount();
       if (account == null) {
+        final pendingSignup = await LocalStorageService.loadSignupData();
+        final canUsePendingSignup =
+            _matchesCurrentUser(pendingSignup, user.email);
+
         final accountId = await DatabaseService.insertUserProfile(
           authId: authId,
-          firstName: (user.email?.split('@')[0].replaceAll('.', ' ').split(' ').map((s) => s.isNotEmpty ? s[0].toUpperCase() + s.substring(1).toLowerCase() : s).join(' ')) ?? 'User',
-          surname: '',
+          firstName: canUsePendingSignup
+              ? pendingSignup!.firstName ?? _displayNameFromEmail(user.email)
+              : _displayNameFromEmail(user.email),
+          surname: canUsePendingSignup ? pendingSignup!.surname ?? '' : '',
           email: user.email ?? '',
-          accountType: 'Buyer',
+          phoneNumber: canUsePendingSignup ? pendingSignup!.phoneNumber : null,
+          accountType: canUsePendingSignup
+              ? _toDatabaseAccountType(pendingSignup!.accountType)
+              : 'Buyer',
         );
         if (accountId == null) {
           throw Exception('Account profile could not be created');
         }
+
+        if (canUsePendingSignup && pendingSignup!.isStep3Complete()) {
+          final address = await DatabaseService.insertAddress(
+            accountId: accountId,
+            province: pendingSignup.province!,
+            city: pendingSignup.municipality!,
+            barangay: pendingSignup.barangay!,
+            street: pendingSignup.street,
+            houseNumber: pendingSignup.houseNumber,
+            isDefault: true,
+          );
+
+          if (address == null) {
+            throw Exception('Delivery address could not be created');
+          }
+
+          await LocalStorageService.clearSignupData();
+        }
+
         account = await DatabaseService.getCurrentAccount();
       }
 
@@ -78,7 +108,40 @@ class _LoginPageState extends State<LoginPage> {
         );
       }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  bool _matchesCurrentUser(UserSignupData? signupData, String? email) {
+    return signupData?.email?.trim().toLowerCase() ==
+        email?.trim().toLowerCase();
+  }
+
+  String _displayNameFromEmail(String? email) {
+    final name = email?.split('@').first.trim();
+    if (name == null || name.isEmpty) return 'User';
+
+    return name
+        .replaceAll('.', ' ')
+        .split(' ')
+        .map((part) {
+          if (part.isEmpty) return part;
+          return part[0].toUpperCase() + part.substring(1).toLowerCase();
+        })
+        .join(' ');
+  }
+
+  String _toDatabaseAccountType(String accountType) {
+    switch (accountType.toLowerCase()) {
+      case 'seller':
+        return 'Seller';
+      case 'rider':
+        return 'Rider';
+      case 'buyer':
+      default:
+        return 'Buyer';
     }
   }
 

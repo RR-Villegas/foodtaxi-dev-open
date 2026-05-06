@@ -211,8 +211,12 @@ class _SignupPageState extends State<SignupPage> {
     _signupData.street = _streetController.text.trim();
     _signupData.houseNumber = _houseNumberController.text.trim();
 
-setState(() => _isLoading = true);
+    setState(() => _isLoading = true);
     try {
+      if (_supabase.auth.currentSession != null) {
+        await _supabase.auth.signOut(scope: SignOutScope.local);
+      }
+
       // Sign up with Supabase Auth - include role as metadata
       final authResponse = await _supabase.auth.signUp(
         email: _signupData.email!,
@@ -227,7 +231,20 @@ setState(() => _isLoading = true);
         throw Exception('Signup failed: No user returned');
       }
 
-      await _waitForAuthSession();
+      final hasNewUserSession = await _waitForAuthSession(userId);
+      if (!hasNewUserSession) {
+        await LocalStorageService.saveSignupData(_signupData);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Account created. Please confirm your email, then sign in to finish setup.'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          Navigator.pushNamed(context, '/login');
+        }
+        return;
+      }
 
       // Insert user profile
       final accountId = await DatabaseService.insertUserProfile(
@@ -274,7 +291,7 @@ setState(() => _isLoading = true);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Signup failed: ${e.toString()}'),
+            content: Text('Signup failed: ${_friendlySignupError(e)}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -286,15 +303,33 @@ setState(() => _isLoading = true);
     }
   }
 
-  Future<void> _waitForAuthSession() async {
-    if (_supabase.auth.currentSession != null) return;
+  Future<bool> _waitForAuthSession(String expectedUserId) async {
+    if (_isSignedInAs(expectedUserId)) return true;
 
     for (var attempt = 0; attempt < 10; attempt++) {
       await Future.delayed(const Duration(milliseconds: 200));
-      if (_supabase.auth.currentSession != null) return;
+      if (_isSignedInAs(expectedUserId)) return true;
     }
 
-    throw Exception('Signup created the auth user, but no active session is available yet. Please confirm your email, then sign in.');
+    return false;
+  }
+
+  bool _isSignedInAs(String expectedUserId) {
+    return _supabase.auth.currentSession != null &&
+        _supabase.auth.currentUser?.id == expectedUserId;
+  }
+
+  String _friendlySignupError(Object error) {
+    if (error is AuthException) {
+      if (error.statusCode == '429' ||
+          error.code == 'over_email_send_rate_limit') {
+        return 'Supabase is temporarily limiting confirmation emails. Please wait a minute, then try again or sign in if the account was already created.';
+      }
+
+      return error.message;
+    }
+
+    return error.toString();
   }
 
   String _toDatabaseAccountType(String accountType) {
