@@ -10,6 +10,43 @@ class CartPage extends StatefulWidget {
 }
 
 class _CartPageState extends State<CartPage> {
+  static const String _fallbackImage = 'assets/images/food1.jpg';
+
+  Widget _buildProductImage(dynamic imageValue, {double size = 80}) {
+    final path = imageValue?.toString().trim();
+    if (path == null || path.isEmpty) {
+      return Image.asset(_fallbackImage, width: size, height: size, fit: BoxFit.cover);
+    }
+
+    if (path.startsWith('http')) {
+      return Image.network(
+        path,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => Image.asset(_fallbackImage, width: size, height: size, fit: BoxFit.cover),
+      );
+    }
+
+    if (path.startsWith('assets/')) {
+      return Image.asset(
+        path,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => Image.asset(_fallbackImage, width: size, height: size, fit: BoxFit.cover),
+      );
+    }
+
+    return Image.network(
+      DatabaseService.getProductImageUrl(path),
+      width: size,
+      height: size,
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => Image.asset(_fallbackImage, width: size, height: size, fit: BoxFit.cover),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Check if the cart is empty
@@ -79,25 +116,7 @@ class _CartPageState extends State<CartPage> {
                           // Product Image
                           ClipRRect(
                             borderRadius: BorderRadius.circular(8),
-                            child: item['main_image_url'] != null
-                                ? Image.network(
-                                    DatabaseService.getProductImageUrl(item['main_image_url']),
-                                    width: 80,
-                                    height: 80,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) => Image.asset(
-                                      'assets/images/food1.jpg',
-                                      width: 80,
-                                      height: 80,
-                                      fit: BoxFit.cover,
-                                    ),
-                                  )
-                                : Image.asset(
-                                    'assets/images/food1.jpg',
-                                    width: 80,
-                                    height: 80,
-                                    fit: BoxFit.cover,
-                                  ),
+                            child: _buildProductImage(item['main_image_url']),
                           ),
                           const SizedBox(width: 16),
                           // Item Details

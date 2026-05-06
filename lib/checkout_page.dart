@@ -17,6 +17,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
   String _selectedPaymentMethod = 'COD';
   bool _isLoading = false;
   bool _isLoadingAddresses = true;
+  static const String _fallbackImage = 'assets/images/food1.jpg';
   
   // Delivery fee in PHP
   static const double _deliveryFee = 50.0;
@@ -59,6 +60,41 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   double get _subtotal => CartModel.totalPrice;
   double get _total => _subtotal + _deliveryFee;
+
+  Widget _buildProductImage(dynamic imageValue, {double size = 50}) {
+    final path = imageValue?.toString().trim();
+    if (path == null || path.isEmpty) {
+      return Image.asset(_fallbackImage, width: size, height: size, fit: BoxFit.cover);
+    }
+
+    if (path.startsWith('http')) {
+      return Image.network(
+        path,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => Image.asset(_fallbackImage, width: size, height: size, fit: BoxFit.cover),
+      );
+    }
+
+    if (path.startsWith('assets/')) {
+      return Image.asset(
+        path,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => Image.asset(_fallbackImage, width: size, height: size, fit: BoxFit.cover),
+      );
+    }
+
+    return Image.network(
+      DatabaseService.getProductImageUrl(path),
+      width: size,
+      height: size,
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => Image.asset(_fallbackImage, width: size, height: size, fit: BoxFit.cover),
+    );
+  }
 
   String _getPaymentMethodLabel() {
     switch (_selectedPaymentMethod) {
@@ -327,12 +363,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                               children: [
                                 ClipRRect(
                                   borderRadius: BorderRadius.circular(8),
-                                  child: Image.asset(
-                                    item['main_image_url'] ?? 'assets/images/food1.jpg',
-                                    width: 50,
-                                    height: 50,
-                                    fit: BoxFit.cover,
-                                  ),
+                                  child: _buildProductImage(item['main_image_url']),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
