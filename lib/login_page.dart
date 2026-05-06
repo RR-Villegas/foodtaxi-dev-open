@@ -37,8 +37,7 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
 
-      final authResponse = await _supabase.auth.signInWithPassword(
-
+      await _supabase.auth.signInWithPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
@@ -47,21 +46,30 @@ class _LoginPageState extends State<LoginPage> {
       final authId = user.id;
 
       // Check/create account row
-      var accountId = await DatabaseService.getCurrentAccountId();
-      if (accountId == null) {
-        accountId = await DatabaseService.insertUserProfile(
+      var account = await DatabaseService.getCurrentAccount();
+      if (account == null) {
+        final accountId = await DatabaseService.insertUserProfile(
           authId: authId,
           firstName: (user.email?.split('@')[0].replaceAll('.', ' ').split(' ').map((s) => s.isNotEmpty ? s[0].toUpperCase() + s.substring(1).toLowerCase() : s).join(' ')) ?? 'User',
           surname: '',
           email: user.email ?? '',
-          phoneNumber: '',
           accountType: 'Buyer',
         );
+        if (accountId == null) {
+          throw Exception('Account profile could not be created');
+        }
+        account = await DatabaseService.getCurrentAccount();
       }
 
-      final role = 'buyer'; // from account_type, default Buyer
+      final role = (account?['account_type'] as String? ?? 'Buyer').toLowerCase();
       if (mounted) {
-        Navigator.pushReplacementNamed(context, role == 'admin' ? '/admin-dashboard' : '/buyer-dashboard');
+        if (role == 'seller') {
+          Navigator.pushReplacementNamed(context, '/seller-dashboard');
+        } else if (role == 'rider') {
+          Navigator.pushReplacementNamed(context, '/rider-dashboard');
+        } else {
+          Navigator.pushReplacementNamed(context, '/buyer-dashboard');
+        }
       }
     } catch (e) {
       if (mounted) {

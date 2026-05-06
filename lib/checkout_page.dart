@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'cart_model.dart';
 import 'services/database_service.dart';
 import 'models/address_model.dart';
@@ -12,12 +11,10 @@ class CheckoutPage extends StatefulWidget {
 }
 
 class _CheckoutPageState extends State<CheckoutPage> {
-  final _supabase = Supabase.instance.client;
-  
   List<Address> _addresses = [];
   Address? _selectedAddress;
   String? _accountId;
-  String _selectedPaymentMethod = 'cash_on_delivery';
+  String _selectedPaymentMethod = 'COD';
   bool _isLoading = false;
   bool _isLoadingAddresses = true;
   
@@ -65,14 +62,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   String _getPaymentMethodLabel() {
     switch (_selectedPaymentMethod) {
-      case 'cash_on_delivery':
+      case 'COD':
         return 'Cash on Delivery';
-      case 'gcash':
+      case 'Gcash':
         return 'GCash';
-      case 'paymaya':
-        return 'PayMaya';
-      case 'card':
-        return 'Credit/Debit Card';
       default:
         return 'Unknown';
     }
@@ -134,18 +127,29 @@ class _CheckoutPageState extends State<CheckoutPage> {
         accountId: _accountId!,
         addressId: _selectedAddress!.addressId!,
         totalAmount: _total,
+        shippingFee: _deliveryFee,
         paymentMethod: _selectedPaymentMethod,
-        status: 'pending',
       );
+
+      if (orderId.isEmpty) {
+        throw Exception('Failed to create order');
+      }
 
       // Add order items
       for (var item in CartModel.cartItems) {
+        final productId = item['product_id']?.toString();
+        if (productId == null || productId.isEmpty) {
+          throw Exception('Cart item is missing product ID');
+        }
+
+        final quantity = item['quantity'] ?? 1;
+        final price = (item['price'] as num).toDouble();
+
         await DatabaseService.insertOrderItem(
           orderId: orderId,
-          productName: item['name'] ?? 'Unknown',
-          price: (item['price'] as num).toDouble(),
-          quantity: item['quantity'] ?? 1,
-          imageUrl: item['main_image_url'] ?? '',
+          productId: productId,
+          unitPriceAtSale: price,
+          quantity: quantity,
         );
       }
 
@@ -448,7 +452,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                     child: Column(
                       children: [
                         RadioListTile<String>(
-                          value: 'cash_on_delivery',
+                          value: 'COD',
                           groupValue: _selectedPaymentMethod,
                           onChanged: (value) => setState(() => _selectedPaymentMethod = value!),
                           title: const Row(
@@ -460,7 +464,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                           ),
                         ),
                         RadioListTile<String>(
-                          value: 'gcash',
+                          value: 'Gcash',
                           groupValue: _selectedPaymentMethod,
                           onChanged: (value) => setState(() => _selectedPaymentMethod = value!),
                           title: const Row(
@@ -468,30 +472,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
                               Icon(Icons.phone_android, color: Colors.blue),
                               SizedBox(width: 8),
                               Text('GCash'),
-                            ],
-                          ),
-                        ),
-                        RadioListTile<String>(
-                          value: 'paymaya',
-                          groupValue: _selectedPaymentMethod,
-                          onChanged: (value) => setState(() => _selectedPaymentMethod = value!),
-                          title: const Row(
-                            children: [
-                              Icon(Icons.credit_card, color: Colors.purple),
-                              SizedBox(width: 8),
-                              Text('PayMaya'),
-                            ],
-                          ),
-                        ),
-                        RadioListTile<String>(
-                          value: 'card',
-                          groupValue: _selectedPaymentMethod,
-                          onChanged: (value) => setState(() => _selectedPaymentMethod = value!),
-                          title: const Row(
-                            children: [
-                              Icon(Icons.credit_card, color: Colors.orange),
-                              SizedBox(width: 8),
-                              Text('Credit/Debit Card'),
                             ],
                           ),
                         ),

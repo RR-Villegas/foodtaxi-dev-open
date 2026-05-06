@@ -36,6 +36,12 @@ class DatabaseService {
     }
   }
 
+  static String? _blankToNull(String? value) {
+    final trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty) return null;
+    return trimmed;
+  }
+
   // Insert user profile after signup
   static Future<String?> insertUserProfile({
     required String authId,
@@ -53,7 +59,7 @@ class DatabaseService {
             'firstname': firstName,
             'surname': surname,
             'email': email,
-            'phone_number': phoneNumber ?? '',
+            'phone_number': _blankToNull(phoneNumber),
             'account_type': accountType,
           })
           .select('account_id')
@@ -66,18 +72,28 @@ class DatabaseService {
     }
   }
 
-  static Future<String?> getCurrentAccountId() async {
+  static Future<Map<String, dynamic>?> getCurrentAccount() async {
     try {
       final authId = _supabase.auth.currentUser?.id;
       if (authId == null) return null;
 
       final response = await _supabase
           .from('account')
-          .select('account_id')
+          .select()
           .eq('auth_id', authId)
-          .single();
+          .maybeSingle();
 
-      return response['account_id'] as String?;
+      return response;
+    } catch (e) {
+      print('DB Error: Failed to fetch current account: $e');
+      return null;
+    }
+  }
+
+  static Future<String?> getCurrentAccountId() async {
+    try {
+      final account = await getCurrentAccount();
+      return account?['account_id'] as String?;
     } catch (e) {
       print('DB Error: Failed to fetch current account ID: $e');
       return null;
@@ -186,20 +202,22 @@ class DatabaseService {
     required String accountId,
     required String addressId,
     required double totalAmount,
+    required double shippingFee,
     required String paymentMethod,
-    required String status,
+    String orderStatus = 'Processing',
   }) async {
     try {
       final response = await _supabase
           .from('orders')
           .insert({
-            'account_id': accountId,
+            'buyer_account_id': accountId,
             'address_id': addressId,
             'total_amount': totalAmount,
+            'shipping_fee': shippingFee,
             'payment_method': paymentMethod,
-            'status': status,
+            'order_status': orderStatus,
           })
-          .select()
+          .select('order_id')
           .single();
 
       return response['order_id'] as String;
@@ -212,20 +230,19 @@ class DatabaseService {
   // Insert order item
   static Future<void> insertOrderItem({
     required String orderId,
-    required String productName,
-    required double price,
+    required String productId,
+    required double unitPriceAtSale,
     required int quantity,
-    required String imageUrl,
   }) async {
     try {
       await _supabase
           .from('order_items')
           .insert({
             'order_id': orderId,
-            'product_name': productName,
-            'price': price,
+            'product_id': productId,
             'quantity': quantity,
-            'image_url': imageUrl,
+            'unit_price_at_sale': unitPriceAtSale,
+            'subtotal': unitPriceAtSale * quantity,
           });
     } catch (e) {
       print('DB Error: Failed to insert order item: $e');
