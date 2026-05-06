@@ -9,6 +9,7 @@ import 'buyer_dashboard.dart';
 import 'admin_dashboard.dart';
 import 'seller_dashboard.dart';
 import 'checkout_page.dart';
+import 'product_page.dart';
 import 'services/database_service.dart';
 
 void main() async {
@@ -47,6 +48,15 @@ class MyApp extends StatelessWidget {
         '/seller-dashboard': (context) => const SellerDashboard(),
         '/admin-dashboard': (context) => const AdminDashboard(),
         '/checkout': (context) => const CheckoutPage(),
+      },
+      onGenerateRoute: (settings) {
+        if (settings.name?.startsWith('/product/') ?? false) {
+          final productId = settings.name!.split('/').last;
+          return MaterialPageRoute(
+            builder: (context) => ProductPage(productId: productId),
+          );
+        }
+        return null;
       },
     );
   }
@@ -290,39 +300,45 @@ class _MyHomePageState extends State<MyHomePage> {
         itemBuilder: (context, index) {
           final item = items[index];
           final imageUrl = item['main_image_url'] as String?;
+          final productId = item['product_id'] as String?;
 
-          return Container(
-            width: 150,
-            margin: const EdgeInsets.all(10),
-            child: Card(
-              child: Column(
-                children: [
-                  Expanded(
-                    child: imageUrl != null
-                        ? Image.network(
-                            DatabaseService.getProductImageUrl(imageUrl),
-                            fit: BoxFit.cover,
-                            width: double.infinity,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                color: Colors.grey[300],
-                                child: const Icon(Icons.image_not_supported),
-                              );
-                            },
-                          )
-                        : Container(
-                            color: Colors.grey[300],
-                            child: const Icon(Icons.image),
-                          ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(6),
-                    child: Text(item['name'] ?? 'Product',
-                        style: const TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                  Text("₱${item['price']?.toStringAsFixed(2) ?? 'N/A'}",
-                      style: const TextStyle(color: Colors.green)),
-                ],
+          return GestureDetector(
+            onTap: productId != null
+                ? () => Navigator.pushNamed(context, '/product/$productId')
+                : null,
+            child: Container(
+              width: 150,
+              margin: const EdgeInsets.all(10),
+              child: Card(
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: imageUrl != null
+                          ? Image.network(
+                              DatabaseService.getProductImageUrl(imageUrl),
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  color: Colors.grey[300],
+                                  child: const Icon(Icons.image_not_supported),
+                                );
+                              },
+                            )
+                          : Container(
+                              color: Colors.grey[300],
+                              child: const Icon(Icons.image),
+                            ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(6),
+                      child: Text(item['name'] ?? 'Product',
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                    Text("₱${item['price']?.toStringAsFixed(2) ?? 'N/A'}",
+                        style: const TextStyle(color: Colors.green)),
+                  ],
+                ),
               ),
             ),
           );

@@ -22,44 +22,15 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
 
   int get _cartLength => CartModel.length;
 
-  // FOOD CATEGORIES (6 items each)
-  Map<String, List<Map<String, dynamic>>> get demoProducts => {
-        "🔥 Trending": [
-          {'name': 'Sushi', 'price': 320.00, 'main_image_url': 'assets/images/sushi.jpg'},
-          {'name': 'Tacos', 'price': 180.00, 'main_image_url': 'assets/images/tacos.jpg'},
-          {'name': 'Pad', 'price': 220.00, 'main_image_url': 'assets/images/padthai.jpg'},
-          {'name': 'Pizza', 'price': 350.00, 'main_image_url': 'assets/images/pizza.jpg'},
-          {'name': 'Kebab', 'price': 250.00, 'main_image_url': 'assets/images/kebab.jpg'},
-          {'name': 'Burger', 'price': 200.00, 'main_image_url': 'assets/images/burger.jpg'},
-        ],
-
-        "🏆 Best Seller": [
-          {'name': 'Ramen', 'price': 260.00, 'main_image_url': 'assets/images/ramen.jpg'},
-          {'name': 'Dim', 'price': 230.00, 'main_image_url': 'assets/images/dimsum.jpg'},
-          {'name': 'Lasagna', 'price': 340.00, 'main_image_url': 'assets/images/lasagna.jpg'},
-          {'name': 'BBQ Ribs', 'price': 420.00, 'main_image_url': 'assets/images/bbqribs.jpg'},
-          {'name': 'Paella', 'price': 360.00, 'main_image_url': 'assets/images/paella.jpg'},
-          {'name': 'Falafel', 'price': 180.00, 'main_image_url': 'assets/images/falafel.jpg'},
-        ],
-
-        "🍝 Pasta": [
-          {'name': 'Carbonara', 'price': 280.00, 'main_image_url': 'assets/images/carbonara.jpg'},
-          {'name': 'Spaghetti Bolognese', 'price': 260.00, 'main_image_url': 'assets/images/spaghetti.jpg'},
-          {'name': 'Pesto Pasta', 'price': 240.00, 'main_image_url': 'assets/images/pesto.jpg'},
-          {'name': 'Seafood Pasta', 'price': 320.00, 'main_image_url': 'assets/images/seafood_pasta.jpg'},
-          {'name': 'Mac & Cheese USA', 'price': 180.00, 'main_image_url': 'assets/images/maccheese.jpg'},
-          {'name': 'Chicken Alfredo', 'price': 300.00, 'main_image_url': 'assets/images/alfredo.jpg'},
-        ],
-
-        "🍔 Burger": [
-          {'name': 'Cheeseburge', 'price': 180.00, 'main_image_url': 'assets/images/cheeseburger.jpg'},
-          {'name': 'Chicken Burger', 'price': 160.00, 'main_image_url': 'assets/images/chicken_burger.jpg'},
-          {'name': 'Double Burger', 'price': 220.00, 'main_image_url': 'assets/images/double_burger.jpg'},
-          {'name': 'Bacon Burger', 'price': 260.00, 'main_image_url': 'assets/images/bacon_burger.jpg'},
-          {'name': 'Veggie Burger', 'price': 150.00, 'main_image_url': 'assets/images/veggie_burger.jpg'},
-          {'name': 'Spicy Burger', 'price': 210.00, 'main_image_url': 'assets/images/spicy_burger.jpg'},
-        ],
-      };
+  // Product categories mapping
+  static const Map<String, String> categoryNames = {
+    'Baking Supplies & Ingredients': '🧁 Baking',
+    'Coffee, Tea & Beverages': '☕ Beverages',
+    'Snacks & Candy': '🍬 Snacks',
+    'Specialty Foods & International Cuisine': '🌍 Specialty',
+    'Organic and Health Foods': '🥗 Health Foods',
+    'Meal Kits & Prepped Foods': '🍱 Meal Kits',
+  };
 
 @override
   void initState() {
@@ -125,11 +96,16 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
     try {
       _products = await DatabaseService.fetchProducts();
       
-      // Group by category
+      // Group by category with display names
       Map<String, List<Map<String, dynamic>>> grouped = {};
       for (var product in _products) {
-        String cat = product['category'] ?? 'Other';
-        grouped.putIfAbsent(cat, () => []).add(product);
+        final category = product['category'] ?? 'Other';
+        final displayName = categoryNames[category] ?? category;
+        
+        if (!grouped.containsKey(displayName)) {
+          grouped[displayName] = [];
+        }
+        grouped[displayName]!.add(product);
       }
       
       _groupedProducts = grouped;
@@ -180,68 +156,74 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
         itemCount: items.length,
         itemBuilder: (context, index) {
           final item = items[index];
+          final productId = item['product_id'] as String?;
 
-          return Container(
-            width: 150,
-            margin: const EdgeInsets.only(right: 12),
-            child: Card(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              elevation: 3,
-              child: Column(
-                children: [
-                  ClipRRect(
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(16),
-                    ),
-                    child: Image.network(
-                      DatabaseService.getProductImageUrl(item['main_image_url']),
-                      height: 100,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Image.asset(
-                        'assets/images/burger.jpg', // fallback
+          return GestureDetector(
+            onTap: productId != null
+                ? () => Navigator.pushNamed(context, '/product/$productId')
+                : null,
+            child: Container(
+              width: 150,
+              margin: const EdgeInsets.only(right: 12),
+              child: Card(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                elevation: 3,
+                child: Column(
+                  children: [
+                    ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(16),
+                      ),
+                      child: Image.network(
+                        DatabaseService.getProductImageUrl(item['main_image_url']),
                         height: 100,
                         width: double.infinity,
                         fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Image.asset(
+                          'assets/images/burger.jpg', // fallback
+                          height: 100,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                        ),
                       ),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(6),
-                    child: Column(
-                      children: [
-                        Text(
-                          item['name'],
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '₱${item['price']}',
-                          style: const TextStyle(
-                            color: Colors.green,
-                            fontWeight: FontWeight.bold,
+                    Padding(
+                      padding: const EdgeInsets.all(6),
+                      child: Column(
+                        children: [
+                          Text(
+                            item['name'],
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
-                        ),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 28,
-                          child: ElevatedButton(
-                            onPressed: () => _addToCart(item),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              padding: EdgeInsets.zero,
+                          const SizedBox(height: 2),
+                          Text(
+                            '₱${item['price']}',
+                            style: const TextStyle(
+                              color: Colors.green,
+                              fontWeight: FontWeight.bold,
                             ),
-                            child: const Text('Add'),
                           ),
-                        )
-                      ],
-                    ),
-                  )
-                ],
+                          SizedBox(
+                            width: double.infinity,
+                            height: 28,
+                            child: ElevatedButton(
+                              onPressed: () => _addToCart(item),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                padding: EdgeInsets.zero,
+                              ),
+                              child: const Text('Add'),
+                            ),
+                          )
+                        ],
+                      ),
+                    )
+                  ],
+                ),
               ),
             ),
           );
