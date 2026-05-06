@@ -48,8 +48,7 @@ class _LoginPageState extends State<LoginPage> {
 
       // Check/create account row
       var accountId = await DatabaseService.getCurrentAccountId();
-      if (accountId == null) {
-        accountId = await DatabaseService.insertUserProfile(
+      accountId ??= await DatabaseService.insertUserProfile(
           authId: authId,
           firstName: (user.email?.split('@')[0].replaceAll('.', ' ').split(' ').map((s) => s.isNotEmpty ? s[0].toUpperCase() + s.substring(1).toLowerCase() : s).join(' ')) ?? 'User',
           surname: '',
@@ -57,7 +56,6 @@ class _LoginPageState extends State<LoginPage> {
           phoneNumber: '',
           accountType: 'Buyer',
         );
-      }
 
       final role = 'buyer'; // from account_type, default Buyer
       if (mounted) {

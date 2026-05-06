@@ -9,6 +9,55 @@ class CartPage extends StatefulWidget {
 }
 
 class _CartPageState extends State<CartPage> {
+
+  /// 🔥 Smart Image Loader (FIXES YOUR ERROR)
+  Widget buildImage(dynamic imageValue) {
+    String fallback = 'assets/images/food1.jpg';
+
+    if (imageValue == null || imageValue.toString().isEmpty) {
+      return Image.asset(fallback, width: 80, height: 80, fit: BoxFit.cover);
+    }
+
+    String path = imageValue.toString();
+
+    // ✅ If full URL (Supabase / internet)
+    if (path.startsWith('http')) {
+      return Image.network(
+        path,
+        width: 80,
+        height: 80,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) {
+          return Image.asset(fallback, width: 80, height: 80, fit: BoxFit.cover);
+        },
+      );
+    }
+
+    // ✅ If already correct asset path
+    if (path.startsWith('assets/')) {
+      return Image.asset(
+        path,
+        width: 80,
+        height: 80,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) {
+          return Image.asset(fallback, width: 80, height: 80, fit: BoxFit.cover);
+        },
+      );
+    }
+
+    // ✅ If only filename (MOST COMMON FIX)
+    return Image.asset(
+      'assets/images/$path',
+      width: 80,
+      height: 80,
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) {
+        return Image.asset(fallback, width: 80, height: 80, fit: BoxFit.cover);
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (CartModel.cartItems.isEmpty) {
@@ -56,7 +105,8 @@ class _CartPageState extends State<CartPage> {
               itemCount: CartModel.cartItems.length,
               itemBuilder: (context, index) {
                 final item = CartModel.cartItems[index];
-                final total = item['price'] * (item['quantity'] ?? 1);
+                final total =
+                    (item['price'] ?? 0) * (item['quantity'] ?? 1);
 
                 return Card(
                   margin: const EdgeInsets.all(12),
@@ -64,38 +114,44 @@ class _CartPageState extends State<CartPage> {
                     padding: const EdgeInsets.all(16),
                     child: Row(
                       children: [
-                        // Image
+                        /// ✅ FIXED IMAGE HERE
                         ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child: Image.asset(
-                            item['main_image_url'] ?? 'assets/images/food1.jpg',
-                            width: 80,
-                            height: 80,
-                            fit: BoxFit.cover,
-                          ),
+                          child: buildImage(item['main_image_url']),
                         ),
+
                         const SizedBox(width: 16),
-                        // Details
+
+                        /// DETAILS
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
                                 item['name'] ?? 'Unknown',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
                               ),
                               Text('₱${item['price']}'),
-                              Text('Total: ₱${total.toStringAsFixed(2)}'),
+                              Text(
+                                'Total: ₱${total.toStringAsFixed(2)}',
+                              ),
                             ],
                           ),
                         ),
-                        // Quantity controls
+
+                        /// QUANTITY CONTROLS
                         Column(
                           children: [
                             IconButton(
                               icon: const Icon(Icons.remove, color: Colors.red),
                               onPressed: () {
-                                CartModel.updateQuantity(item['uniqueId'], (item['quantity'] ?? 1) - 1);
+                                CartModel.updateQuantity(
+                                  item['uniqueId'],
+                                  (item['quantity'] ?? 1) - 1,
+                                );
                                 setState(() {});
                               },
                             ),
@@ -103,7 +159,10 @@ class _CartPageState extends State<CartPage> {
                             IconButton(
                               icon: const Icon(Icons.add, color: Colors.green),
                               onPressed: () {
-                                CartModel.updateQuantity(item['uniqueId'], (item['quantity'] ?? 1) + 1);
+                                CartModel.updateQuantity(
+                                  item['uniqueId'],
+                                  (item['quantity'] ?? 1) + 1,
+                                );
                                 setState(() {});
                               },
                             ),
@@ -123,12 +182,15 @@ class _CartPageState extends State<CartPage> {
               },
             ),
           ),
-          // Total & Checkout
+
+          /// TOTAL SECTION
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: Colors.green[50],
-              border: Border(top: BorderSide(color: Colors.green[200]!)),
+              border: Border(
+                top: BorderSide(color: Colors.green[200]!),
+              ),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -139,11 +201,17 @@ class _CartPageState extends State<CartPage> {
                 ),
                 Text(
                   '₱${CartModel.totalPrice.toStringAsFixed(2)}',
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green),
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                  ),
                 ),
               ],
             ),
           ),
+
+          /// CHECKOUT BUTTON
           Padding(
             padding: const EdgeInsets.all(20),
             child: SizedBox(
@@ -154,7 +222,7 @@ class _CartPageState extends State<CartPage> {
                   backgroundColor: const Color(0xFF2d8f4e),
                   foregroundColor: Colors.white,
                 ),
-onPressed: () {
+                onPressed: () {
                   Navigator.pushNamed(context, '/checkout');
                 },
                 child: const Text(

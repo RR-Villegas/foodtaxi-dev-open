@@ -374,7 +374,7 @@ Widget heroSection() {
               PopupMenuItem(
                 child: const ListTile(
                   leading: Icon(Icons.person),
-                  title: const Text('Profile'),
+                  title: Text('Profile'),
                   onTap: null,
                 ),
                 onTap: () => Navigator.pushNamed(context, '/profile'),
