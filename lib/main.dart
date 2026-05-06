@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'login_page.dart';
 import 'signup_page.dart';
-import 'profile_page.dart';
+import 'user_details.dart';
 import 'cart_page.dart';
 import 'search_page.dart';
 import 'buyer_dashboard.dart';
@@ -34,12 +34,13 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2d8f4e)),
         useMaterial3: true,
       ),
+      debugShowCheckedModeBanner: false,
       initialRoute: '/',
       routes: {
         '/': (context) => const MyHomePage(title: 'FoodTaxi Omega'),
         '/login': (context) => const LoginPage(),
         '/signup': (context) => const SignupPage(),
-        '/profile': (context) => const ProfilePage(),
+        '/profile': (context) => UserDetailsPage(),
         '/cart': (context) => const CartPage(),
         '/search': (context) => const SearchPage(),
         '/buyer-dashboard': (context) => const BuyerDashboard(),
@@ -126,22 +127,22 @@ class _MyHomePageState extends State<MyHomePage> {
         backgroundColor: Theme.of(context).colorScheme.primary,
         title: Text(widget.title),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () => Navigator.pushNamed(context, '/search'),
+          TextButton.icon(
+            onPressed: () => Navigator.pushNamed(context, '/signup'),
+            icon: const Icon(Icons.person_add, size: 18),
+            label: const Text('Create Account'),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.white,
+            ),
           ),
-          IconButton(
-            icon: const Icon(Icons.shopping_cart),
-            onPressed: () => Navigator.pushNamed(context, '/cart'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.person),
+          const SizedBox(width: 16),
+          TextButton.icon(
             onPressed: () => Navigator.pushNamed(context, '/login'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.admin_panel_settings, color: Colors.orange),
-            tooltip: 'DEMO Admin Dashboard',
-            onPressed: () => Navigator.pushNamed(context, '/admin-dashboard'),
+            icon: const Icon(Icons.login, size: 18),
+            label: const Text('Sign In'),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.white,
+            ),
           ),
         ],
       ),

@@ -823,6 +823,7 @@ _provinceController.dispose();
             ),
             onPressed: () {
               Navigator.pop(context);
+              Navigator.pushNamed(context, '/login');
             },
             child: const Text('Already have an account? Sign In'),
           ),

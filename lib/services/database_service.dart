@@ -167,6 +167,20 @@ class DatabaseService {
     }
   }
 
+  // Update user role
+  static Future<bool> updateUserRole(String accountId, String newRole) async {
+    try {
+      await _supabase
+          .from('account')
+          .update({'account_type': newRole})
+          .eq('account_id', accountId);
+      return true;
+    } catch (e) {
+      print('DB Error: Failed to update role: $e');
+      return false;
+    }
+  }
+
   // Insert order
   static Future<String> insertOrder({
     required String accountId,
@@ -416,3 +430,4 @@ class DatabaseService {
     }
   }
 }
+

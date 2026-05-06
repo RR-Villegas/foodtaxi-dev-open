@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'services/database_service.dart';
 import 'cart_model.dart';
 
 class BuyerDashboard extends StatefulWidget {
@@ -12,11 +13,12 @@ class BuyerDashboard extends StatefulWidget {
 class _BuyerDashboardState extends State<BuyerDashboard> {
   final _supabase = Supabase.instance.client;
 
-  final List<Map<String, dynamic>> _products = [];
-// _cart replaced by CartModel.cartItems
-
+  List<Map<String, dynamic>> _products = [];
+  Map<String, List<Map<String, dynamic>>> _groupedProducts = {};
+  Map<String, dynamic>? _userProfile;
   bool _isLoading = true;
   bool _hasError = false;
+  bool _isLoadingProfile = true;
 
   int get _cartLength => CartModel.length;
 
@@ -59,23 +61,84 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
         ],
       };
 
-  @override
+@override
   void initState() {
     super.initState();
+    _fetchProfile();
     _fetchProducts();
+  }
+
+  Future<void> _fetchProfile() async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) {
+        setState(() => _isLoadingProfile = false);
+        return;
+      }
+      final accountId = await DatabaseService.getCurrentAccountId();
+      if (accountId != null) {
+        final response = await _supabase
+            .from('account')
+            .select('firstname, surname, email')
+            .eq('account_id', accountId)
+            .maybeSingle();
+        if (response != null) {
+          setState(() {
+            _userProfile = response;
+          });
+        }
+      }
+    } catch (e) {
+      print('Profile fetch error: $e');
+    } finally {
+      setState(() => _isLoadingProfile = false);
+    }
+  }
+
+  Future<void> _logout() async {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context); // close dialog
+              await _supabase.auth.signOut();
+              if (mounted) {
+                Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+              }
+            },
+            child: const Text('Yes'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _fetchProducts() async {
     try {
-      await _supabase
-          .from('product')
-          .select('product_id, name, price, main_image_url, category')
-          .eq('is_active', true);
+      _products = await DatabaseService.fetchProducts();
+      
+      // Group by category
+      Map<String, List<Map<String, dynamic>>> grouped = {};
+      for (var product in _products) {
+        String cat = product['category'] ?? 'Other';
+        grouped.putIfAbsent(cat, () => []).add(product);
+      }
+      
+      _groupedProducts = grouped;
 
       setState(() {
         _isLoading = false;
       });
     } catch (e) {
+      print('Products fetch error: $e');
       setState(() {
         _hasError = true;
         _isLoading = false;
@@ -132,11 +195,17 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
                     borderRadius: const BorderRadius.vertical(
                       top: Radius.circular(16),
                     ),
-                    child: Image.asset(
-                      item['main_image_url'],
+                    child: Image.network(
+                      DatabaseService.getProductImageUrl(item['main_image_url']),
                       height: 100,
                       width: double.infinity,
                       fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Image.asset(
+                        'assets/images/burger.jpg', // fallback
+                        height: 100,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                      ),
                     ),
                   ),
                   Padding(
@@ -256,14 +325,64 @@ Widget heroSection() {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+  appBar: AppBar(
+        automaticallyImplyLeading: false,
         title: const Text("FoodTaxi Omega"),
         backgroundColor: const Color.fromARGB(255, 30, 83, 32),
         actions: [
-          Center(child: Text(' $_cartLength ')),
-          IconButton(
-            icon: const Icon(Icons.shopping_cart),
-            onPressed: () => Navigator.pushNamed(context, '/cart'),
+          Center(child: Badge(
+            label: Text('$_cartLength'),
+            child: IconButton(
+              icon: const Icon(Icons.shopping_cart),
+              onPressed: () => Navigator.pushNamed(context, '/cart'),
+            ),
+          )),
+            PopupMenuButton<String>(
+            icon: _isLoadingProfile 
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+                : CircleAvatar(
+                  backgroundColor: Colors.white,
+                  child: Text(
+                    _userProfile?['firstname']?[0] ?? 'U',
+                    style: const TextStyle(color: Color.fromARGB(255, 30, 83, 32)),
+                  ),
+                ),
+            onSelected: (value) {
+              if (value == 'logout') {
+                _logout();
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                child: _userProfile != null 
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${_userProfile!['firstname'] ?? ''} ${_userProfile!['surname'] ?? ''}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        Text(_userProfile!['email'] ?? ''),
+                      ],
+                    )
+                  : const Text('Profile'),
+              ),
+              PopupMenuItem(
+                child: const ListTile(
+                  leading: Icon(Icons.person),
+                  title: const Text('Profile'),
+                  onTap: null,
+                ),
+                onTap: () => Navigator.pushNamed(context, '/profile'),
+              ),
+              const PopupMenuItem(child: Text('Settings')),
+              const PopupMenuDivider(),
+              PopupMenuItem(value: 'logout', child: const Text('Logout')),
+            ],
           ),
         ],
       ),
@@ -277,7 +396,7 @@ Widget heroSection() {
                     children: [
                       heroSection(),
 
-                      ...demoProducts.entries.map((entry) {
+                      ..._groupedProducts.entries.map((entry) {
                         return Column(
                           children: [
                             sectionTitle(entry.key),
