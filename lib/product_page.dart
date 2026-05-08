@@ -1,11 +1,13 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'services/database_service.dart';
+
 import 'cart_model.dart';
+import 'services/database_service.dart';
 
 class ProductPage extends StatefulWidget {
   final String productId;
-  
+
   const ProductPage({super.key, required this.productId});
 
   @override
@@ -14,6 +16,7 @@ class ProductPage extends StatefulWidget {
 
 class _ProductPageState extends State<ProductPage> {
   final _supabase = Supabase.instance.client;
+
   Map<String, dynamic>? _product;
   bool _isLoading = true;
   bool _hasError = false;
@@ -25,20 +28,43 @@ class _ProductPageState extends State<ProductPage> {
     _fetchProduct();
   }
 
+  double _toDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  int _toInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  String? _resolveImagePath(dynamic imageValue) {
+    final path = imageValue?.toString().trim();
+    if (path == null || path.isEmpty) return null;
+    if (path.startsWith('http') || path.startsWith('assets/')) return path;
+    return DatabaseService.getProductImageUrl(path);
+  }
+
   Future<void> _fetchProduct() async {
     try {
       final response = await _supabase
           .from('product')
           .select()
           .eq('product_id', widget.productId)
-          .single();
+          .maybeSingle();
+
+      if (!mounted) return;
 
       setState(() {
-        _product = response as Map<String, dynamic>;
+        _product = response == null ? null : Map<String, dynamic>.from(response);
+        _hasError = response == null;
         _isLoading = false;
       });
     } catch (e) {
-      print('Error fetching product: $e');
+      debugPrint('Error fetching product: $e');
+      if (!mounted) return;
+
       setState(() {
         _hasError = true;
         _isLoading = false;
@@ -47,22 +73,50 @@ class _ProductPageState extends State<ProductPage> {
   }
 
   void _addToCart() {
-    if (_product == null) return;
+    final product = _product;
+    if (product == null) return;
 
-    // Add product to cart with quantity
-    for (int i = 0; i < _quantity; i++) {
-      CartModel.addItem(_product!);
+    for (var i = 0; i < _quantity; i++) {
+      CartModel.addItem(product);
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${_product!['name']} x${_quantity} added to cart!'),
+        content: Text('${product['name']} x$_quantity added to cart!'),
         duration: const Duration(seconds: 2),
       ),
     );
 
-    // Navigate back to previous page
     Navigator.pop(context);
+  }
+
+  Widget _buildImage(String? imagePath) {
+    if (imagePath == null) {
+      return Container(
+        color: Colors.grey[300],
+        child: const Icon(Icons.image_not_supported, size: 64),
+      );
+    }
+
+    if (imagePath.startsWith('assets/')) {
+      return Image.asset(
+        imagePath,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => Container(
+          color: Colors.grey[300],
+          child: const Icon(Icons.image_not_supported, size: 64),
+        ),
+      );
+    }
+
+    return Image.network(
+      imagePath,
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => Container(
+        color: Colors.grey[300],
+        child: const Icon(Icons.image_not_supported, size: 64),
+      ),
+    );
   }
 
   @override
@@ -97,8 +151,13 @@ class _ProductPageState extends State<ProductPage> {
     }
 
     final product = _product!;
-    final imageUrl = DatabaseService.getProductImageUrl(product['main_image_url'] ?? '');
-    final stock = product['stock_quantity'] ?? 0;
+    final imagePath = _resolveImagePath(product['main_image_url']);
+    final stock = _toInt(product['stock_quantity']);
+    final price = _toDouble(product['price']);
+    final isActive = product['is_active'] != false;
+    final canPurchase = isActive && stock > 0;
+    final description = product['description']?.toString().trim() ?? '';
+    final sku = product['sku']?.toString().trim() ?? '';
 
     return Scaffold(
       appBar: AppBar(
@@ -109,39 +168,26 @@ class _ProductPageState extends State<ProductPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Product Image
             Container(
               height: 300,
               color: Colors.grey[200],
-              child: Image.network(
-                imageUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Container(
-                  color: Colors.grey[300],
-                  child: const Icon(Icons.image_not_supported, size: 64),
-                ),
-              ),
+              child: _buildImage(imagePath),
             ),
-            
-            // Product Details
             Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Name
                   Text(
-                    product['name'] ?? 'Unknown Product',
+                    product['name']?.toString() ?? 'Unknown Product',
                     style: const TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   const SizedBox(height: 8),
-
-                  // Price
                   Text(
-                    '₱${(product['price'] ?? 0).toStringAsFixed(2)}',
+                    'PHP ${price.toStringAsFixed(2)}',
                     style: const TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
@@ -149,32 +195,29 @@ class _ProductPageState extends State<ProductPage> {
                     ),
                   ),
                   const SizedBox(height: 8),
-
-                  // Category
                   if (product['category'] != null)
                     Chip(
-                      label: Text(product['category']),
+                      label: Text(product['category'].toString()),
                       backgroundColor: Colors.green[100],
                     ),
                   const SizedBox(height: 16),
-
-                  // Stock Status
                   Row(
                     children: [
-                      const Text('Stock: ', style: TextStyle(fontWeight: FontWeight.w600)),
+                      const Text(
+                        'Stock: ',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
                       Text(
-                        '$stock available',
+                        isActive ? '$stock available' : 'Hidden from buyers',
                         style: TextStyle(
-                          color: stock > 0 ? Colors.green : Colors.red,
+                          color: canPurchase ? Colors.green : Colors.red,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 20),
-
-                  // Description
-                  if (product['description'] != null)
+                  if (description.isNotEmpty)
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -187,29 +230,31 @@ class _ProductPageState extends State<ProductPage> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          product['description'],
+                          description,
                           style: const TextStyle(fontSize: 16, height: 1.5),
                         ),
                         const SizedBox(height: 20),
                       ],
                     ),
-
-                  // SKU
-                  if (product['sku'] != null)
+                  if (sku.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 20),
                       child: Row(
                         children: [
-                          const Text('SKU: ', style: TextStyle(fontWeight: FontWeight.w600)),
-                          Text(product['sku']),
+                          const Text(
+                            'SKU: ',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          Text(sku),
                         ],
                       ),
                     ),
-
-                  // Quantity Selector
-                  if (stock > 0)
+                  if (canPurchase)
                     Container(
-                      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 16,
+                        horizontal: 16,
+                      ),
                       decoration: BoxDecoration(
                         border: Border.all(color: Colors.grey[300]!),
                         borderRadius: BorderRadius.circular(12),
@@ -258,24 +303,24 @@ class _ProductPageState extends State<ProductPage> {
                       ),
                     ),
                   const SizedBox(height: 30),
-
-                  // Add to Cart Button
                   SizedBox(
                     height: 56,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: stock > 0 ? Colors.green : Colors.grey,
+                        backgroundColor: canPurchase ? Colors.green : Colors.grey,
+                        foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      onPressed: stock > 0 ? _addToCart : null,
+                      onPressed: canPurchase ? _addToCart : null,
                       child: Text(
-                        stock > 0 ? 'Add to Cart' : 'Out of Stock',
+                        canPurchase
+                            ? 'Add to Cart'
+                            : (isActive ? 'Out of Stock' : 'Unavailable'),
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          color: Colors.white,
                         ),
                       ),
                     ),

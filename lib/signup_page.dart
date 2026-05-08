@@ -30,6 +30,7 @@ class _SignupPageState extends State<SignupPage> {
   final _barangayController = TextEditingController();
   final _streetController = TextEditingController();
   final _houseNumberController = TextEditingController();
+  final _zipCodeController = TextEditingController();
 
   final _supabase = Supabase.instance.client;
   bool _isLoading = false;
@@ -76,6 +77,7 @@ class _SignupPageState extends State<SignupPage> {
         _barangayController.text = existingData.barangay ?? '';
         _streetController.text = existingData.street ?? '';
         _houseNumberController.text = existingData.houseNumber ?? '';
+        _zipCodeController.text = existingData.zipCode ?? '';
       });
     }
   }
@@ -158,11 +160,6 @@ class _SignupPageState extends State<SignupPage> {
 
     if (_streetController.text.isEmpty) {
       setState(() => _step3Error = 'Street is required');
-      return false;
-    }
-
-    if (_houseNumberController.text.isEmpty) {
-      setState(() => _step3Error = 'House number is required');
       return false;
     }
 

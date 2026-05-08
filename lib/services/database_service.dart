@@ -1,8 +1,13 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/address_model.dart';
 
 class DatabaseService {
   static final _supabase = Supabase.instance.client;
+
+  static void _logDbError(String message, Object error) {
+    debugPrint('DB Error: $message: $error');
+  }
 
   // Insert address for a user
   static Future<Address?> insertAddress({
@@ -12,6 +17,7 @@ class DatabaseService {
     required String barangay,
     String? street,
     String? houseNumber,
+    String? zipCode,
     bool isDefault = false,
   }) async {
     try {
@@ -22,8 +28,9 @@ class DatabaseService {
             'province': province,
             'city': city,
             'barangay': barangay,
-            'street': street,
-            'house_number': houseNumber ?? '',
+            'street': street ?? '',
+            'house_number': _blankToNull(houseNumber),
+            'zip_code': _blankToNull(zipCode),
             'is_default': isDefault,
           })
           .select()
@@ -31,7 +38,7 @@ class DatabaseService {
 
       return Address.fromJson(response);
     } catch (e) {
-      print('DB Error: Failed to insert address: $e');
+      _logDbError('Failed to insert address', e);
       return null;
     }
   }
@@ -41,6 +48,15 @@ class DatabaseService {
     if (trimmed == null || trimmed.isEmpty) return null;
     return trimmed;
   }
+
+  static num _toNum(dynamic value) {
+    if (value is num) return value;
+    return num.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  static double _toDouble(dynamic value) => _toNum(value).toDouble();
+
+  static int _toInt(dynamic value) => _toNum(value).toInt();
 
   // Insert user profile after signup
   static Future<String?> insertUserProfile({
@@ -67,7 +83,7 @@ class DatabaseService {
 
       return response['account_id'] as String?;
     } catch (e) {
-      print('DB Error: Failed to insert user profile: $e');
+      _logDbError('Failed to insert user profile', e);
       return null;
     }
   }
@@ -85,7 +101,7 @@ class DatabaseService {
 
       return response;
     } catch (e) {
-      print('DB Error: Failed to fetch current account: $e');
+      _logDbError('Failed to fetch current account', e);
       return null;
     }
   }
@@ -95,7 +111,7 @@ class DatabaseService {
       final account = await getCurrentAccount();
       return account?['account_id'] as String?;
     } catch (e) {
-      print('DB Error: Failed to fetch current account ID: $e');
+      _logDbError('Failed to fetch current account ID', e);
       return null;
     }
   }
@@ -114,7 +130,7 @@ class DatabaseService {
           .map((address) => Address.fromJson(address))
           .toList();
     } catch (e) {
-      print('DB Error: Failed to fetch addresses: $e');
+      _logDbError('Failed to fetch addresses', e);
       return [];
     }
   }
@@ -127,6 +143,7 @@ class DatabaseService {
     String? barangay,
     String? street,
     String? houseNumber,
+    String? zipCode,
     bool? isDefault,
   }) async {
     try {
@@ -136,6 +153,7 @@ class DatabaseService {
       if (barangay != null) updateData['barangay'] = barangay;
       if (street != null) updateData['street'] = street;
       if (houseNumber != null) updateData['house_number'] = houseNumber;
+      if (zipCode != null) updateData['zip_code'] = zipCode;
       if (isDefault != null) updateData['is_default'] = isDefault;
 
       final response = await _supabase
@@ -147,7 +165,7 @@ class DatabaseService {
 
       return Address.fromJson(response);
     } catch (e) {
-      print('DB Error: Failed to update address: $e');
+      _logDbError('Failed to update address', e);
       return null;
     }
   }
@@ -160,7 +178,7 @@ class DatabaseService {
           .delete()
           .eq('address_id', addressId);
     } catch (e) {
-      print('DB Error: Failed to delete address: $e');
+      _logDbError('Failed to delete address', e);
     }
   }
 
@@ -179,7 +197,7 @@ class DatabaseService {
           .update({'is_default': true})
           .eq('address_id', addressId);
     } catch (e) {
-      print('DB Error: Failed to set default address: $e');
+      _logDbError('Failed to set default address', e);
     }
   }
 
@@ -192,7 +210,7 @@ class DatabaseService {
           .eq('account_id', accountId);
       return true;
     } catch (e) {
-      print('DB Error: Failed to update role: $e');
+      _logDbError('Failed to update role', e);
       return false;
     }
   }
@@ -204,6 +222,7 @@ class DatabaseService {
     required double totalAmount,
     required double shippingFee,
     required String paymentMethod,
+    String? sellerAccountId,
     String orderStatus = 'Processing',
   }) async {
     try {
@@ -211,6 +230,7 @@ class DatabaseService {
           .from('orders')
           .insert({
             'buyer_account_id': accountId,
+            'seller_account_id': sellerAccountId,
             'address_id': addressId,
             'total_amount': totalAmount,
             'shipping_fee': shippingFee,
@@ -222,7 +242,7 @@ class DatabaseService {
 
       return response['order_id'] as String;
     } catch (e) {
-      print('DB Error: Failed to insert order: $e');
+      _logDbError('Failed to insert order', e);
       return '';
     }
   }
@@ -245,8 +265,165 @@ class DatabaseService {
             'subtotal': unitPriceAtSale * quantity,
           });
     } catch (e) {
-      print('DB Error: Failed to insert order item: $e');
+      _logDbError('Failed to insert order item', e);
     }
+  }
+
+  static Future<Map<String, dynamic>?> getCurrentSellerStore() async {
+    try {
+      final accountId = await getCurrentAccountId();
+      if (accountId == null) return null;
+
+      final response = await _supabase
+          .from('store')
+          .select()
+          .eq('owner_account_id', accountId)
+          .maybeSingle();
+
+      return response;
+    } catch (e) {
+      _logDbError('Failed to fetch current seller store', e);
+      return null;
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getSellerProducts(
+      String storeId) async {
+    try {
+      final response = await _supabase
+          .from('product')
+          .select()
+          .eq('store_id', storeId)
+          .order('name');
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      _logDbError('Failed to fetch seller products', e);
+      return [];
+    }
+  }
+
+  static Future<bool> insertProduct({
+    required String storeId,
+    required String name,
+    required double price,
+    required int stockQuantity,
+    String? category,
+    String? description,
+    String? sku,
+    String? mainImageUrl,
+    bool isActive = true,
+  }) async {
+    try {
+      await _supabase.from('product').insert({
+        'store_id': storeId,
+        'category': _blankToNull(category),
+        'name': name.trim(),
+        'description': _blankToNull(description),
+        'price': price,
+        'stock_quantity': stockQuantity,
+        'sku': _blankToNull(sku),
+        'main_image_url': _blankToNull(mainImageUrl),
+        'is_active': isActive,
+      });
+      return true;
+    } catch (e) {
+      _logDbError('Failed to insert product', e);
+      return false;
+    }
+  }
+
+  static Future<bool> updateProduct({
+    required String productId,
+    required String name,
+    required double price,
+    required int stockQuantity,
+    String? category,
+    String? description,
+    String? sku,
+    String? mainImageUrl,
+    required bool isActive,
+  }) async {
+    try {
+      await _supabase.from('product').update({
+        'category': _blankToNull(category),
+        'name': name.trim(),
+        'description': _blankToNull(description),
+        'price': price,
+        'stock_quantity': stockQuantity,
+        'sku': _blankToNull(sku),
+        'main_image_url': _blankToNull(mainImageUrl),
+        'is_active': isActive,
+      }).eq('product_id', productId);
+      return true;
+    } catch (e) {
+      _logDbError('Failed to update product', e);
+      return false;
+    }
+  }
+
+  static Future<bool> deleteProduct(String productId) async {
+    try {
+      await _supabase
+          .from('product')
+          .update({'is_active': false}).eq('product_id', productId);
+      return true;
+    } catch (e) {
+      _logDbError('Failed to delete product', e);
+      return false;
+    }
+  }
+
+  static Future<String?> getSellerAccountIdForProduct(String productId) async {
+    try {
+      final response = await _supabase
+          .from('product')
+          .select('store(owner_account_id)')
+          .eq('product_id', productId)
+          .maybeSingle();
+
+      return response?['store']?['owner_account_id'] as String?;
+    } catch (e) {
+      _logDbError('Failed to fetch seller for product', e);
+      return null;
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getSellerOrders(
+      String sellerAccountId) async {
+    try {
+      final response = await _supabase
+          .from('orders')
+          .select('*, account!orders_buyer_account_id_fkey(firstname, surname, email), order_items(*, product(name, main_image_url))')
+          .eq('seller_account_id', sellerAccountId)
+          .order('order_date', ascending: false);
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      _logDbError('Failed to fetch seller orders', e);
+      return [];
+    }
+  }
+
+  static Map<String, dynamic> summarizeSales(List<Map<String, dynamic>> orders) {
+    var revenue = 0.0;
+    var itemsSold = 0;
+
+    for (final order in orders) {
+      revenue += _toDouble(order['total_amount']);
+      final items = order['order_items'];
+      if (items is List) {
+        for (final item in items) {
+          itemsSold += _toInt(item['quantity']);
+        }
+      }
+    }
+
+    return {
+      'orders': orders.length,
+      'revenue': revenue,
+      'itemsSold': itemsSold,
+    };
   }
 
   // Fetch all products
@@ -258,7 +435,7 @@ class DatabaseService {
           .eq('is_active', true);
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      print('DB Error: Failed to fetch products: $e');
+      _logDbError('Failed to fetch products', e);
       return [];
     }
   }
@@ -285,7 +462,7 @@ class DatabaseService {
         'price_at_time': priceAtTime,
       });
     } catch (e) {
-      print('DB Error: Failed to insert cart item: $e');
+      _logDbError('Failed to insert cart item', e);
     }
   }
 
@@ -299,7 +476,7 @@ class DatabaseService {
           .eq('account_id', accountId);
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      print('DB Error: Failed to fetch cart items: $e');
+      _logDbError('Failed to fetch cart items', e);
       return [];
     }
   }
@@ -314,7 +491,7 @@ class DatabaseService {
           .from('cart')
           .update({'quantity': quantity}).eq('id', cartId);
     } catch (e) {
-      print('DB Error: Failed to update cart item: $e');
+      _logDbError('Failed to update cart item', e);
     }
   }
 
@@ -323,7 +500,7 @@ class DatabaseService {
     try {
       await _supabase.from('cart').delete().eq('id', cartId);
     } catch (e) {
-      print('DB Error: Failed to delete cart item: $e');
+      _logDbError('Failed to delete cart item', e);
     }
   }
 
@@ -332,7 +509,7 @@ class DatabaseService {
     try {
       await _supabase.from('cart').delete().eq('account_id', accountId);
     } catch (e) {
-      print('DB Error: Failed to clear cart: $e');
+      _logDbError('Failed to clear cart', e);
     }
   }
 
@@ -344,35 +521,28 @@ class DatabaseService {
     required String province,
     required String city,
     required String barangay,
-    String? street,
+    required String street,
     String? houseNumber,
+    String? zipCode,
     required String contactPhone,
   }) async {
     try {
-      final businessAddress = [
-        _blankToNull(houseNumber),
-        _blankToNull(street),
-        barangay.trim(),
-        city.trim(),
-        province.trim(),
-      ].whereType<String>().join(', ');
-
       await _supabase.from('seller_application').insert({
         'account_id': accountId,
         'store_name': storeName.trim(),
         'store_description': _blankToNull(storeDescription),
-        'business_address': businessAddress,
         'province': province.trim(),
         'city': city.trim(),
         'barangay': barangay.trim(),
-        'street': _blankToNull(street),
+        'street': street.trim(),
         'house_number': _blankToNull(houseNumber),
+        'zip_code': _blankToNull(zipCode),
         'contact_phone': contactPhone.trim(),
         'status': 'Pending Review',
       });
       return true;
     } catch (e) {
-      print('DB Error: Failed to submit seller application: $e');
+      _logDbError('Failed to submit seller application', e);
       return false;
     }
   }
@@ -385,7 +555,7 @@ class DatabaseService {
           .select('*, account(firstname, surname, email)');
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      print('DB Error: Failed to fetch seller applications: $e');
+      _logDbError('Failed to fetch seller applications', e);
       return [];
     }
   }
@@ -401,7 +571,7 @@ class DatabaseService {
           .single();
       return response;
     } catch (e) {
-      print('DB Error: Failed to get seller application: $e');
+      _logDbError('Failed to get seller application', e);
       return null;
     }
   }
@@ -443,7 +613,7 @@ class DatabaseService {
       });
       return true;
     } catch (e) {
-      print('DB Error: Failed to approve seller application: $e');
+      _logDbError('Failed to approve seller application', e);
       return false;
     }
   }
@@ -462,7 +632,7 @@ class DatabaseService {
           })
           .eq('application_id', applicationId);
     } catch (e) {
-      print('DB Error: Failed to reject seller application: $e');
+      _logDbError('Failed to reject seller application', e);
     }
   }
 }

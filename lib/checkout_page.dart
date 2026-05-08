@@ -158,6 +158,15 @@ class _CheckoutPageState extends State<CheckoutPage> {
     setState(() => _isLoading = true);
 
     try {
+      String? sellerAccountId;
+      for (final item in CartModel.cartItems) {
+        final productId = item['product_id']?.toString();
+        if (productId == null || productId.isEmpty) continue;
+        sellerAccountId =
+            await DatabaseService.getSellerAccountIdForProduct(productId);
+        if (sellerAccountId != null) break;
+      }
+
       // Create order in database
       final orderId = await DatabaseService.insertOrder(
         accountId: _accountId!,
@@ -165,6 +174,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         totalAmount: _total,
         shippingFee: _deliveryFee,
         paymentMethod: _selectedPaymentMethod,
+        sellerAccountId: sellerAccountId,
       );
 
       if (orderId.isEmpty) {

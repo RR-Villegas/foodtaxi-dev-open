@@ -10,6 +10,7 @@ import 'admin_dashboard.dart';
 import 'seller_dashboard.dart';
 import 'checkout_page.dart';
 import 'product_page.dart';
+import 'seller_registration.dart';
 import 'services/database_service.dart';
 
 void main() async {
@@ -48,6 +49,7 @@ class MyApp extends StatelessWidget {
         '/seller-dashboard': (context) => const SellerDashboard(),
         '/admin-dashboard': (context) => const AdminDashboard(),
         '/checkout': (context) => const CheckoutPage(),
+        '/seller-registration': (context) => const SellerRegistrationPage(),
       },
       onGenerateRoute: (settings) {
         if (settings.name?.startsWith('/product/') ?? false) {
@@ -265,7 +267,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   ),
                   const SizedBox(height: 15),
                   ElevatedButton(
-                    onPressed: () {},
+                    onPressed: () => Navigator.pushNamed(context, '/seller-registration'),
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
                     child: const Text("Start Selling"),
                   )

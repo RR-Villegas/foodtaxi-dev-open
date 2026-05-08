@@ -16,6 +16,7 @@ class UserSignupData {
   String? barangay;
   String? street;
   String? houseNumber;
+  String? zipCode;
 
   // Account type (buyer/seller)
   String accountType = 'buyer';
@@ -33,6 +34,7 @@ class UserSignupData {
     this.barangay,
     this.street,
     this.houseNumber,
+    this.zipCode,
     this.accountType = 'buyer',
     this.role = 'buyer',
   });
@@ -50,6 +52,7 @@ class UserSignupData {
       'barangay': barangay,
       'street': street,
       'houseNumber': houseNumber,
+      'zipCode': zipCode,
       'accountType': accountType,
       'role': role,
     };
@@ -68,6 +71,7 @@ class UserSignupData {
       barangay: json['barangay'],
       street: json['street'],
       houseNumber: json['houseNumber'],
+      zipCode: json['zipCode'],
       accountType: json['accountType'] ?? 'buyer',
       role: json['role'] ?? 'buyer',
     );
