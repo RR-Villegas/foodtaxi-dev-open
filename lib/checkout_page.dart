@@ -323,11 +323,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
               try {
                 await DatabaseService.insertAddress(
                   accountId: _accountId!,
-                  province: provinceController.text,
-                  city: cityController.text,
-                  barangay: barangayController.text,
+                  province: provinceController.text.isNotEmpty ? provinceController.text : null,
+                  city: cityController.text.isNotEmpty ? cityController.text : null,
+                  barangay: barangayController.text.isNotEmpty ? barangayController.text : null,
                   street: streetController.text.isNotEmpty ? streetController.text : null,
                   houseNumber: houseNumberController.text.isNotEmpty ? houseNumberController.text : null,
+                  zipCode: null,
                   isDefault: _addresses.isEmpty,
                 );
                 Navigator.pop(context);

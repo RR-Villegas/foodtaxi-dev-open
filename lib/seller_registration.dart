@@ -17,10 +17,20 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
   int _currentStep = 1;
   String? _step1Error;
   String? _step2Error;
+  String? _step3Error;
 
+  // Step 1: Personal Account Info
+  final _firstNameController = TextEditingController();
+  final _surnameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+
+  // Step 2: Store Information
   final _storeNameController = TextEditingController();
   final _storeDescriptionController = TextEditingController();
   final _contactPhoneController = TextEditingController();
+
+  // Step 3: Location
   final _streetController = TextEditingController();
   final _houseNumberController = TextEditingController();
   final _zipCodeController = TextEditingController();
@@ -31,9 +41,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
   List<Map<String, dynamic>> _barangays = [];
 
   String? _selectedProvinceName;
-  String? _selectedProvinceCode;
   String? _selectedCityName;
-  String? _selectedCityCode;
   String? _selectedBarangayName;
 
   bool _loadingProvinces = true;
@@ -48,6 +56,10 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
 
   @override
   void dispose() {
+    _firstNameController.dispose();
+    _surnameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
     _storeNameController.dispose();
     _storeDescriptionController.dispose();
     _contactPhoneController.dispose();
@@ -84,9 +96,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
 
     setState(() {
       _selectedProvinceName = provinceName;
-      _selectedProvinceCode = province['code'];
       _selectedCityName = null;
-      _selectedCityCode = null;
       _selectedBarangayName = null;
       _cities = [];
       _barangays = [];
@@ -94,7 +104,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
     });
 
     try {
-      final cities = await LocationService.fetchMunicipalities(province['code']);
+      final cities = await LocationService.fetchCitiesAndMunicipalities(province['code']);
       if (mounted) {
         setState(() {
           _cities = cities;
@@ -119,7 +129,6 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
 
     setState(() {
       _selectedCityName = cityName;
-      _selectedCityCode = city['code'];
       _selectedBarangayName = null;
       _barangays = [];
       _loadingBarangays = true;
@@ -144,13 +153,33 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
   bool _validateStep1() {
     setState(() => _step1Error = null);
 
-    if (_storeNameController.text.isEmpty) {
-      setState(() => _step1Error = 'Store name is required');
+    if (_firstNameController.text.isEmpty) {
+      setState(() => _step1Error = 'First name is required');
       return false;
     }
 
-    if (_contactPhoneController.text.isEmpty) {
-      setState(() => _step1Error = 'Phone number is required');
+    if (_surnameController.text.isEmpty) {
+      setState(() => _step1Error = 'Surname is required');
+      return false;
+    }
+
+    if (_emailController.text.isEmpty) {
+      setState(() => _step1Error = 'Email is required');
+      return false;
+    }
+
+    if (!_emailController.text.contains('@')) {
+      setState(() => _step1Error = 'Invalid email format');
+      return false;
+    }
+
+    if (_passwordController.text.isEmpty) {
+      setState(() => _step1Error = 'Password is required');
+      return false;
+    }
+
+    if (_passwordController.text.length < 6) {
+      setState(() => _step1Error = 'Password must be at least 6 characters');
       return false;
     }
 
@@ -160,23 +189,39 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
   bool _validateStep2() {
     setState(() => _step2Error = null);
 
+    if (_storeNameController.text.isEmpty) {
+      setState(() => _step2Error = 'Store name is required');
+      return false;
+    }
+
+    if (_contactPhoneController.text.isEmpty) {
+      setState(() => _step2Error = 'Contact phone is required');
+      return false;
+    }
+
+    return true;
+  }
+
+  bool _validateStep3() {
+    setState(() => _step3Error = null);
+
     if (_selectedProvinceName == null) {
-      setState(() => _step2Error = 'Province is required');
+      setState(() => _step3Error = 'Province is required');
       return false;
     }
 
     if (_selectedCityName == null) {
-      setState(() => _step2Error = 'Municipality/City is required');
+      setState(() => _step3Error = 'Municipality/City is required');
       return false;
     }
 
     if (_selectedBarangayName == null) {
-      setState(() => _step2Error = 'Barangay is required');
+      setState(() => _step3Error = 'Barangay is required');
       return false;
     }
 
     if (_streetController.text.isEmpty) {
-      setState(() => _step2Error = 'Street is required');
+      setState(() => _step3Error = 'Street is required');
       return false;
     }
 
@@ -186,6 +231,8 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
   void _nextStep() {
     if (_currentStep == 1 && _validateStep1()) {
       setState(() => _currentStep = 2);
+    } else if (_currentStep == 2 && _validateStep2()) {
+      setState(() => _currentStep = 3);
     }
   }
 
@@ -196,32 +243,47 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
   }
 
   Future<void> _submitApplication() async {
-    if (!_validateStep2()) return;
+    if (!_validateStep3()) return;
 
     setState(() => _isLoading = true);
 
     try {
-      final currentUser = _supabase.auth.currentUser;
-      if (currentUser == null) {
-        throw Exception('User not authenticated');
+      // Step 1: Create Supabase auth user
+      final authResponse = await _supabase.auth.signUp(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
+
+      final userId = authResponse.user?.id;
+      if (userId == null) {
+        throw Exception('Failed to create authentication account');
       }
 
-      final accountId = await DatabaseService.getCurrentAccountId();
+      // Step 2: Create account profile
+      final accountId = await DatabaseService.insertUserProfile(
+        authId: userId,
+        firstName: _firstNameController.text.trim(),
+        surname: _surnameController.text.trim(),
+        email: _emailController.text.trim(),
+        phoneNumber: _contactPhoneController.text.trim(),
+        accountType: 'Seller',
+      );
+
       if (accountId == null) {
-        throw Exception('Account profile not found');
+        throw Exception('Failed to create seller account profile');
       }
 
-      // Submit seller application
+      // Step 3: Submit seller application
       final submitted = await DatabaseService.insertSellerApplication(
         accountId: accountId,
         storeName: _storeNameController.text.trim(),
         storeDescription: _storeDescriptionController.text.trim(),
-        province: _selectedProvinceName ?? '',
+        province: _selectedProvinceName,
         city: _selectedCityName ?? '',
-        barangay: _selectedBarangayName ?? '',
-        street: _streetController.text.trim(),
-        houseNumber: _houseNumberController.text.trim(),
-        zipCode: _zipCodeController.text.trim(),
+        barangay: _selectedBarangayName,
+        street: _streetController.text.isNotEmpty ? _streetController.text.trim() : null,
+        houseNumber: _houseNumberController.text.isNotEmpty ? _houseNumberController.text.trim() : null,
+        zipCode: _zipCodeController.text.isNotEmpty ? _zipCodeController.text.trim() : null,
         contactPhone: _contactPhoneController.text.trim(),
       );
 
@@ -233,7 +295,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Application submitted successfully! Waiting for admin approval.',
+              'Account created and application submitted! Please confirm your email, then wait for admin approval.',
             ),
             backgroundColor: Colors.green,
           ),
@@ -275,7 +337,11 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
             children: [
               _buildStepIndicators(),
               const SizedBox(height: 32),
-              _currentStep == 1 ? _buildStep1Form() : _buildStep2Form(),
+              _currentStep == 1
+                  ? _buildStep1Form()
+                  : _currentStep == 2
+                      ? _buildStep2Form()
+                      : _buildStep3Form(),
               const SizedBox(height: 24),
               _buildButtonRow(),
             ],
@@ -300,7 +366,11 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _currentStep == 1 ? _buildStep1Form() : _buildStep2Form(),
+                  _currentStep == 1
+                      ? _buildStep1Form()
+                      : _currentStep == 2
+                          ? _buildStep2Form()
+                          : _buildStep3Form(),
                   const SizedBox(height: 32),
                   _buildButtonRow(),
                 ],
@@ -349,9 +419,11 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
             ),
           ),
           const SizedBox(height: 48),
-          _buildStepIndicator('Store Information', 1),
+          _buildStepIndicator('Personal Info', 1),
           const SizedBox(height: 24),
-          _buildStepIndicator('Location Details', 2),
+          _buildStepIndicator('Store Information', 2),
+          const SizedBox(height: 24),
+          _buildStepIndicator('Location Details', 3),
         ],
       ),
     );
@@ -361,13 +433,19 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        _buildStepIndicator('Store Information', 1),
+        _buildStepIndicator('Personal', 1),
         Container(
           height: 2,
-          width: 40,
+          width: 30,
           color: _currentStep > 1 ? const Color(0xFF2d8f4e) : Colors.grey[300],
         ),
-        _buildStepIndicator('Location Details', 2),
+        _buildStepIndicator('Store', 2),
+        Container(
+          height: 2,
+          width: 30,
+          color: _currentStep > 2 ? const Color(0xFF2d8f4e) : Colors.grey[300],
+        ),
+        _buildStepIndicator('Location', 3),
       ],
     );
   }
@@ -414,6 +492,108 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
   }
 
   Widget _buildStep1Form() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Personal Information',
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 24),
+        TextField(
+          controller: _firstNameController,
+          decoration: InputDecoration(
+            labelText: 'First Name *',
+            hintText: 'Enter your first name',
+            prefixIcon: const Icon(Icons.person),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFF2d8f4e), width: 2),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _surnameController,
+          decoration: InputDecoration(
+            labelText: 'Surname *',
+            hintText: 'Enter your surname',
+            prefixIcon: const Icon(Icons.person),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFF2d8f4e), width: 2),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _emailController,
+          decoration: InputDecoration(
+            labelText: 'Email *',
+            hintText: 'Enter your email address',
+            prefixIcon: const Icon(Icons.email),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFF2d8f4e), width: 2),
+            ),
+          ),
+          keyboardType: TextInputType.emailAddress,
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _passwordController,
+          decoration: InputDecoration(
+            labelText: 'Password *',
+            hintText: 'Enter a password (minimum 6 characters)',
+            prefixIcon: const Icon(Icons.lock),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFF2d8f4e), width: 2),
+            ),
+          ),
+          obscureText: true,
+        ),
+        if (_step1Error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red[200]!),
+              ),
+              child: Text(
+                _step1Error!,
+                style: TextStyle(color: Colors.red[700], fontSize: 14),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildStep2Form() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -477,7 +657,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
           ),
           keyboardType: TextInputType.phone,
         ),
-        if (_step1Error != null)
+        if (_step2Error != null)
           Padding(
             padding: const EdgeInsets.only(top: 16),
             child: Container(
@@ -488,7 +668,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
                 border: Border.all(color: Colors.red[200]!),
               ),
               child: Text(
-                _step1Error!,
+                _step2Error!,
                 style: TextStyle(color: Colors.red[700], fontSize: 14),
               ),
             ),
@@ -497,7 +677,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
     );
   }
 
-  Widget _buildStep2Form() {
+  Widget _buildStep3Form() {
   return Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
@@ -708,7 +888,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
       // =========================
       // ERROR DISPLAY
       // =========================
-      if (_step2Error != null)
+      if (_step3Error != null)
         Padding(
           padding: const EdgeInsets.only(top: 16),
           child: Container(
@@ -719,7 +899,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
               border: Border.all(color: Colors.red[200]!),
             ),
             child: Text(
-              _step2Error!,
+              _step3Error!,
               style: TextStyle(
                 color: Colors.red[700],
                 fontSize: 14,
@@ -753,7 +933,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
           child: ElevatedButton(
             onPressed: _isLoading
                 ? null
-                : (_currentStep == 1 ? _nextStep : _submitApplication),
+                : (_currentStep < 3 ? _nextStep : _submitApplication),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF2d8f4e),
               padding: const EdgeInsets.symmetric(vertical: 14),
@@ -762,7 +942,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
             child: Text(
               _isLoading
                   ? 'Submitting...'
-                  : (_currentStep == 1 ? 'Next' : 'Submit Application'),
+                  : (_currentStep < 3 ? 'Next' : 'Submit Application'),
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 16,

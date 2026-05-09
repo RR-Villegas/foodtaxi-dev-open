@@ -73,11 +73,12 @@ class _LoginPageState extends State<LoginPage> {
         if (canUsePendingSignup && pendingSignup!.isStep3Complete()) {
           final address = await DatabaseService.insertAddress(
             accountId: accountId,
-            province: pendingSignup.province!,
-            city: pendingSignup.municipality!,
-            barangay: pendingSignup.barangay!,
+            province: pendingSignup.province,
+            city: pendingSignup.municipality,
+            barangay: pendingSignup.barangay,
             street: pendingSignup.street,
             houseNumber: pendingSignup.houseNumber,
+            zipCode: pendingSignup.zipCode,
             isDefault: true,
           );
 

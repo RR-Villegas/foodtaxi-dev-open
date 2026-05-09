@@ -257,14 +257,15 @@ class _SignupPageState extends State<SignupPage> {
         throw Exception('Failed to create user profile');
       }
 
-      // Insert address into the database - ensure houseNumber is not null
+      // Insert address into the database
       final address = await DatabaseService.insertAddress(
         accountId: accountId,
-        province: _signupData.province!,
-        city: _signupData.municipality!,
-        barangay: _signupData.barangay!,
+        province: _signupData.province,
+        city: _signupData.municipality,
+        barangay: _signupData.barangay,
         street: _signupData.street,
-        houseNumber: _signupData.houseNumber ?? '',
+        houseNumber: _signupData.houseNumber,
+        zipCode: _signupData.zipCode,
         isDefault: true, // Set first address as default
       );
 

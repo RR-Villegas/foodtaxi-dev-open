@@ -12,9 +12,9 @@ class DatabaseService {
   // Insert address for a user
   static Future<Address?> insertAddress({
     required String accountId,
-    required String province,
-    required String city,
-    required String barangay,
+    String? province,
+    String? city,
+    String? barangay,
     String? street,
     String? houseNumber,
     String? zipCode,
@@ -25,10 +25,10 @@ class DatabaseService {
           .from('address')
           .insert({
             'account_id': accountId,
-            'province': province,
-            'city': city,
-            'barangay': barangay,
-            'street': street ?? '',
+            'province': _blankToNull(province),
+            'city': _blankToNull(city),
+            'barangay': _blankToNull(barangay),
+            'street': _blankToNull(street),
             'house_number': _blankToNull(houseNumber),
             'zip_code': _blankToNull(zipCode),
             'is_default': isDefault,
@@ -148,12 +148,12 @@ class DatabaseService {
   }) async {
     try {
       final updateData = <String, dynamic>{};
-      if (province != null) updateData['province'] = province;
-      if (city != null) updateData['city'] = city;
-      if (barangay != null) updateData['barangay'] = barangay;
-      if (street != null) updateData['street'] = street;
-      if (houseNumber != null) updateData['house_number'] = houseNumber;
-      if (zipCode != null) updateData['zip_code'] = zipCode;
+      if (province != null) updateData['province'] = _blankToNull(province);
+      if (city != null) updateData['city'] = _blankToNull(city);
+      if (barangay != null) updateData['barangay'] = _blankToNull(barangay);
+      if (street != null) updateData['street'] = _blankToNull(street);
+      if (houseNumber != null) updateData['house_number'] = _blankToNull(houseNumber);
+      if (zipCode != null) updateData['zip_code'] = _blankToNull(zipCode);
       if (isDefault != null) updateData['is_default'] = isDefault;
 
       final response = await _supabase
@@ -518,10 +518,10 @@ class DatabaseService {
     required String accountId,
     required String storeName,
     String? storeDescription,
-    required String province,
+    String? province,
     required String city,
-    required String barangay,
-    required String street,
+    String? barangay,
+    String? street,
     String? houseNumber,
     String? zipCode,
     required String contactPhone,
@@ -531,10 +531,10 @@ class DatabaseService {
         'account_id': accountId,
         'store_name': storeName.trim(),
         'store_description': _blankToNull(storeDescription),
-        'province': province.trim(),
+        'province': _blankToNull(province),
         'city': city.trim(),
-        'barangay': barangay.trim(),
-        'street': street.trim(),
+        'barangay': _blankToNull(barangay),
+        'street': _blankToNull(street),
         'house_number': _blankToNull(houseNumber),
         'zip_code': _blankToNull(zipCode),
         'contact_phone': contactPhone.trim(),
