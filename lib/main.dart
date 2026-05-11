@@ -12,6 +12,7 @@ import 'checkout_page.dart';
 import 'product_page.dart';
 import 'seller_registration.dart';
 import 'services/database_service.dart';
+import 'services/protected_route.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -42,20 +43,44 @@ class MyApp extends StatelessWidget {
         '/': (context) => const MyHomePage(title: 'FoodTaxi Omega'),
         '/login': (context) => const LoginPage(),
         '/signup': (context) => const SignupPage(),
-        '/profile': (context) => UserDetailsPage(),
-        '/cart': (context) => const CartPage(),
-        '/search': (context) => const SearchPage(),
-        '/buyer-dashboard': (context) => const BuyerDashboard(),
-        '/seller-dashboard': (context) => const SellerDashboard(),
-        '/admin-dashboard': (context) => const AdminDashboard(),
-        '/checkout': (context) => const CheckoutPage(),
+        '/profile': (context) => ProtectedRoute(
+          protection: RouteProtection.authenticated,
+          child: UserDetailsPage(),
+        ),
+        '/cart': (context) => ProtectedRoute(
+          protection: RouteProtection.authenticated,
+          child: const CartPage(),
+        ),
+        '/search': (context) => ProtectedRoute(
+          protection: RouteProtection.authenticated,
+          child: const SearchPage(),
+        ),
+        '/buyer-dashboard': (context) => ProtectedRoute(
+          protection: RouteProtection.buyerOnly,
+          child: const BuyerDashboard(),
+        ),
+        '/seller-dashboard': (context) => ProtectedRoute(
+          protection: RouteProtection.sellerOnly,
+          child: const SellerDashboard(),
+        ),
+        '/admin-dashboard': (context) => ProtectedRoute(
+          protection: RouteProtection.adminOnly,
+          child: const AdminDashboard(),
+        ),
+        '/checkout': (context) => ProtectedRoute(
+          protection: RouteProtection.buyerOnly,
+          child: const CheckoutPage(),
+        ),
         '/seller-registration': (context) => const SellerRegistrationPage(),
       },
       onGenerateRoute: (settings) {
         if (settings.name?.startsWith('/product/') ?? false) {
           final productId = settings.name!.split('/').last;
           return MaterialPageRoute(
-            builder: (context) => ProductPage(productId: productId),
+            builder: (context) => ProtectedRoute(
+              protection: RouteProtection.authenticated,
+              child: ProductPage(productId: productId),
+            ),
           );
         }
         return null;

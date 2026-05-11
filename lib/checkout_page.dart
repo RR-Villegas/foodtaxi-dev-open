@@ -229,7 +229,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
               ElevatedButton(
                 onPressed: () {
                   Navigator.of(context).pop(); // Close dialog
-                  Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false); // Go to home
+                  Navigator.of(context).pushNamedAndRemoveUntil('/buyer-dashboard', (route) => false); // Go to buyer dashboard
                 },
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
                 child: const Text('OK'),

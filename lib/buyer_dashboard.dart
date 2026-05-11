@@ -319,27 +319,34 @@ Widget heroSection() {
               onPressed: () => Navigator.pushNamed(context, '/cart'),
             ),
           )),
-            PopupMenuButton<String>(
-            icon: _isLoadingProfile 
-              ? const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-                : CircleAvatar(
-                  backgroundColor: Colors.white,
-                  child: Text(
-                    _userProfile?['firstname']?[0] ?? 'U',
-                    style: const TextStyle(color: Color.fromARGB(255, 30, 83, 32)),
-                  ),
-                ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.menu),
             onSelected: (value) {
-              if (value == 'logout') {
-                _logout();
+              switch (value) {
+                case 'profile':
+                  Navigator.pushNamed(context, '/profile');
+                  break;
+                case 'orders':
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('My Orders - Coming Soon')),
+                  );
+                  break;
+                case 'location':
+                  Navigator.pushNamed(context, '/profile');
+                  break;
+                case 'settings':
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Settings - Coming Soon')),
+                  );
+                  break;
+                case 'logout':
+                  _logout();
+                  break;
               }
             },
             itemBuilder: (context) => [
-              PopupMenuItem(
+              PopupMenuItem<String>(
+                enabled: false,
                 child: _userProfile != null 
                   ? Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -348,22 +355,63 @@ Widget heroSection() {
                           '${_userProfile!['firstname'] ?? ''} ${_userProfile!['surname'] ?? ''}',
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
-                        Text(_userProfile!['email'] ?? ''),
+                        Text(_userProfile!['email'] ?? '', style: const TextStyle(fontSize: 12)),
                       ],
                     )
                   : const Text('Profile'),
               ),
-              PopupMenuItem(
-                child: const ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Profile'),
-                  onTap: null,
-                ),
-                onTap: () => Navigator.pushNamed(context, '/profile'),
-              ),
-              const PopupMenuItem(child: Text('Settings')),
               const PopupMenuDivider(),
-              PopupMenuItem(value: 'logout', child: const Text('Logout')),
+              const PopupMenuItem<String>(
+                value: 'profile',
+                child: Row(
+                  children: [
+                    Icon(Icons.person, size: 20),
+                    SizedBox(width: 12),
+                    Text('Profile'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem<String>(
+                value: 'orders',
+                child: Row(
+                  children: [
+                    Icon(Icons.receipt, size: 20),
+                    SizedBox(width: 12),
+                    Text('My Orders'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem<String>(
+                value: 'location',
+                child: Row(
+                  children: [
+                    Icon(Icons.location_on, size: 20),
+                    SizedBox(width: 12),
+                    Text('My Location'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem<String>(
+                value: 'settings',
+                child: Row(
+                  children: [
+                    Icon(Icons.settings, size: 20),
+                    SizedBox(width: 12),
+                    Text('Settings'),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              PopupMenuItem<String>(
+                value: 'logout',
+                child: const Row(
+                  children: [
+                    Icon(Icons.logout, size: 20),
+                    SizedBox(width: 12),
+                    Text('Logout'),
+                  ],
+                ),
+              ),
             ],
           ),
         ],

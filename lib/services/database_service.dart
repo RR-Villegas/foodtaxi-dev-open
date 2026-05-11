@@ -59,6 +59,7 @@ class DatabaseService {
   static int _toInt(dynamic value) => _toNum(value).toInt();
 
   // Insert user profile after signup
+  // Returns existing account_id if already exists, creates new if not
   static Future<String?> insertUserProfile({
     required String authId,
     required String firstName,
@@ -68,6 +69,19 @@ class DatabaseService {
     required String accountType,
   }) async {
     try {
+      // First, check if account already exists
+      final existingAccount = await _supabase
+          .from('account')
+          .select('account_id')
+          .eq('auth_id', authId)
+          .maybeSingle();
+
+      if (existingAccount != null) {
+        debugPrint('Account already exists for auth_id: $authId');
+        return existingAccount['account_id'] as String?;
+      }
+
+      // Account doesn't exist, create it
       final response = await _supabase
           .from('account')
           .insert({
@@ -82,7 +96,18 @@ class DatabaseService {
           .single();
 
       return response['account_id'] as String?;
+    } on PostgrestException catch (e) {
+      debugPrint('=== PostgreSQL Error ===');
+      debugPrint('Error Code: ${e.code}');
+      debugPrint('Error Message: ${e.message}');
+      debugPrint('Error Details: ${e.details}');
+      debugPrint('Full Error: $e');
+      _logDbError('Failed to insert user profile', e);
+      return null;
     } catch (e) {
+      debugPrint('=== Generic Error ===');
+      debugPrint('Error Type: ${e.runtimeType}');
+      debugPrint('Error: $e');
       _logDbError('Failed to insert user profile', e);
       return null;
     }
@@ -112,6 +137,16 @@ class DatabaseService {
       return account?['account_id'] as String?;
     } catch (e) {
       _logDbError('Failed to fetch current account ID', e);
+      return null;
+    }
+  }
+
+  static Future<String?> getCurrentAccountType() async {
+    try {
+      final account = await getCurrentAccount();
+      return account?['account_type'] as String?;
+    } catch (e) {
+      _logDbError('Failed to fetch current account type', e);
       return null;
     }
   }
@@ -541,7 +576,18 @@ class DatabaseService {
         'status': 'Pending Review',
       });
       return true;
+    } on PostgrestException catch (e) {
+      debugPrint('=== Seller Application PostgreSQL Error ===');
+      debugPrint('Error Code: ${e.code}');
+      debugPrint('Error Message: ${e.message}');
+      debugPrint('Error Details: ${e.details}');
+      debugPrint('Full Error: $e');
+      _logDbError('Failed to submit seller application', e);
+      return false;
     } catch (e) {
+      debugPrint('=== Seller Application Generic Error ===');
+      debugPrint('Error Type: ${e.runtimeType}');
+      debugPrint('Error: $e');
       _logDbError('Failed to submit seller application', e);
       return false;
     }

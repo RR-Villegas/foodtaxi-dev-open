@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'models/user_model.dart';
 import 'services/local_storage_service.dart';
 import 'services/database_service.dart';
+import 'services/input_validator.dart';
 import 'utils/password_validator.dart';
 
 class SignupPage extends StatefulWidget {
@@ -85,33 +86,48 @@ class _SignupPageState extends State<SignupPage> {
   bool _validateStep1() {
     setState(() => _step1Error = null);
 
-    if (_emailController.text.isEmpty) {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    final confirmPassword = _confirmPasswordController.text;
+
+    if (email.isEmpty) {
       setState(() => _step1Error = 'Email is required');
       return false;
     }
 
-    if (!_emailController.text.contains('@')) {
+    // Check for SQL injection patterns
+    if (InputValidator.containsSQLInjectionPatterns(email)) {
+      setState(() => _step1Error = 'Email contains invalid characters');
+      return false;
+    }
+
+    if (!InputValidator.isValidEmail(email)) {
       setState(() => _step1Error = 'Please enter a valid email');
       return false;
     }
 
-    if (_passwordController.text.isEmpty) {
+    if (password.isEmpty) {
       setState(() => _step1Error = 'Password is required');
       return false;
     }
 
-    if (_passwordController.text.length < 6) {
-      setState(() => _step1Error = 'Password must be at least 6 characters');
+    if (password.length < 8) {
+      setState(() => _step1Error = 'Password must be at least 8 characters');
       return false;
     }
 
-    if (!PasswordValidator.isValidCharacters(_passwordController.text)) {
+    if (!InputValidator.isValidPassword(password)) {
+      setState(() => _step1Error = 'Password must contain uppercase, lowercase, number, and special character');
+      return false;
+    }
+
+    if (!PasswordValidator.isValidCharacters(password)) {
       setState(() =>
           _step1Error = 'Password contains invalid characters. Use: a-z, A-Z, 0-9, @#\$%^&*+=!~');
       return false;
     }
 
-    if (_passwordController.text != _confirmPasswordController.text) {
+    if (password != confirmPassword) {
       setState(() => _step1Error = 'Passwords do not match');
       return false;
     }
@@ -122,18 +138,39 @@ class _SignupPageState extends State<SignupPage> {
   bool _validateStep2() {
     setState(() => _step2Error = null);
 
-    if (_firstNameController.text.isEmpty) {
+    final firstName = _firstNameController.text.trim();
+    final surname = _surnameController.text.trim();
+    final phone = _phoneNumberController.text.trim();
+
+    if (firstName.isEmpty) {
       setState(() => _step2Error = 'First name is required');
       return false;
     }
 
-    if (_surnameController.text.isEmpty) {
+    // Sanitize and validate first name
+    if (!InputValidator.isValidName(firstName)) {
+      setState(() => _step2Error = 'First name contains invalid characters');
+      return false;
+    }
+
+    if (surname.isEmpty) {
       setState(() => _step2Error = 'Surname is required');
       return false;
     }
 
-    if (_phoneNumberController.text.isEmpty) {
+    // Sanitize and validate surname
+    if (!InputValidator.isValidName(surname)) {
+      setState(() => _step2Error = 'Surname contains invalid characters');
+      return false;
+    }
+
+    if (phone.isEmpty) {
       setState(() => _step2Error = 'Phone number is required');
+      return false;
+    }
+
+    if (!InputValidator.isValidPhoneNumber(phone)) {
+      setState(() => _step2Error = 'Please enter a valid Philippine phone number');
       return false;
     }
 
