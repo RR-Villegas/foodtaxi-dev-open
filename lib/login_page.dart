@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'models/user_model.dart';
+import 'services/auth_service.dart';
 import 'services/database_service.dart';
 import 'services/local_storage_service.dart';
+import 'services/input_validator.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -28,20 +30,50 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _signIn() async {
     setState(() => _isLoading = true);
     try {
+      final email = _emailController.text.trim();
+      final password = _passwordController.text.trim();
+
+      // Validate email format and check for injection attempts
+      if (email.isEmpty) {
+        _showErrorSnackBar('Email is required');
+        return;
+      }
+
+      if (InputValidator.containsSQLInjectionPatterns(email)) {
+        _showErrorSnackBar('Invalid email format');
+        return;
+      }
+
+      if (!InputValidator.isValidEmail(email)) {
+        _showErrorSnackBar('Please enter a valid email');
+        return;
+      }
+
+      // Validate password
+      if (password.isEmpty) {
+        _showErrorSnackBar('Password is required');
+        return;
+      }
+
+      if (InputValidator.containsSQLInjectionPatterns(password)) {
+        _showErrorSnackBar('Password contains invalid characters');
+        return;
+      }
+
       // Test accounts
-      if (_emailController.text.trim() == 'admin@gmail.com' && _passwordController.text.trim() == 'admin') {
+      if (email == 'admin@gmail.com' && password == 'admin') {
         Navigator.pushReplacementNamed(context, '/admin-dashboard');
         return;
       }
 
-      if (_emailController.text.trim() == 'seller@gmail.com' && _passwordController.text.trim() == 'seller12345') {
+      if (email == 'seller@gmail.com' && password == 'seller12345') {
         Navigator.pushReplacementNamed(context, '/seller-dashboard');
         return;
       }
 
       await _supabase.auth.signInWithPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
+        email: email,
+        password: password,
       );
 
       final user = _supabase.auth.currentUser!;
@@ -92,6 +124,9 @@ class _LoginPageState extends State<LoginPage> {
         account = await DatabaseService.getCurrentAccount();
       }
 
+      // Save login session for persistent login
+      await AuthService.saveLoginSession(user);
+
       final role = (account?['account_type'] as String? ?? 'Buyer').toLowerCase();
       if (mounted) {
         if (role == 'seller') {
@@ -112,6 +147,18 @@ class _LoginPageState extends State<LoginPage> {
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  void _showErrorSnackBar(String message) {
+    setState(() => _isLoading = false);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 

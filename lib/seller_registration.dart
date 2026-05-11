@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'services/database_service.dart';
 import 'services/location_service.dart';
+import 'services/input_validator.dart';
 import 'package:dropdown_search/dropdown_search.dart';
 
 class SellerRegistrationPage extends StatefulWidget {
@@ -153,33 +154,77 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
   bool _validateStep1() {
     setState(() => _step1Error = null);
 
-    if (_firstNameController.text.isEmpty) {
+    final firstName = _firstNameController.text.trim();
+    final surname = _surnameController.text.trim();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (firstName.isEmpty) {
       setState(() => _step1Error = 'First name is required');
       return false;
     }
 
-    if (_surnameController.text.isEmpty) {
+    // Sanitize and validate first name
+    if (InputValidator.containsSQLInjectionPatterns(firstName)) {
+      setState(() => _step1Error = 'First name contains invalid characters');
+      return false;
+    }
+
+    if (!InputValidator.isValidName(firstName)) {
+      setState(() => _step1Error = 'First name contains invalid characters');
+      return false;
+    }
+
+    if (surname.isEmpty) {
       setState(() => _step1Error = 'Surname is required');
       return false;
     }
 
-    if (_emailController.text.isEmpty) {
+    // Sanitize and validate surname
+    if (InputValidator.containsSQLInjectionPatterns(surname)) {
+      setState(() => _step1Error = 'Surname contains invalid characters');
+      return false;
+    }
+
+    if (!InputValidator.isValidName(surname)) {
+      setState(() => _step1Error = 'Surname contains invalid characters');
+      return false;
+    }
+
+    if (email.isEmpty) {
       setState(() => _step1Error = 'Email is required');
       return false;
     }
 
-    if (!_emailController.text.contains('@')) {
+    // Check email for injection attempts
+    if (InputValidator.containsSQLInjectionPatterns(email)) {
+      setState(() => _step1Error = 'Email contains invalid characters');
+      return false;
+    }
+
+    if (!InputValidator.isValidEmail(email)) {
       setState(() => _step1Error = 'Invalid email format');
       return false;
     }
 
-    if (_passwordController.text.isEmpty) {
+    if (password.isEmpty) {
       setState(() => _step1Error = 'Password is required');
       return false;
     }
 
-    if (_passwordController.text.length < 6) {
-      setState(() => _step1Error = 'Password must be at least 6 characters');
+    if (password.length < 8) {
+      setState(() => _step1Error = 'Password must be at least 8 characters');
+      return false;
+    }
+
+    // Validate password strength and check for injection
+    if (InputValidator.containsSQLInjectionPatterns(password)) {
+      setState(() => _step1Error = 'Password contains invalid characters');
+      return false;
+    }
+
+    if (!InputValidator.isValidPassword(password)) {
+      setState(() => _step1Error = 'Password must contain uppercase, lowercase, number, and special character');
       return false;
     }
 
@@ -189,13 +234,38 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
   bool _validateStep2() {
     setState(() => _step2Error = null);
 
-    if (_storeNameController.text.isEmpty) {
+    final storeName = _storeNameController.text.trim();
+    final phone = _contactPhoneController.text.trim();
+
+    if (storeName.isEmpty) {
       setState(() => _step2Error = 'Store name is required');
       return false;
     }
 
-    if (_contactPhoneController.text.isEmpty) {
+    // Validate store name
+    if (InputValidator.containsSQLInjectionPatterns(storeName)) {
+      setState(() => _step2Error = 'Store name contains invalid characters');
+      return false;
+    }
+
+    if (!InputValidator.isValidStoreName(storeName)) {
+      setState(() => _step2Error = 'Store name must be between 3-100 characters');
+      return false;
+    }
+
+    if (phone.isEmpty) {
       setState(() => _step2Error = 'Contact phone is required');
+      return false;
+    }
+
+    // Validate phone number
+    if (InputValidator.containsSQLInjectionPatterns(phone)) {
+      setState(() => _step2Error = 'Phone number contains invalid characters');
+      return false;
+    }
+
+    if (!InputValidator.isValidPhoneNumber(phone)) {
+      setState(() => _step2Error = 'Invalid Philippine phone number format');
       return false;
     }
 
@@ -204,6 +274,8 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
 
   bool _validateStep3() {
     setState(() => _step3Error = null);
+
+    final street = _streetController.text.trim();
 
     if (_selectedProvinceName == null) {
       setState(() => _step3Error = 'Province is required');
@@ -220,8 +292,27 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
       return false;
     }
 
-    if (_streetController.text.isEmpty) {
+    if (street.isEmpty) {
       setState(() => _step3Error = 'Street is required');
+      return false;
+    }
+
+    // Validate street input for injection attempts
+    if (InputValidator.containsSQLInjectionPatterns(street)) {
+      setState(() => _step3Error = 'Street contains invalid characters');
+      return false;
+    }
+
+    // Optional fields - validate if provided
+    final houseNumber = _houseNumberController.text.trim();
+    if (houseNumber.isNotEmpty && InputValidator.containsSQLInjectionPatterns(houseNumber)) {
+      setState(() => _step3Error = 'House number contains invalid characters');
+      return false;
+    }
+
+    final zipCode = _zipCodeController.text.trim();
+    if (zipCode.isNotEmpty && InputValidator.containsSQLInjectionPatterns(zipCode)) {
+      setState(() => _step3Error = 'Zip code contains invalid characters');
       return false;
     }
 
