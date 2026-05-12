@@ -1,8 +1,11 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/application_data.dart';
 import '../models/user_model.dart';
 
 class LocalStorageService {
   static const String _signupDataKey = 'signup_data';
+  static const String _sellerApplicationDataKey = 'seller_application_data';
+  static const String _riderApplicationDataKey = 'rider_application_data';
   static const String _sessionTokenKey = 'session_token';
   static const String _refreshTokenKey = 'refresh_token';
   static const String _userIdKey = 'user_id';
@@ -38,6 +41,44 @@ class LocalStorageService {
   static Future<bool> hasSignupData() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.containsKey(_signupDataKey);
+  }
+
+  static Future<void> saveSellerApplicationData(
+    SellerApplicationData data,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_sellerApplicationDataKey, data.toJsonString());
+  }
+
+  static Future<SellerApplicationData?> loadSellerApplicationData() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonString = prefs.getString(_sellerApplicationDataKey);
+    if (jsonString == null) return null;
+    return SellerApplicationData.fromJsonString(jsonString);
+  }
+
+  static Future<void> clearSellerApplicationData() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_sellerApplicationDataKey);
+  }
+
+  static Future<void> saveRiderApplicationData(
+    RiderApplicationData data,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_riderApplicationDataKey, data.toJsonString());
+  }
+
+  static Future<RiderApplicationData?> loadRiderApplicationData() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonString = prefs.getString(_riderApplicationDataKey);
+    if (jsonString == null) return null;
+    return RiderApplicationData.fromJsonString(jsonString);
+  }
+
+  static Future<void> clearRiderApplicationData() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_riderApplicationDataKey);
   }
 
   // ============== Session Token Management ==============

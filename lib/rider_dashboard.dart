@@ -2,14 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'services/database_service.dart';
 
-class SellerDashboard extends StatefulWidget {
-  const SellerDashboard({super.key});
+class RiderDashboard extends StatefulWidget {
+  const RiderDashboard({super.key});
 
   @override
-  State<SellerDashboard> createState() => _SellerDashboardState();
+  State<RiderDashboard> createState() => _RiderDashboardState();
 }
 
-class _SellerDashboardState extends State<SellerDashboard> {
+class _RiderDashboardState extends State<RiderDashboard> {
   final _supabase = Supabase.instance.client;
   List<Map<String, dynamic>> products = [];
   bool isLoading = true;

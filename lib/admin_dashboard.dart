@@ -11,17 +11,49 @@ class AdminDashboard extends StatefulWidget {
 class _AdminDashboardState extends State<AdminDashboard> {
   int _currentIndex = 0;
   List<Map<String, dynamic>> _sellerApplications = [];
+  List<Map<String, dynamic>> _riderApplications = [];
   bool _isLoading = false;
   late List<double> _dailySales;
   final List<Map<String, dynamic>> _mockOrders = [
-    {'id': 'ORD001', 'date': '2024-10-01', 'customer': 'John Doe', 'items': 3, 'total': 1250.00},
-    {'id': 'ORD002', 'date': '2024-10-01', 'customer': 'Jane Smith', 'items': 2, 'total': 850.00},
-    {'id': 'ORD003', 'date': '2024-10-02', 'customer': 'Bob Johnson', 'items': 4, 'total': 2100.00},
-    {'id': 'ORD004', 'date': '2024-10-02', 'customer': 'Alice Brown', 'items': 1, 'total': 450.00},
-    {'id': 'ORD005', 'date': '2024-10-03', 'customer': 'Charlie Wilson', 'items': 5, 'total': 3200.00},
+    {
+      'id': 'ORD001',
+      'date': '2024-10-01',
+      'customer': 'John Doe',
+      'items': 3,
+      'total': 1250.00,
+    },
+    {
+      'id': 'ORD002',
+      'date': '2024-10-01',
+      'customer': 'Jane Smith',
+      'items': 2,
+      'total': 850.00,
+    },
+    {
+      'id': 'ORD003',
+      'date': '2024-10-02',
+      'customer': 'Bob Johnson',
+      'items': 4,
+      'total': 2100.00,
+    },
+    {
+      'id': 'ORD004',
+      'date': '2024-10-02',
+      'customer': 'Alice Brown',
+      'items': 1,
+      'total': 450.00,
+    },
+    {
+      'id': 'ORD005',
+      'date': '2024-10-03',
+      'customer': 'Charlie Wilson',
+      'items': 5,
+      'total': 3200.00,
+    },
   ];
 
-  double get _totalSales => _mockOrders.fold(0.0, (sum, order) => sum + order['total']);
+  double get _totalSales =>
+      _mockOrders.fold(0.0, (sum, order) => sum + order['total']);
   int get _totalOrders => _mockOrders.length;
   double get _avgOrderValue => _totalSales / _totalOrders;
 
@@ -40,9 +72,29 @@ class _AdminDashboardState extends State<AdminDashboard> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _loadRiderApplications() async {
+    setState(() => _isLoading = true);
+    try {
+      final applications = await DatabaseService.getRiderApplications();
+      if (mounted) {
+        setState(() => _riderApplications = applications);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     } finally {
       if (mounted) {
@@ -123,10 +175,83 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 }
               } catch (e) {
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error: $e')),
-                  );
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Error: $e')));
                 }
+              }
+            },
+            child: const Text('Reject'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _approveRider(Map<String, dynamic> app) async {
+    try {
+      final approved = await DatabaseService.approveRiderApplication(
+        applicationId: app['rider_app_id'].toString(),
+        accountId: app['account_id'].toString(),
+      );
+
+      if (!approved) {
+        throw Exception('Rider application could not be approved');
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Rider application approved!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        _loadRiderApplications();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  void _rejectRider(Map<String, dynamic> app) {
+    final notesController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reject Rider Application'),
+        content: TextField(
+          controller: notesController,
+          decoration: const InputDecoration(
+            labelText: 'Reason for rejection',
+            border: OutlineInputBorder(),
+          ),
+          maxLines: 3,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              await DatabaseService.rejectRiderApplication(
+                applicationId: app['rider_app_id'],
+                reviewNotes: notesController.text,
+              );
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Rider application rejected'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+                Navigator.pop(context);
+                _loadRiderApplications();
               }
             },
             child: const Text('Reject'),
@@ -146,7 +271,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              _detailRow('Applicant', '${app['account']?['firstname'] ?? 'N/A'} ${app['account']?['surname'] ?? ''}'),
+              _detailRow(
+                'Applicant',
+                '${app['account']?['firstname'] ?? 'N/A'} ${app['account']?['surname'] ?? ''}',
+              ),
               _detailRow('Email', app['account']?['email'] ?? 'N/A'),
               _detailRow('Store Name', app['store_name'] ?? 'N/A'),
               _detailRow('Phone', app['contact_phone'] ?? 'N/A'),
@@ -156,15 +284,19 @@ class _AdminDashboardState extends State<AdminDashboard> {
               _detailRow('Barangay', app['barangay'] ?? 'N/A'),
               _detailRow('Street', app['street'] ?? 'N/A'),
               _detailRow('House Number', app['house_number'] ?? 'N/A'),
+              _detailRow('Zip Code', app['zip_code'] ?? 'N/A'),
               _detailRow('Status', app['status'] ?? 'N/A'),
               _detailRow('Submitted', app['submission_date'] ?? 'N/A'),
-              if (app['store_description'] != null && app['store_description'].isNotEmpty)
-                ...[
-                  const SizedBox(height: 8),
-                  const Text('Description:', style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  Text(app['store_description']),
-                ],
+              if (app['store_description'] != null &&
+                  app['store_description'].isNotEmpty) ...[
+                const SizedBox(height: 8),
+                const Text(
+                  'Description:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(app['store_description']),
+              ],
             ],
           ),
         ),
@@ -186,7 +318,65 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 Navigator.pop(context);
                 _approveSeller(app);
               },
-              child: const Text('Approve', style: TextStyle(color: Colors.green)),
+              child: const Text(
+                'Approve',
+                style: TextStyle(color: Colors.green),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _viewRiderApplicationDetails(Map<String, dynamic> app) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(app['account']?['firstname'] ?? 'Rider Application'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _detailRow(
+                'Applicant',
+                '${app['account']?['firstname'] ?? 'N/A'} ${app['account']?['surname'] ?? ''}',
+              ),
+              _detailRow('Email', app['account']?['email'] ?? 'N/A'),
+              _detailRow('Phone', app['account']?['phone_number'] ?? 'N/A'),
+              _detailRow('License Number', app['license_number'] ?? 'N/A'),
+              _detailRow('Vehicle Type', app['vehicle_type'] ?? 'N/A'),
+              _detailRow('Plate Number', app['plate_number'] ?? 'N/A'),
+              _detailRow('Status', app['status'] ?? 'N/A'),
+              _detailRow('Submitted', app['application_date'] ?? 'N/A'),
+              if (app['documents_path'] != null)
+                _detailRow('Documents', app['documents_path'].toString()),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          if (app['status'] == 'Pending Review') ...[
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _rejectRider(app);
+              },
+              child: const Text('Reject', style: TextStyle(color: Colors.red)),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _approveRider(app);
+              },
+              child: const Text(
+                'Approve',
+                style: TextStyle(color: Colors.green),
+              ),
             ),
           ],
         ],
@@ -195,17 +385,19 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   String _formatSellerAddress(Map<String, dynamic> app) {
-    final parts = [
-      app['house_number'],
-      app['street'],
+    final parts =
+        [
+              app['house_number'],
+              app['street'],
       app['barangay'],
       app['city'],
       app['province'],
+      app['zip_code'],
     ]
-        .whereType<String>()
-        .map((part) => part.trim())
-        .where((part) => part.isNotEmpty)
-        .toList();
+            .whereType<String>()
+            .map((part) => part.trim())
+            .where((part) => part.isNotEmpty)
+            .toList();
 
     if (parts.isNotEmpty) return parts.join(', ');
 
@@ -231,9 +423,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
 
     if (_sellerApplications.isEmpty) {
-      return const Center(
-        child: Text('No seller applications'),
-      );
+      return const Center(child: Text('No seller applications'));
     }
 
     return ListView.builder(
@@ -244,8 +434,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
         final statusColor = app['status'] == 'Approved'
             ? Colors.green
             : app['status'] == 'Rejected'
-                ? Colors.red
-                : Colors.orange;
+            ? Colors.red
+            : Colors.orange;
 
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
@@ -254,7 +444,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('${app['account']?['firstname'] ?? 'Unknown'} ${app['account']?['surname'] ?? ''}'),
+                Text(
+                  '${app['account']?['firstname'] ?? 'Unknown'} ${app['account']?['surname'] ?? ''}',
+                ),
                 Text(app['contact_phone'] ?? ''),
                 Chip(
                   label: Text(app['status'] ?? 'Pending'),
@@ -274,6 +466,55 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
+  Widget _buildRiderApplicationsTab() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_riderApplications.isEmpty) {
+      return const Center(child: Text('No rider applications'));
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _riderApplications.length,
+      itemBuilder: (context, index) {
+        final app = _riderApplications[index];
+        final statusColor = app['status'] == 'Approved'
+            ? Colors.green
+            : app['status'] == 'Rejected'
+            ? Colors.red
+            : Colors.orange;
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: ListTile(
+            title: Text(
+              '${app['account']?['firstname'] ?? 'Unknown'} ${app['account']?['surname'] ?? ''}',
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(app['vehicle_type'] ?? ''),
+                Text(app['plate_number'] ?? ''),
+                Chip(
+                  label: Text(app['status'] ?? 'Pending'),
+                  backgroundColor: statusColor.withOpacity(0.3),
+                  labelStyle: TextStyle(color: statusColor),
+                ),
+              ],
+            ),
+            trailing: IconButton(
+              icon: const Icon(Icons.arrow_forward),
+              onPressed: () => _viewRiderApplicationDetails(app),
+            ),
+            onTap: () => _viewRiderApplicationDetails(app),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildDashboardTab() {
     return SingleChildScrollView(
       child: Column(
@@ -284,16 +525,35 @@ class _AdminDashboardState extends State<AdminDashboard> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                Expanded(child: _metricCard('Total Sales', '₱${_totalSales.toStringAsFixed(0)}', Icons.trending_up, Colors.green)),
+                Expanded(
+                  child: _metricCard(
+                    'Total Sales',
+                    '₱${_totalSales.toStringAsFixed(0)}',
+                    Icons.trending_up,
+                    Colors.green,
+                  ),
+                ),
                 const SizedBox(width: 12),
-                Expanded(child: _metricCard('Total Orders', '$_totalOrders', Icons.shopping_cart, Colors.blue)),
+                Expanded(
+                  child: _metricCard(
+                    'Total Orders',
+                    '$_totalOrders',
+                    Icons.shopping_cart,
+                    Colors.blue,
+                  ),
+                ),
               ],
             ),
           ),
           const SizedBox(height: 16),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: _metricCard('Avg Order Value', '₱${_avgOrderValue.toStringAsFixed(0)}', Icons.attach_money, Colors.orange),
+            child: _metricCard(
+              'Avg Order Value',
+              '₱${_avgOrderValue.toStringAsFixed(0)}',
+              Icons.attach_money,
+              Colors.orange,
+            ),
           ),
           const SizedBox(height: 20),
           _sectionTitle('Daily Revenue'),
@@ -318,20 +578,34 @@ class _AdminDashboardState extends State<AdminDashboard> {
         final order = _mockOrders[index];
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           elevation: 3,
           child: ListTile(
             contentPadding: const EdgeInsets.all(16),
             leading: CircleAvatar(
               backgroundColor: Theme.of(context).colorScheme.primary,
-              child: Text('#${order['id'].substring(3)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              child: Text(
+                '#${order['id'].substring(3)}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
             title: Text(order['customer']),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Date: ${order['date']} | Items: ${order['items']}'),
-                Text('Total: ₱${order['total'].toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                Text(
+                  'Total: ₱${order['total'].toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                  ),
+                ),
               ],
             ),
             trailing: const Icon(Icons.arrow_forward_ios, size: 16),
@@ -349,7 +623,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 12, offset: const Offset(0, 4)),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Column(
@@ -358,7 +636,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
           const SizedBox(height: 8),
           Text(title, style: const TextStyle(fontSize: 14, color: Colors.grey)),
           const SizedBox(height: 4),
-          Text(value, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
         ],
       ),
     );
@@ -394,11 +679,17 @@ class _AdminDashboardState extends State<AdminDashboard> {
             Text('Customer: ${order['customer']}'),
             Text('Date: ${order['date']}'),
             Text('Items: ${order['items']}'),
-            Text('Total: ₱${order['total']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text(
+              'Total: ₱${order['total']}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
         ],
       ),
     );
@@ -432,7 +723,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
               children: [
                 const Text(
                   'Admin Dashboard',
-                  style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 const Text(
@@ -452,14 +747,22 @@ class _AdminDashboardState extends State<AdminDashboard> {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Align(
         alignment: Alignment.centerLeft,
-        child: Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        child: Text(
+          title,
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final tabs = [_buildDashboardTab(), _buildSalesReportTab(), _buildSellerApplicationsTab()];
+    final tabs = [
+      _buildDashboardTab(),
+      _buildSalesReportTab(),
+      _buildSellerApplicationsTab(),
+      _buildRiderApplicationsTab(),
+    ];
 
     return Scaffold(
       appBar: AppBar(
@@ -472,6 +775,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
             onPressed: () {
               if (_currentIndex == 2) {
                 _loadSellerApplications();
+              } else if (_currentIndex == 3) {
+                _loadRiderApplications();
               } else {
                 setState(() {});
               }
@@ -486,14 +791,23 @@ class _AdminDashboardState extends State<AdminDashboard> {
           setState(() => _currentIndex = index);
           if (index == 2) {
             _loadSellerApplications();
+          } else if (index == 3) {
+            _loadRiderApplications();
           }
         },
         type: BottomNavigationBarType.fixed,
         selectedItemColor: Theme.of(context).colorScheme.primary,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Dashboard'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.dashboard),
+            label: 'Dashboard',
+          ),
           BottomNavigationBarItem(icon: Icon(Icons.analytics), label: 'Sales'),
           BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Sellers'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.delivery_dining),
+            label: 'Riders',
+          ),
         ],
       ),
     );

@@ -68,7 +68,27 @@ class AuthService {
       debugPrint('WARNING: Unauthorized seller access attempt detected');
       return false;
     }
-    return true;
+    final accountId = await DatabaseService.getCurrentAccountId();
+    if (accountId == null) return false;
+    final application = await DatabaseService.getSellerApplicationByAccountId(
+      accountId,
+    );
+    return application?['status'] == 'Approved';
+  }
+
+  /// Verify rider access before route navigation
+  static Future<bool> verifyRiderAccess() async {
+    final isRider = await AuthService.isRider();
+    if (!isRider) {
+      debugPrint('WARNING: Unauthorized rider access attempt detected');
+      return false;
+    }
+    final accountId = await DatabaseService.getCurrentAccountId();
+    if (accountId == null) return false;
+    final application = await DatabaseService.getRiderApplicationByAccountId(
+      accountId,
+    );
+    return application?['status'] == 'Approved';
   }
 
   /// Verify buyer access before route navigation
@@ -85,7 +105,9 @@ class AuthService {
   static void logSecurityEvent(String eventType, String details) {
     final timestamp = DateTime.now().toIso8601String();
     final userId = _supabase.auth.currentUser?.id ?? 'anonymous';
-    debugPrint('[SECURITY] $timestamp | Event: $eventType | User: $userId | Details: $details');
+    debugPrint(
+      '[SECURITY] $timestamp | Event: $eventType | User: $userId | Details: $details',
+    );
   }
 
   // ============== Session Management (Persistent Login) ==============
@@ -102,7 +124,10 @@ class AuthService {
           userEmail: user.email ?? '',
           accountType: await getCurrentUserType(),
         );
-        logSecurityEvent('LOGIN_SESSION_SAVED', 'Session stored for user: ${user.email}');
+        logSecurityEvent(
+          'LOGIN_SESSION_SAVED',
+          'Session stored for user: ${user.email}',
+        );
       }
     } catch (e) {
       debugPrint('Error saving login session: $e');
@@ -158,10 +183,10 @@ class AuthService {
     try {
       // Sign out from Supabase
       await _supabase.auth.signOut();
-      
+
       // Clear stored credentials
       await LocalStorageService.clearSession();
-      
+
       logSecurityEvent('LOGOUT', 'User session cleared');
     } catch (e) {
       debugPrint('Error clearing login session: $e');

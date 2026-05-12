@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'models/application_data.dart';
 import 'services/database_service.dart';
+import 'services/local_storage_service.dart';
 import 'services/location_service.dart';
 import 'services/input_validator.dart';
+import 'services/zip_code_service.dart';
+import 'utils/password_validator.dart';
 import 'package:dropdown_search/dropdown_search.dart';
 
 class SellerRegistrationPage extends StatefulWidget {
@@ -25,6 +29,12 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
   final _surnameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  final _passwordFocusNode = FocusNode();
+  bool _showPassword = false;
+  bool _showConfirmPassword = false;
+  PasswordStrength _passwordStrength = PasswordStrength.weak;
+  String? _passwordCharError;
 
   // Step 2: Store Information
   final _storeNameController = TextEditingController();
@@ -52,7 +62,20 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
   @override
   void initState() {
     super.initState();
+    _passwordFocusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
+    _passwordController.addListener(_updatePasswordStrength);
     _loadProvinces();
+  }
+
+  void _updatePasswordStrength() {
+    setState(() {
+      _passwordStrength =
+          PasswordValidator.calculateStrength(_passwordController.text);
+      _passwordCharError =
+          PasswordValidator.getFeedback(_passwordController.text);
+    });
   }
 
   @override
@@ -61,6 +84,9 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
     _surnameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _passwordController.removeListener(_updatePasswordStrength);
+    _confirmPasswordController.dispose();
+    _passwordFocusNode.dispose();
     _storeNameController.dispose();
     _storeDescriptionController.dispose();
     _contactPhoneController.dispose();
@@ -105,7 +131,9 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
     });
 
     try {
-      final cities = await LocationService.fetchCitiesAndMunicipalities(province['code']);
+      final cities = await LocationService.fetchCitiesAndMunicipalities(
+        province['code'],
+      );
       if (mounted) {
         setState(() {
           _cities = cities;
@@ -135,6 +163,11 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
       _loadingBarangays = true;
     });
 
+    final zipCode = ZipCodeService.fromCityName(cityName);
+    if (zipCode != null) {
+      _zipCodeController.text = zipCode;
+    }
+
     try {
       final barangays = await LocationService.fetchBarangays(city['code']);
       if (mounted) {
@@ -158,6 +191,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
     final surname = _surnameController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text;
+    final confirmPassword = _confirmPasswordController.text;
 
     if (firstName.isEmpty) {
       setState(() => _step1Error = 'First name is required');
@@ -224,7 +258,20 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
     }
 
     if (!InputValidator.isValidPassword(password)) {
-      setState(() => _step1Error = 'Password must contain uppercase, lowercase, number, and special character');
+      setState(
+        () => _step1Error =
+            'Password must contain uppercase, lowercase, number, and special character',
+      );
+      return false;
+    }
+
+    if (confirmPassword.isEmpty) {
+      setState(() => _step1Error = 'Please re-enter your password');
+      return false;
+    }
+
+    if (password != confirmPassword) {
+      setState(() => _step1Error = 'Passwords do not match');
       return false;
     }
 
@@ -249,7 +296,9 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
     }
 
     if (!InputValidator.isValidStoreName(storeName)) {
-      setState(() => _step2Error = 'Store name must be between 3-100 characters');
+      setState(
+        () => _step2Error = 'Store name must be between 3-100 characters',
+      );
       return false;
     }
 
@@ -305,13 +354,15 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
 
     // Optional fields - validate if provided
     final houseNumber = _houseNumberController.text.trim();
-    if (houseNumber.isNotEmpty && InputValidator.containsSQLInjectionPatterns(houseNumber)) {
+    if (houseNumber.isNotEmpty &&
+        InputValidator.containsSQLInjectionPatterns(houseNumber)) {
       setState(() => _step3Error = 'House number contains invalid characters');
       return false;
     }
 
     final zipCode = _zipCodeController.text.trim();
-    if (zipCode.isNotEmpty && InputValidator.containsSQLInjectionPatterns(zipCode)) {
+    if (zipCode.isNotEmpty &&
+        InputValidator.containsSQLInjectionPatterns(zipCode)) {
       setState(() => _step3Error = 'Zip code contains invalid characters');
       return false;
     }
@@ -339,67 +390,110 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
     setState(() => _isLoading = true);
 
     try {
-      // Step 1: Create Supabase auth user
-      final authResponse = await _supabase.auth.signUp(
+      final applicationData = SellerApplicationData(
         email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
-
-      final userId = authResponse.user?.id;
-      if (userId == null) {
-        throw Exception('Failed to create authentication account');
-      }
-
-      // Step 2: Create account profile
-      final accountId = await DatabaseService.insertUserProfile(
-        authId: userId,
         firstName: _firstNameController.text.trim(),
         surname: _surnameController.text.trim(),
-        email: _emailController.text.trim(),
-        phoneNumber: _contactPhoneController.text.trim(),
-        accountType: 'Seller',
-      );
-
-      if (accountId == null) {
-        throw Exception('Failed to create seller account profile');
-      }
-
-      // Step 3: Submit seller application
-      final submitted = await DatabaseService.insertSellerApplication(
-        accountId: accountId,
+        password: _passwordController.text,
         storeName: _storeNameController.text.trim(),
         storeDescription: _storeDescriptionController.text.trim(),
         province: _selectedProvinceName,
         city: _selectedCityName ?? '',
         barangay: _selectedBarangayName,
-        street: _streetController.text.isNotEmpty ? _streetController.text.trim() : null,
-        houseNumber: _houseNumberController.text.isNotEmpty ? _houseNumberController.text.trim() : null,
-        zipCode: _zipCodeController.text.isNotEmpty ? _zipCodeController.text.trim() : null,
+        street: _streetController.text.isNotEmpty
+            ? _streetController.text.trim()
+            : null,
+        houseNumber: _houseNumberController.text.isNotEmpty
+            ? _houseNumberController.text.trim()
+            : null,
+        zipCode: _zipCodeController.text.isNotEmpty
+            ? _zipCodeController.text.trim()
+            : null,
         contactPhone: _contactPhoneController.text.trim(),
       );
 
-      if (!submitted) {
-        throw Exception('Seller application could not be submitted');
+      await LocalStorageService.saveSellerApplicationData(applicationData);
+
+      final currentUser = _supabase.auth.currentUser;
+      final submittedWhileLoggedIn = currentUser != null;
+      if (currentUser == null) {
+        final authResponse = await _supabase.auth.signUp(
+          email: applicationData.email,
+          password: applicationData.password,
+          emailRedirectTo: Uri.base.origin,
+          data: {'role': 'seller'},
+        );
+
+        if (authResponse.user == null) {
+          throw Exception('Failed to create authentication account');
+        }
+        if (_supabase.auth.currentSession != null) {
+          await _supabase.auth.signOut(scope: SignOutScope.local);
+        }
+      } else {
+        final accountId = await DatabaseService.insertUserProfile(
+          authId: currentUser.id,
+          firstName: applicationData.firstName,
+          surname: applicationData.surname,
+          email: currentUser.email ?? applicationData.email,
+          phoneNumber: applicationData.contactPhone,
+          accountType: 'Seller',
+        );
+
+        if (accountId == null) {
+          throw Exception('Failed to create seller account profile');
+        }
+
+        final submitted = await DatabaseService.saveSellerApplication(
+          accountId: accountId,
+          storeName: applicationData.storeName,
+          storeDescription: applicationData.storeDescription,
+          province: applicationData.province,
+          city: applicationData.city,
+          barangay: applicationData.barangay,
+          street: applicationData.street,
+          houseNumber: applicationData.houseNumber,
+          zipCode: applicationData.zipCode,
+          contactPhone: applicationData.contactPhone,
+        );
+
+        if (!submitted) {
+          throw Exception('Seller application could not be submitted');
+        }
+
+        await LocalStorageService.clearSellerApplicationData();
       }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              'Account created and application submitted! Please confirm your email, then wait for admin approval.',
+              submittedWhileLoggedIn
+                  ? 'Seller application submitted for admin review.'
+                  : 'Seller application saved. Please confirm your email and log in to send it for admin review.',
             ),
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.pop(context);
+        if (submittedWhileLoggedIn) {
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            '/application-status',
+            (route) => false,
+            arguments: 'seller',
+          );
+        } else {
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            '/login',
+            (route) => false,
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -415,8 +509,43 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
-      body: isMobile ? _buildMobileLayout() : _buildDesktopLayout(),
+      body: Stack(
+        children: [
+          isMobile ? _buildMobileLayout() : _buildDesktopLayout(),
+          _buildCloseButton(),
+        ],
+      ),
     );
+  }
+
+  Widget _buildCloseButton() {
+    return SafeArea(
+      child: Align(
+        alignment: Alignment.topRight,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Material(
+            color: Colors.white.withOpacity(0.92),
+            shape: const CircleBorder(),
+            elevation: 3,
+            child: IconButton(
+              icon: const Icon(Icons.close),
+              tooltip: 'Close',
+              color: Colors.black87,
+              onPressed: _closePage,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _closePage() {
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context);
+    } else {
+      Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+    }
   }
 
   Widget _buildMobileLayout() {
@@ -431,8 +560,8 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
               _currentStep == 1
                   ? _buildStep1Form()
                   : _currentStep == 2
-                      ? _buildStep2Form()
-                      : _buildStep3Form(),
+                  ? _buildStep2Form()
+                  : _buildStep3Form(),
               const SizedBox(height: 24),
               _buildButtonRow(),
             ],
@@ -445,10 +574,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
   Widget _buildDesktopLayout() {
     return Row(
       children: [
-        Expanded(
-          flex: 1,
-          child: _buildSidePanel(),
-        ),
+        Expanded(flex: 1, child: _buildSidePanel()),
         Expanded(
           flex: 2,
           child: SingleChildScrollView(
@@ -460,8 +586,8 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
                   _currentStep == 1
                       ? _buildStep1Form()
                       : _currentStep == 2
-                          ? _buildStep2Form()
-                          : _buildStep3Form(),
+                      ? _buildStep2Form()
+                      : _buildStep3Form(),
                   const SizedBox(height: 32),
                   _buildButtonRow(),
                 ],
@@ -482,10 +608,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
           colors: [Color(0xFF2d8f4e), Color(0xFF1e5322)],
         ),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10),
         ],
       ),
       padding: const EdgeInsets.all(32.0),
@@ -504,10 +627,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
           const SizedBox(height: 16),
           const Text(
             'Join our marketplace and grow your business.',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 16,
-            ),
+            style: TextStyle(color: Colors.white70, fontSize: 16),
           ),
           const SizedBox(height: 48),
           _buildStepIndicator('Personal Info', 1),
@@ -562,7 +682,9 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
                 : Text(
                     '$step',
                     style: TextStyle(
-                      color: isCurrent || isCompleted ? Colors.white : Colors.grey,
+                      color: isCurrent || isCompleted
+                          ? Colors.white
+                          : Colors.grey,
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
                     ),
@@ -575,7 +697,9 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
           textAlign: TextAlign.center,
           style: TextStyle(
             fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-            color: isCurrent || isCompleted ? const Color(0xFF2d8f4e) : Colors.grey,
+            color: isCurrent || isCompleted
+                ? const Color(0xFF2d8f4e)
+                : Colors.grey,
           ),
         ),
       ],
@@ -648,10 +772,22 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
         const SizedBox(height: 16),
         TextField(
           controller: _passwordController,
+          focusNode: _passwordFocusNode,
           decoration: InputDecoration(
             labelText: 'Password *',
-            hintText: 'Enter a password (minimum 6 characters)',
+            hintText: 'Enter a strong password',
+            helperText: _passwordFocusNode.hasFocus
+                ? 'Allowed special characters: ! @ # \$ % ^ & *'
+                : null,
             prefixIcon: const Icon(Icons.lock),
+            suffixIcon: IconButton(
+              icon: Icon(
+                _showPassword ? Icons.visibility : Icons.visibility_off,
+              ),
+              onPressed: () {
+                setState(() => _showPassword = !_showPassword);
+              },
+            ),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
@@ -662,7 +798,39 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
               borderSide: const BorderSide(color: Color(0xFF2d8f4e), width: 2),
             ),
           ),
-          obscureText: true,
+          obscureText: !_showPassword,
+        ),
+        _buildPasswordStrengthIndicator(),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _confirmPasswordController,
+          decoration: InputDecoration(
+            labelText: 'Re-enter Password *',
+            hintText: 'Confirm your password',
+            prefixIcon: const Icon(Icons.lock_outline),
+            suffixIcon: IconButton(
+              icon: Icon(
+                _showConfirmPassword
+                    ? Icons.visibility
+                    : Icons.visibility_off,
+              ),
+              onPressed: () {
+                setState(
+                  () => _showConfirmPassword = !_showConfirmPassword,
+                );
+              },
+            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFF2d8f4e), width: 2),
+            ),
+          ),
+          obscureText: !_showConfirmPassword,
         ),
         if (_step1Error != null)
           Padding(
@@ -681,6 +849,36 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
             ),
           ),
       ],
+    );
+  }
+
+  Widget _buildPasswordStrengthIndicator() {
+    if (_passwordController.text.isEmpty) return const SizedBox.shrink();
+
+    final color = PasswordValidator.getStrengthColor(_passwordStrength);
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          LinearProgressIndicator(
+            value: (_passwordStrength.index + 1) / 4,
+            backgroundColor: Colors.grey[300],
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+            minHeight: 6,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Strength: ${PasswordValidator.getStrengthLabel(_passwordStrength)}',
+            style: TextStyle(color: color, fontWeight: FontWeight.bold),
+          ),
+          if (_passwordCharError != null && _passwordCharError!.isNotEmpty)
+            Text(
+              _passwordCharError!,
+              style: TextStyle(color: Colors.grey[700], fontSize: 12),
+            ),
+        ],
+      ),
     );
   }
 
@@ -769,238 +967,223 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
   }
 
   Widget _buildStep3Form() {
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      const Text(
-        'Location Details',
-        style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Location Details',
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+        ),
 
-      const SizedBox(height: 24),
+        const SizedBox(height: 24),
 
-      // =========================
-      // PROVINCE
-      // =========================
-      _loadingProvinces
-          ? Container(
-              height: 56,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey[300]!),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Center(child: CircularProgressIndicator()),
-            )
-          : DropdownSearch<String>(
-              items: _provinces
-                  .map((p) => p['name'] as String)
-                  .toList(),
-
-              selectedItem: _selectedProvinceName,
-
-              popupProps: const PopupProps.menu(
-                showSearchBox: true,
-                fit: FlexFit.loose,
-              ),
-
-              dropdownDecoratorProps: DropDownDecoratorProps(
-                dropdownSearchDecoration: InputDecoration(
-                  labelText: 'Select Province *',
-                  prefixIcon: const Icon(Icons.map),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+        // =========================
+        // PROVINCE
+        // =========================
+        _loadingProvinces
+            ? Container(
+                height: 56,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey[300]!),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-              ),
+                child: const Center(child: CircularProgressIndicator()),
+              )
+            : DropdownSearch<String>(
+                items: _provinces.map((p) => p['name'] as String).toList(),
 
-              onChanged: _onProvinceSelected,
-            ),
+                selectedItem: _selectedProvinceName,
 
-      const SizedBox(height: 16),
-
-      // =========================
-      // CITY / MUNICIPALITY
-      // =========================
-      _selectedProvinceName == null
-          ? Container(
-              height: 56,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey[300]!),
-                borderRadius: BorderRadius.circular(8),
-                color: Colors.grey[100],
-              ),
-              child: const Center(
-                child: Text(
-                  'Select a province first',
-                  style: TextStyle(color: Colors.grey),
+                popupProps: const PopupProps.menu(
+                  showSearchBox: true,
+                  fit: FlexFit.loose,
                 ),
-              ),
-            )
-          : _loadingCities
-              ? Container(
-                  height: 56,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey[300]!),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Center(child: CircularProgressIndicator()),
-                )
-              : DropdownSearch<String>(
-                  items: _cities
-                      .map((c) => c['name'] as String)
-                      .toList(),
 
-                  selectedItem: _selectedCityName,
-
-                  popupProps: const PopupProps.menu(
-                    showSearchBox: true,
-                    fit: FlexFit.loose,
-                  ),
-
-                  dropdownDecoratorProps: DropDownDecoratorProps(
-                    dropdownSearchDecoration: InputDecoration(
-                      labelText: 'Select City / Municipality *',
-                      prefixIcon: const Icon(Icons.location_city),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                dropdownDecoratorProps: DropDownDecoratorProps(
+                  dropdownSearchDecoration: InputDecoration(
+                    labelText: 'Select Province *',
+                    prefixIcon: const Icon(Icons.map),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-
-                  onChanged: _onCitySelected,
                 ),
 
-      const SizedBox(height: 16),
-
-      // =========================
-      // BARANGAY
-      // =========================
-      _selectedCityName == null
-          ? Container(
-              height: 56,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey[300]!),
-                borderRadius: BorderRadius.circular(8),
-                color: Colors.grey[100],
+                onChanged: _onProvinceSelected,
               ),
-              child: const Center(
-                child: Text(
-                  'Select a city first',
-                  style: TextStyle(color: Colors.grey),
+
+        const SizedBox(height: 16),
+
+        // =========================
+        // CITY / MUNICIPALITY
+        // =========================
+        _selectedProvinceName == null
+            ? Container(
+                height: 56,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey[300]!),
+                  borderRadius: BorderRadius.circular(8),
+                  color: Colors.grey[100],
                 ),
-              ),
-            )
-          : _loadingBarangays
-              ? Container(
-                  height: 56,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey[300]!),
-                    borderRadius: BorderRadius.circular(8),
+                child: const Center(
+                  child: Text(
+                    'Select a province first',
+                    style: TextStyle(color: Colors.grey),
                   ),
-                  child: const Center(child: CircularProgressIndicator()),
-                )
-              : DropdownSearch<String>(
-                  items: _barangays
-                      .map((b) => b['name'] as String)
-                      .toList(),
+                ),
+              )
+            : _loadingCities
+            ? Container(
+                height: 56,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey[300]!),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Center(child: CircularProgressIndicator()),
+              )
+            : DropdownSearch<String>(
+                items: _cities.map((c) => c['name'] as String).toList(),
 
-                  selectedItem: _selectedBarangayName,
+                selectedItem: _selectedCityName,
 
-                  popupProps: const PopupProps.menu(
-                    showSearchBox: true,
-                    fit: FlexFit.loose,
-                  ),
+                popupProps: const PopupProps.menu(
+                  showSearchBox: true,
+                  fit: FlexFit.loose,
+                ),
 
-                  dropdownDecoratorProps: DropDownDecoratorProps(
-                    dropdownSearchDecoration: InputDecoration(
-                      labelText: 'Select Barangay *',
-                      prefixIcon: const Icon(Icons.place),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                dropdownDecoratorProps: DropDownDecoratorProps(
+                  dropdownSearchDecoration: InputDecoration(
+                    labelText: 'Select City / Municipality *',
+                    prefixIcon: const Icon(Icons.location_city),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedBarangayName = value;
-                    });
-                  },
                 ),
 
-      const SizedBox(height: 16),
+                onChanged: _onCitySelected,
+              ),
 
-      // =========================
-      // STREET
-      // =========================
-      TextField(
-        controller: _streetController,
-        decoration: InputDecoration(
-          labelText: 'Street *',
-          prefixIcon: const Icon(Icons.location_on_outlined),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
+        const SizedBox(height: 16),
+
+        // =========================
+        // BARANGAY
+        // =========================
+        _selectedCityName == null
+            ? Container(
+                height: 56,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey[300]!),
+                  borderRadius: BorderRadius.circular(8),
+                  color: Colors.grey[100],
+                ),
+                child: const Center(
+                  child: Text(
+                    'Select a city first',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+              )
+            : _loadingBarangays
+            ? Container(
+                height: 56,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey[300]!),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Center(child: CircularProgressIndicator()),
+              )
+            : DropdownSearch<String>(
+                items: _barangays.map((b) => b['name'] as String).toList(),
+
+                selectedItem: _selectedBarangayName,
+
+                popupProps: const PopupProps.menu(
+                  showSearchBox: true,
+                  fit: FlexFit.loose,
+                ),
+
+                dropdownDecoratorProps: DropDownDecoratorProps(
+                  dropdownSearchDecoration: InputDecoration(
+                    labelText: 'Select Barangay *',
+                    prefixIcon: const Icon(Icons.place),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+
+                onChanged: (value) {
+                  setState(() {
+                    _selectedBarangayName = value;
+                  });
+                },
+              ),
+
+        const SizedBox(height: 16),
+
+        // =========================
+        // STREET
+        // =========================
+        TextField(
+          controller: _streetController,
+          decoration: InputDecoration(
+            labelText: 'Street *',
+            prefixIcon: const Icon(Icons.location_on_outlined),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           ),
         ),
-      ),
 
-      const SizedBox(height: 16),
+        const SizedBox(height: 16),
 
-      // =========================
-      // HOUSE NUMBER
-      // =========================
-      TextField(
-        controller: _houseNumberController,
-        decoration: InputDecoration(
-          labelText: 'House Number',
-          prefixIcon: const Icon(Icons.home),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
+        // =========================
+        // HOUSE NUMBER
+        // =========================
+        TextField(
+          controller: _houseNumberController,
+          decoration: InputDecoration(
+            labelText: 'House Number',
+            prefixIcon: const Icon(Icons.home),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           ),
         ),
-      ),
 
-      const SizedBox(height: 16),
+        const SizedBox(height: 16),
 
-      // =========================
-      // ZIP CODE
-      // =========================
-      TextField(
-        controller: _zipCodeController,
-        decoration: InputDecoration(
-          labelText: 'Zip Code',
-          prefixIcon: const Icon(Icons.mail),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
+        // =========================
+        // ZIP CODE
+        // =========================
+        TextField(
+          controller: _zipCodeController,
+          decoration: InputDecoration(
+            labelText: 'Zip Code',
+            prefixIcon: const Icon(Icons.mail),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           ),
         ),
-      ),
 
-      // =========================
-      // ERROR DISPLAY
-      // =========================
-      if (_step3Error != null)
-        Padding(
-          padding: const EdgeInsets.only(top: 16),
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.red[50],
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.red[200]!),
-            ),
-            child: Text(
-              _step3Error!,
-              style: TextStyle(
-                color: Colors.red[700],
-                fontSize: 14,
+        // =========================
+        // ERROR DISPLAY
+        // =========================
+        if (_step3Error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red[200]!),
+              ),
+              child: Text(
+                _step3Error!,
+                style: TextStyle(color: Colors.red[700], fontSize: 14),
               ),
             ),
           ),
-        ),
-    ],
-  );
-}
+      ],
+    );
+  }
 
   Widget _buildButtonRow() {
     return Row(
@@ -1034,10 +1217,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
               _isLoading
                   ? 'Submitting...'
                   : (_currentStep < 3 ? 'Next' : 'Submit Application'),
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
           ),
         ),

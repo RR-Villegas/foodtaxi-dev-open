@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:dropdown_search/dropdown_search.dart';
 
 import 'models/user_model.dart';
 import 'services/local_storage_service.dart';
 import 'services/database_service.dart';
 import 'services/input_validator.dart';
+import 'services/location_service.dart';
+import 'services/zip_code_service.dart';
 import 'utils/password_validator.dart';
 
 class SignupPage extends StatefulWidget {
@@ -35,8 +38,14 @@ class _SignupPageState extends State<SignupPage> {
 
   final _supabase = Supabase.instance.client;
   bool _isLoading = false;
+  bool _loadingProvinces = true;
+  bool _loadingCities = false;
+  bool _loadingBarangays = false;
   int _currentStep = 1;
   late UserSignupData _signupData;
+  List<Map<String, dynamic>> _provinces = [];
+  List<Map<String, dynamic>> _cities = [];
+  List<Map<String, dynamic>> _barangays = [];
   String? _step1Error;
   String? _step2Error;
   String? _step3Error;
@@ -53,7 +62,88 @@ class _SignupPageState extends State<SignupPage> {
     _signupData = UserSignupData();
     _passwordStrength = PasswordStrength.weak;
     _loadExistingData();
+    _loadProvinces();
     _passwordController.addListener(_updatePasswordStrength);
+  }
+
+  Future<void> _loadProvinces() async {
+    try {
+      final provinces = await LocationService.fetchProvinces();
+      if (mounted) {
+        setState(() {
+          _provinces = provinces;
+          _loadingProvinces = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _loadingProvinces = false);
+    }
+  }
+
+  Future<void> _onProvinceSelected(String? provinceName) async {
+    if (provinceName == null) return;
+
+    final province = _provinces.firstWhere(
+      (p) => p['name'] == provinceName,
+      orElse: () => {},
+    );
+
+    _provinceController.text = provinceName;
+    _municipalityController.clear();
+    _barangayController.clear();
+
+    setState(() {
+      _cities = [];
+      _barangays = [];
+      _loadingCities = true;
+    });
+
+    try {
+      final cities =
+          await LocationService.fetchCitiesAndMunicipalities(province['code']);
+      if (mounted) {
+        setState(() {
+          _cities = cities;
+          _loadingCities = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _loadingCities = false);
+    }
+  }
+
+  Future<void> _onCitySelected(String? cityName) async {
+    if (cityName == null) return;
+
+    final city = _cities.firstWhere(
+      (c) => c['name'] == cityName,
+      orElse: () => {},
+    );
+
+    _municipalityController.text = cityName;
+    _barangayController.clear();
+
+    final zipCode = ZipCodeService.fromCityName(cityName);
+    if (zipCode != null) {
+      _zipCodeController.text = zipCode;
+    }
+
+    setState(() {
+      _barangays = [];
+      _loadingBarangays = true;
+    });
+
+    try {
+      final barangays = await LocationService.fetchBarangays(city['code']);
+      if (mounted) {
+        setState(() {
+          _barangays = barangays;
+          _loadingBarangays = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _loadingBarangays = false);
+    }
   }
 
   void _updatePasswordStrength() {
@@ -255,6 +345,7 @@ class _SignupPageState extends State<SignupPage> {
       final authResponse = await _supabase.auth.signUp(
         email: _signupData.email!,
         password: _signupData.password!,
+        emailRedirectTo: Uri.base.origin,
         data: {'role': _signupData.role},
       );
 
@@ -698,25 +789,79 @@ _provinceController.dispose();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(
-          controller: _provinceController,
-          decoration: InputDecoration(
-            labelText: 'Province',
-            hintText: 'Enter your province',
-            filled: true,
-            fillColor: const Color(0xFFF1F7F1),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide.none,
-            ),
-          ),
-        ),
+        _loadingProvinces
+            ? _loadingLocationBox()
+            : DropdownSearch<String>(
+                items: _provinces.map((p) => p['name'] as String).toList(),
+                selectedItem: _provinceController.text.isEmpty
+                    ? null
+                    : _provinceController.text,
+                popupProps: const PopupProps.menu(
+                  showSearchBox: true,
+                  fit: FlexFit.loose,
+                ),
+                dropdownDecoratorProps: DropDownDecoratorProps(
+                  dropdownSearchDecoration: _locationDecoration(
+                    'Province',
+                    Icons.map,
+                  ),
+                ),
+                onChanged: _onProvinceSelected,
+              ),
+        const SizedBox(height: 16),
+        _provinceController.text.isEmpty
+            ? _disabledLocationBox('Select a province first')
+            : _loadingCities
+                ? _loadingLocationBox()
+                : DropdownSearch<String>(
+                    items: _cities.map((c) => c['name'] as String).toList(),
+                    selectedItem: _municipalityController.text.isEmpty
+                        ? null
+                        : _municipalityController.text,
+                    popupProps: const PopupProps.menu(
+                      showSearchBox: true,
+                      fit: FlexFit.loose,
+                    ),
+                    dropdownDecoratorProps: DropDownDecoratorProps(
+                      dropdownSearchDecoration: _locationDecoration(
+                        'Municipality/City',
+                        Icons.location_city,
+                      ),
+                    ),
+                    onChanged: _onCitySelected,
+                  ),
+        const SizedBox(height: 16),
+        _municipalityController.text.isEmpty
+            ? _disabledLocationBox('Select a city first')
+            : _loadingBarangays
+                ? _loadingLocationBox()
+                : DropdownSearch<String>(
+                    items: _barangays.map((b) => b['name'] as String).toList(),
+                    selectedItem: _barangayController.text.isEmpty
+                        ? null
+                        : _barangayController.text,
+                    popupProps: const PopupProps.menu(
+                      showSearchBox: true,
+                      fit: FlexFit.loose,
+                    ),
+                    dropdownDecoratorProps: DropDownDecoratorProps(
+                      dropdownSearchDecoration: _locationDecoration(
+                        'Barangay',
+                        Icons.place,
+                      ),
+                    ),
+                    onChanged: (value) {
+                      setState(() {
+                        _barangayController.text = value ?? '';
+                      });
+                    },
+                  ),
         const SizedBox(height: 16),
         TextField(
-          controller: _municipalityController,
+          controller: _zipCodeController,
           decoration: InputDecoration(
-            labelText: 'Municipality/City',
-            hintText: 'Enter your municipality or city',
+            labelText: 'Zip Code',
+            hintText: 'Auto-filled from city when available',
             filled: true,
             fillColor: const Color(0xFFF1F7F1),
             border: OutlineInputBorder(
@@ -724,20 +869,7 @@ _provinceController.dispose();
               borderSide: BorderSide.none,
             ),
           ),
-        ),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _barangayController,
-          decoration: InputDecoration(
-            labelText: 'Barangay',
-            hintText: 'Enter your barangay',
-            filled: true,
-            fillColor: const Color(0xFFF1F7F1),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide.none,
-            ),
-          ),
+          keyboardType: TextInputType.number,
         ),
         const SizedBox(height: 16),
         TextField(
@@ -820,6 +952,43 @@ _provinceController.dispose();
           ),
         ),
       ],
+    );
+  }
+
+  InputDecoration _locationDecoration(String label, IconData icon) {
+    return InputDecoration(
+      labelText: label,
+      prefixIcon: Icon(icon),
+      filled: true,
+      fillColor: const Color(0xFFF1F7F1),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide.none,
+      ),
+    );
+  }
+
+  Widget _loadingLocationBox() {
+    return Container(
+      height: 56,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F7F1),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: const Center(child: CircularProgressIndicator()),
+    );
+  }
+
+  Widget _disabledLocationBox(String text) {
+    return Container(
+      height: 56,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F7F1),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Center(
+        child: Text(text, style: const TextStyle(color: Colors.black54)),
+      ),
     );
   }
 

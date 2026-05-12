@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'models/application_data.dart';
 import 'models/user_model.dart';
 import 'services/auth_service.dart';
 import 'services/database_service.dart';
@@ -24,8 +25,6 @@ class _LoginPageState extends State<LoginPage> {
   void initState() {
     super.initState();
   }
-
-
 
   Future<void> _signIn() async {
     setState(() => _isLoading = true);
@@ -71,10 +70,7 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
 
-      await _supabase.auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
+      await _supabase.auth.signInWithPassword(email: email, password: password);
 
       final user = _supabase.auth.currentUser!;
       final authId = user.id;
@@ -83,20 +79,58 @@ class _LoginPageState extends State<LoginPage> {
       var account = await DatabaseService.getCurrentAccount();
       if (account == null) {
         final pendingSignup = await LocalStorageService.loadSignupData();
-        final canUsePendingSignup =
-            _matchesCurrentUser(pendingSignup, user.email);
+        final pendingSeller =
+            await LocalStorageService.loadSellerApplicationData();
+        final pendingRider =
+            await LocalStorageService.loadRiderApplicationData();
+        final canUsePendingSignup = _matchesCurrentUser(
+          pendingSignup,
+          user.email,
+        );
+        final canUsePendingSeller = _matchesSellerApplication(
+          pendingSeller,
+          user.email,
+        );
+        final canUsePendingRider = _matchesRiderApplication(
+          pendingRider,
+          user.email,
+        );
+        final firstName = canUsePendingSeller
+            ? pendingSeller!.firstName
+            : canUsePendingRider
+            ? pendingRider!.firstName
+            : canUsePendingSignup
+            ? pendingSignup!.firstName ?? _displayNameFromEmail(user.email)
+            : _displayNameFromEmail(user.email);
+        final surname = canUsePendingSeller
+            ? pendingSeller!.surname
+            : canUsePendingRider
+            ? pendingRider!.surname
+            : canUsePendingSignup
+            ? pendingSignup!.surname ?? ''
+            : '';
+        final phoneNumber = canUsePendingSeller
+            ? pendingSeller!.contactPhone
+            : canUsePendingRider
+            ? pendingRider!.phoneNumber
+            : canUsePendingSignup
+            ? pendingSignup!.phoneNumber
+            : null;
+        final accountType = canUsePendingSeller
+            ? 'Seller'
+            : canUsePendingRider
+            ? 'Rider'
+            : canUsePendingSignup
+            ? _toDatabaseAccountType(pendingSignup!.accountType)
+            : 'Buyer';
 
         final accountId = await DatabaseService.insertUserProfile(
           authId: authId,
-          firstName: canUsePendingSignup
-              ? pendingSignup!.firstName ?? _displayNameFromEmail(user.email)
-              : _displayNameFromEmail(user.email),
-          surname: canUsePendingSignup ? pendingSignup!.surname ?? '' : '',
+          firstName: firstName,
+          surname: surname,
           email: user.email ?? '',
-          phoneNumber: canUsePendingSignup ? pendingSignup!.phoneNumber : null,
-          accountType: canUsePendingSignup
-              ? _toDatabaseAccountType(pendingSignup!.accountType)
-              : 'Buyer',
+          phoneNumber: phoneNumber,
+          accountType: accountType,
         );
         if (accountId == null) {
           throw Exception('Account profile could not be created');
@@ -127,21 +161,24 @@ class _LoginPageState extends State<LoginPage> {
       // Save login session for persistent login
       await AuthService.saveLoginSession(user);
 
-      final role = (account?['account_type'] as String? ?? 'Buyer').toLowerCase();
+      final role = (account?['account_type'] as String? ?? 'Buyer')
+          .toLowerCase();
       if (mounted) {
-        if (role == 'seller') {
-          Navigator.pushReplacementNamed(context, '/seller-dashboard');
+        if (role == 'admin') {
+          Navigator.pushReplacementNamed(context, '/admin-dashboard');
+        } else if (role == 'seller') {
+          await _handleSellerLogin(account);
         } else if (role == 'rider') {
-          Navigator.pushReplacementNamed(context, '/rider-dashboard');
+          await _handleRiderLogin(account);
         } else {
           Navigator.pushReplacementNamed(context, '/buyer-dashboard');
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     } finally {
       if (mounted) {
@@ -154,10 +191,7 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _isLoading = false);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text(message), backgroundColor: Colors.red),
       );
     }
   }
@@ -193,6 +227,115 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  Future<void> _handleSellerLogin(Map<String, dynamic>? account) async {
+    final accountId = account?['account_id'] as String?;
+    if (accountId == null) {
+      Navigator.pushReplacementNamed(context, '/login');
+      return;
+    }
+
+    await _syncPendingSellerApplication(accountId);
+    final application = await DatabaseService.getSellerApplicationByAccountId(
+      accountId,
+    );
+    final status = application?['status']?.toString();
+
+    if (status == 'Approved') {
+      Navigator.pushReplacementNamed(context, '/seller-dashboard');
+    } else {
+      if (status == 'Rejected') {
+        _showApplicationSnackBar(
+          'Your seller application was denied. Please resend your application.',
+        );
+      }
+      Navigator.pushReplacementNamed(
+        context,
+        '/application-status',
+        arguments: 'seller',
+      );
+    }
+  }
+
+  Future<void> _handleRiderLogin(Map<String, dynamic>? account) async {
+    final accountId = account?['account_id'] as String?;
+    if (accountId == null) {
+      Navigator.pushReplacementNamed(context, '/login');
+      return;
+    }
+
+    await _syncPendingRiderApplication(accountId);
+    final application = await DatabaseService.getRiderApplicationByAccountId(
+      accountId,
+    );
+    final status = application?['status']?.toString();
+
+    if (status == 'Approved') {
+      Navigator.pushReplacementNamed(context, '/rider-dashboard');
+    } else {
+      if (status == 'Rejected') {
+        _showApplicationSnackBar(
+          'Your rider application was denied. Please resend your application.',
+        );
+      }
+      Navigator.pushReplacementNamed(
+        context,
+        '/application-status',
+        arguments: 'rider',
+      );
+    }
+  }
+
+  Future<void> _syncPendingSellerApplication(String accountId) async {
+    final data = await LocalStorageService.loadSellerApplicationData();
+    if (!_matchesSellerApplication(data, _supabase.auth.currentUser?.email)) {
+      return;
+    }
+
+    final saved = await DatabaseService.saveSellerApplication(
+      accountId: accountId,
+      storeName: data!.storeName,
+      storeDescription: data.storeDescription,
+      province: data.province,
+      city: data.city,
+      barangay: data.barangay,
+      street: data.street,
+      houseNumber: data.houseNumber,
+      zipCode: data.zipCode,
+      contactPhone: data.contactPhone,
+    );
+    if (saved) await LocalStorageService.clearSellerApplicationData();
+  }
+
+  Future<void> _syncPendingRiderApplication(String accountId) async {
+    final data = await LocalStorageService.loadRiderApplicationData();
+    if (!_matchesRiderApplication(data, _supabase.auth.currentUser?.email)) {
+      return;
+    }
+
+    final saved = await DatabaseService.saveRiderApplication(
+      accountId: accountId,
+      licenseNumber: data!.licenseNumber,
+      vehicleType: data.vehicleType,
+      plateNumber: data.plateNumber,
+      documentNotes: data.documentNotes,
+    );
+    if (saved) await LocalStorageService.clearRiderApplicationData();
+  }
+
+  bool _matchesSellerApplication(SellerApplicationData? data, String? email) {
+    return data?.email.trim().toLowerCase() == email?.trim().toLowerCase();
+  }
+
+  bool _matchesRiderApplication(RiderApplicationData? data, String? email) {
+    return data?.email.trim().toLowerCase() == email?.trim().toLowerCase();
+  }
+
+  void _showApplicationSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.orange),
+    );
+  }
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -216,7 +359,10 @@ class _LoginPageState extends State<LoginPage> {
             ),
             child: Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 24,
+                  horizontal: 16,
+                ),
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 900),
                   child: Container(
@@ -277,10 +423,7 @@ class _LoginPageState extends State<LoginPage> {
         children: [
           const Text(
             'Sign In',
-            style: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 24),
           TextField(
@@ -322,7 +465,6 @@ class _LoginPageState extends State<LoginPage> {
             obscureText: !_showPassword,
           ),
 
-
           const SizedBox(height: 24),
           SizedBox(
             height: 52,
@@ -336,7 +478,10 @@ class _LoginPageState extends State<LoginPage> {
               onPressed: _isLoading ? null : _signIn,
               child: _isLoading
                   ? const CircularProgressIndicator(color: Colors.white)
-                  : const Text('Sign In', style: TextStyle(fontSize: 16, color: Colors.white)),
+                  : const Text(
+                      'Sign In',
+                      style: TextStyle(fontSize: 16, color: Colors.white),
+                    ),
             ),
           ),
           const SizedBox(height: 24),
@@ -362,7 +507,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Widget _buildSidePanel(BuildContext context, {bool isSmall = false}) {
-final panel = Container(
+    final panel = Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [Color(0xFF0E5C40), Color(0xFF2B8C5A), Color(0xFF4DBB7B)],

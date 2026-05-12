@@ -78,6 +78,16 @@ class DatabaseService {
 
       if (existingAccount != null) {
         debugPrint('Account already exists for auth_id: $authId');
+        await _supabase
+            .from('account')
+            .update({
+              'firstname': firstName,
+              'surname': surname,
+              'email': email,
+              'phone_number': _blankToNull(phoneNumber),
+              'account_type': accountType,
+            })
+            .eq('auth_id', authId);
         return existingAccount['account_id'] as String?;
       }
 
@@ -97,6 +107,33 @@ class DatabaseService {
 
       return response['account_id'] as String?;
     } on PostgrestException catch (e) {
+      if (e.code == '23505') {
+        try {
+          final existingByEmail = await _supabase
+              .from('account')
+              .select('account_id')
+              .eq('email', email)
+              .maybeSingle();
+
+          final accountId = existingByEmail?['account_id'] as String?;
+          if (accountId != null) {
+            await _supabase
+                .from('account')
+                .update({
+                  'auth_id': authId,
+                  'firstname': firstName,
+                  'surname': surname,
+                  'phone_number': _blankToNull(phoneNumber),
+                  'account_type': accountType,
+                })
+                .eq('account_id', accountId);
+            return accountId;
+          }
+        } catch (recoveryError) {
+          _logDbError('Failed to recover duplicate account insert',
+              recoveryError);
+        }
+      }
       debugPrint('=== PostgreSQL Error ===');
       debugPrint('Error Code: ${e.code}');
       debugPrint('Error Message: ${e.message}');
@@ -187,7 +224,8 @@ class DatabaseService {
       if (city != null) updateData['city'] = _blankToNull(city);
       if (barangay != null) updateData['barangay'] = _blankToNull(barangay);
       if (street != null) updateData['street'] = _blankToNull(street);
-      if (houseNumber != null) updateData['house_number'] = _blankToNull(houseNumber);
+      if (houseNumber != null)
+        updateData['house_number'] = _blankToNull(houseNumber);
       if (zipCode != null) updateData['zip_code'] = _blankToNull(zipCode);
       if (isDefault != null) updateData['is_default'] = isDefault;
 
@@ -208,17 +246,17 @@ class DatabaseService {
   // Delete address
   static Future<void> deleteAddress(String addressId) async {
     try {
-      await _supabase
-          .from('address')
-          .delete()
-          .eq('address_id', addressId);
+      await _supabase.from('address').delete().eq('address_id', addressId);
     } catch (e) {
       _logDbError('Failed to delete address', e);
     }
   }
 
-// Set address as default
-  static Future<void> setDefaultAddress(String accountId, String addressId) async {
+  // Set address as default
+  static Future<void> setDefaultAddress(
+    String accountId,
+    String addressId,
+  ) async {
     try {
       // Set all addresses to not default
       await _supabase
@@ -290,15 +328,13 @@ class DatabaseService {
     required int quantity,
   }) async {
     try {
-      await _supabase
-          .from('order_items')
-          .insert({
-            'order_id': orderId,
-            'product_id': productId,
-            'quantity': quantity,
-            'unit_price_at_sale': unitPriceAtSale,
-            'subtotal': unitPriceAtSale * quantity,
-          });
+      await _supabase.from('order_items').insert({
+        'order_id': orderId,
+        'product_id': productId,
+        'quantity': quantity,
+        'unit_price_at_sale': unitPriceAtSale,
+        'subtotal': unitPriceAtSale * quantity,
+      });
     } catch (e) {
       _logDbError('Failed to insert order item', e);
     }
@@ -323,7 +359,8 @@ class DatabaseService {
   }
 
   static Future<List<Map<String, dynamic>>> getSellerProducts(
-      String storeId) async {
+    String storeId,
+  ) async {
     try {
       final response = await _supabase
           .from('product')
@@ -380,16 +417,19 @@ class DatabaseService {
     required bool isActive,
   }) async {
     try {
-      await _supabase.from('product').update({
-        'category': _blankToNull(category),
-        'name': name.trim(),
-        'description': _blankToNull(description),
-        'price': price,
-        'stock_quantity': stockQuantity,
-        'sku': _blankToNull(sku),
-        'main_image_url': _blankToNull(mainImageUrl),
-        'is_active': isActive,
-      }).eq('product_id', productId);
+      await _supabase
+          .from('product')
+          .update({
+            'category': _blankToNull(category),
+            'name': name.trim(),
+            'description': _blankToNull(description),
+            'price': price,
+            'stock_quantity': stockQuantity,
+            'sku': _blankToNull(sku),
+            'main_image_url': _blankToNull(mainImageUrl),
+            'is_active': isActive,
+          })
+          .eq('product_id', productId);
       return true;
     } catch (e) {
       _logDbError('Failed to update product', e);
@@ -401,7 +441,8 @@ class DatabaseService {
     try {
       await _supabase
           .from('product')
-          .update({'is_active': false}).eq('product_id', productId);
+          .update({'is_active': false})
+          .eq('product_id', productId);
       return true;
     } catch (e) {
       _logDbError('Failed to delete product', e);
@@ -425,11 +466,14 @@ class DatabaseService {
   }
 
   static Future<List<Map<String, dynamic>>> getSellerOrders(
-      String sellerAccountId) async {
+    String sellerAccountId,
+  ) async {
     try {
       final response = await _supabase
           .from('orders')
-          .select('*, account!orders_buyer_account_id_fkey(firstname, surname, email), order_items(*, product(name, main_image_url))')
+          .select(
+            '*, account!orders_buyer_account_id_fkey(firstname, surname, email), order_items(*, product(name, main_image_url))',
+          )
           .eq('seller_account_id', sellerAccountId)
           .order('order_date', ascending: false);
 
@@ -440,7 +484,9 @@ class DatabaseService {
     }
   }
 
-  static Map<String, dynamic> summarizeSales(List<Map<String, dynamic>> orders) {
+  static Map<String, dynamic> summarizeSales(
+    List<Map<String, dynamic>> orders,
+  ) {
     var revenue = 0.0;
     var itemsSold = 0;
 
@@ -503,7 +549,8 @@ class DatabaseService {
 
   // Get cart items for user
   static Future<List<Map<String, dynamic>>> getCartItems(
-      String accountId) async {
+    String accountId,
+  ) async {
     try {
       final response = await _supabase
           .from('cart')
@@ -524,7 +571,8 @@ class DatabaseService {
     try {
       await _supabase
           .from('cart')
-          .update({'quantity': quantity}).eq('id', cartId);
+          .update({'quantity': quantity})
+          .eq('id', cartId);
     } catch (e) {
       _logDbError('Failed to update cart item', e);
     }
@@ -608,17 +656,208 @@ class DatabaseService {
 
   // Get seller application by account_id
   static Future<Map<String, dynamic>?> getSellerApplicationByAccountId(
-      String accountId) async {
+    String accountId,
+  ) async {
     try {
       final response = await _supabase
           .from('seller_application')
           .select()
           .eq('account_id', accountId)
-          .single();
+          .maybeSingle();
       return response;
     } catch (e) {
       _logDbError('Failed to get seller application', e);
       return null;
+    }
+  }
+
+  static Future<bool> saveSellerApplication({
+    required String accountId,
+    required String storeName,
+    String? storeDescription,
+    String? province,
+    required String city,
+    String? barangay,
+    String? street,
+    String? houseNumber,
+    String? zipCode,
+    required String contactPhone,
+  }) async {
+    final existing = await getSellerApplicationByAccountId(accountId);
+    if (existing == null) {
+      return insertSellerApplication(
+        accountId: accountId,
+        storeName: storeName,
+        storeDescription: storeDescription,
+        province: province,
+        city: city,
+        barangay: barangay,
+        street: street,
+        houseNumber: houseNumber,
+        zipCode: zipCode,
+        contactPhone: contactPhone,
+      );
+    }
+
+    if (existing['status'] != 'Rejected') return true;
+
+    try {
+      await _supabase
+          .from('seller_application')
+          .update({
+            'store_name': storeName.trim(),
+            'store_description': _blankToNull(storeDescription),
+            'province': _blankToNull(province),
+            'city': city.trim(),
+            'barangay': _blankToNull(barangay),
+            'street': _blankToNull(street),
+            'house_number': _blankToNull(houseNumber),
+            'zip_code': _blankToNull(zipCode),
+            'contact_phone': contactPhone.trim(),
+            'status': 'Pending Review',
+            'review_notes': null,
+            'date_approved': null,
+            'submission_date': DateTime.now().toIso8601String(),
+          })
+          .eq('account_id', accountId);
+      return true;
+    } catch (e) {
+      _logDbError('Failed to resubmit seller application', e);
+      return false;
+    }
+  }
+
+  static Future<bool> insertRiderApplication({
+    required String accountId,
+    required String licenseNumber,
+    required String vehicleType,
+    required String plateNumber,
+    String? documentNotes,
+  }) async {
+    try {
+      await _supabase.from('rider_application').insert({
+        'account_id': accountId,
+        'license_number': licenseNumber.trim(),
+        'vehicle_type': vehicleType.trim(),
+        'plate_number': plateNumber.trim(),
+        'documents_path': _blankToNull(documentNotes) == null
+            ? null
+            : {'notes': documentNotes!.trim()},
+        'status': 'Pending Review',
+      });
+      return true;
+    } catch (e) {
+      _logDbError('Failed to submit rider application', e);
+      return false;
+    }
+  }
+
+  static Future<Map<String, dynamic>?> getRiderApplicationByAccountId(
+    String accountId,
+  ) async {
+    try {
+      final response = await _supabase
+          .from('rider_application')
+          .select()
+          .eq('account_id', accountId)
+          .maybeSingle();
+      return response;
+    } catch (e) {
+      _logDbError('Failed to get rider application', e);
+      return null;
+    }
+  }
+
+  static Future<bool> saveRiderApplication({
+    required String accountId,
+    required String licenseNumber,
+    required String vehicleType,
+    required String plateNumber,
+    String? documentNotes,
+  }) async {
+    final existing = await getRiderApplicationByAccountId(accountId);
+    if (existing == null) {
+      return insertRiderApplication(
+        accountId: accountId,
+        licenseNumber: licenseNumber,
+        vehicleType: vehicleType,
+        plateNumber: plateNumber,
+        documentNotes: documentNotes,
+      );
+    }
+
+    if (existing['status'] != 'Rejected') return true;
+
+    try {
+      await _supabase
+          .from('rider_application')
+          .update({
+            'license_number': licenseNumber.trim(),
+            'vehicle_type': vehicleType.trim(),
+            'plate_number': plateNumber.trim(),
+            'documents_path': _blankToNull(documentNotes) == null
+                ? null
+                : {'notes': documentNotes!.trim()},
+            'status': 'Pending Review',
+            'review_notes': null,
+            'date_approved': null,
+            'application_date': DateTime.now().toIso8601String(),
+          })
+          .eq('account_id', accountId);
+      return true;
+    } catch (e) {
+      _logDbError('Failed to resubmit rider application', e);
+      return false;
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getRiderApplications() async {
+    try {
+      final response = await _supabase
+          .from('rider_application')
+          .select('*, account(firstname, surname, email, phone_number)');
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      _logDbError('Failed to fetch rider applications', e);
+      return [];
+    }
+  }
+
+  static Future<bool> approveRiderApplication({
+    required String applicationId,
+    required String accountId,
+  }) async {
+    try {
+      await _supabase
+          .from('rider_application')
+          .update({
+            'status': 'Approved',
+            'date_approved': DateTime.now().toIso8601String(),
+          })
+          .eq('rider_app_id', applicationId);
+
+      await _supabase
+          .from('account')
+          .update({'account_type': 'Rider', 'is_verified': true})
+          .eq('account_id', accountId);
+      return true;
+    } catch (e) {
+      _logDbError('Failed to approve rider application', e);
+      return false;
+    }
+  }
+
+  static Future<void> rejectRiderApplication({
+    required String applicationId,
+    required String reviewNotes,
+  }) async {
+    try {
+      await _supabase
+          .from('rider_application')
+          .update({'status': 'Rejected', 'review_notes': reviewNotes})
+          .eq('rider_app_id', applicationId);
+    } catch (e) {
+      _logDbError('Failed to reject rider application', e);
     }
   }
 
@@ -672,14 +911,10 @@ class DatabaseService {
     try {
       await _supabase
           .from('seller_application')
-          .update({
-            'status': 'Rejected',
-            'review_notes': reviewNotes,
-          })
+          .update({'status': 'Rejected', 'review_notes': reviewNotes})
           .eq('application_id', applicationId);
     } catch (e) {
       _logDbError('Failed to reject seller application', e);
     }
   }
 }
-

@@ -3,12 +3,12 @@ import 'auth_service.dart';
 
 /// Route protection types
 enum RouteProtection {
-  public,           // No authentication required
-  authenticated,    // Just needs to be logged in
-  adminOnly,        // Admin role required
-  sellerOnly,       // Seller role required
-  buyerOnly,        // Buyer role required
-  riderOnly,        // Rider role required
+  public, // No authentication required
+  authenticated, // Just needs to be logged in
+  adminOnly, // Admin role required
+  sellerOnly, // Seller role required
+  buyerOnly, // Buyer role required
+  riderOnly, // Rider role required
 }
 
 /// Protected route wrapper to enforce access control
@@ -104,7 +104,7 @@ class _ProtectedRouteState extends State<ProtectedRoute> {
           _redirectToLogin();
           return false;
         }
-        final hasAccess = await AuthService.isRider();
+        final hasAccess = await AuthService.verifyRiderAccess();
         if (!hasAccess) {
           AuthService.logSecurityEvent(
             'UNAUTHORIZED_ACCESS',
@@ -128,7 +128,11 @@ class _ProtectedRouteState extends State<ProtectedRoute> {
   void _redirectToHome() {
     if (mounted) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        Navigator.pushNamedAndRemoveUntil(context, widget.fallbackRoute ?? '/', (route) => false);
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          widget.fallbackRoute ?? '/',
+          (route) => false,
+        );
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('You do not have permission to access this page'),
@@ -152,9 +156,7 @@ class _ProtectedRouteState extends State<ProtectedRoute> {
 
         if (snapshot.hasError || !(snapshot.data ?? false)) {
           return const Scaffold(
-            body: Center(
-              child: Text('Unauthorized Access'),
-            ),
+            body: Center(child: Text('Unauthorized Access')),
           );
         }
 

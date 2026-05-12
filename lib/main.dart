@@ -8,9 +8,13 @@ import 'search_page.dart';
 import 'buyer_dashboard.dart';
 import 'admin_dashboard.dart';
 import 'seller_dashboard.dart';
+import 'rider_dashboard.dart';
 import 'checkout_page.dart';
 import 'product_page.dart';
 import 'seller_registration.dart';
+import 'rider_registration.dart';
+import 'application_status_page.dart';
+import 'reset_password_page.dart';
 import 'services/database_service.dart';
 import 'services/protected_route.dart';
 
@@ -38,11 +42,13 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
       ),
       debugShowCheckedModeBanner: false,
-      initialRoute: '/',
+      initialRoute:
+          Uri.base.fragment.contains('type=recovery') ? '/reset-password' : '/',
       routes: {
         '/': (context) => const MyHomePage(title: 'FoodTaxi Omega'),
         '/login': (context) => const LoginPage(),
         '/signup': (context) => const SignupPage(),
+        '/reset-password': (context) => const ResetPasswordPage(),
         '/profile': (context) => ProtectedRoute(
           protection: RouteProtection.authenticated,
           child: UserDetailsPage(),
@@ -63,6 +69,10 @@ class MyApp extends StatelessWidget {
           protection: RouteProtection.sellerOnly,
           child: const SellerDashboard(),
         ),
+        '/rider-dashboard': (context) => ProtectedRoute(
+          protection: RouteProtection.riderOnly,
+          child: RiderDashboard(),
+        ),
         '/admin-dashboard': (context) => ProtectedRoute(
           protection: RouteProtection.adminOnly,
           child: const AdminDashboard(),
@@ -72,6 +82,12 @@ class MyApp extends StatelessWidget {
           child: const CheckoutPage(),
         ),
         '/seller-registration': (context) => const SellerRegistrationPage(),
+        '/rider-registration': (context) => const RiderRegistrationPage(),
+        '/application-status': (context) {
+          final role =
+              ModalRoute.of(context)?.settings.arguments?.toString() ?? 'seller';
+          return ApplicationStatusPage(role: role);
+        },
       },
       onGenerateRoute: (settings) {
         if (settings.name?.startsWith('/product/') ?? false) {
@@ -133,14 +149,14 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> _loadProductsFromDatabase() async {
     try {
       final products = await DatabaseService.fetchProducts();
-      
+
       // Group products by category
       Map<String, List<Map<String, dynamic>>> grouped = {};
-      
+
       for (var product in products) {
         final category = product['category'] ?? 'Other';
         final displayName = categoryNames[category] ?? category;
-        
+
         if (!grouped.containsKey(displayName)) {
           grouped[displayName] = [];
         }
@@ -168,18 +184,14 @@ class _MyHomePageState extends State<MyHomePage> {
             onPressed: () => Navigator.pushNamed(context, '/signup'),
             icon: const Icon(Icons.person_add, size: 18),
             label: const Text('Create Account'),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.white,
-            ),
+            style: TextButton.styleFrom(foregroundColor: Colors.white),
           ),
           const SizedBox(width: 16),
           TextButton.icon(
             onPressed: () => Navigator.pushNamed(context, '/login'),
             icon: const Icon(Icons.login, size: 18),
             label: const Text('Sign In'),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.white,
-            ),
+            style: TextButton.styleFrom(foregroundColor: Colors.white),
           ),
         ],
       ),
@@ -187,11 +199,13 @@ class _MyHomePageState extends State<MyHomePage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-
             // STATUS
             Padding(
               padding: const EdgeInsets.all(12),
-              child: Text(status, style: const TextStyle(fontWeight: FontWeight.bold)),
+              child: Text(
+                status,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
 
             // HERO
@@ -213,7 +227,10 @@ class _MyHomePageState extends State<MyHomePage> {
                   Positioned.fill(
                     child: Opacity(
                       opacity: 0.1,
-                      child: Image.asset('assets/images/tacos.jpg', fit: BoxFit.cover),
+                      child: Image.asset(
+                        'assets/images/tacos.jpg',
+                        fit: BoxFit.cover,
+                      ),
                     ),
                   ),
                   const Center(
@@ -224,9 +241,10 @@ class _MyHomePageState extends State<MyHomePage> {
                           "Your Philippine Marketplace",
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 28,
-                              fontWeight: FontWeight.bold),
+                            color: Colors.white,
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         SizedBox(height: 8),
                         Text(
@@ -255,24 +273,24 @@ class _MyHomePageState extends State<MyHomePage> {
                     child: CircularProgressIndicator(),
                   )
                 : foodCategories.isEmpty
-                    ? const Padding(
-                        padding: EdgeInsets.all(20),
-                        child: Text('No products available'),
-                      )
-                    : Column(
-                        children: foodCategories.entries.map<Widget>((entry) {
-                          final categoryKey = entry.key;
-                          final categoryValue = entry.value;
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 10),
-                              sectionTitle(categoryKey),
-                              horizontalFoodList(categoryValue),
-                            ],
-                          );
-                        }).toList(),
-                      ),
+                ? const Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Text('No products available'),
+                  )
+                : Column(
+                    children: foodCategories.entries.map<Widget>((entry) {
+                      final categoryKey = entry.key;
+                      final categoryValue = entry.value;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 10),
+                          sectionTitle(categoryKey),
+                          horizontalFoodList(categoryValue),
+                        ],
+                      );
+                    }).toList(),
+                  ),
 
             const SizedBox(height: 20),
 
@@ -292,10 +310,13 @@ class _MyHomePageState extends State<MyHomePage> {
                   ),
                   const SizedBox(height: 15),
                   ElevatedButton(
-                    onPressed: () => Navigator.pushNamed(context, '/seller-registration'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
+                    onPressed: () =>
+                        Navigator.pushNamed(context, '/seller-registration'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.amber,
+                    ),
                     child: const Text("Start Selling"),
-                  )
+                  ),
                 ],
               ),
             ),
@@ -359,11 +380,15 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                     Padding(
                       padding: const EdgeInsets.all(6),
-                      child: Text(item['name'] ?? 'Product',
-                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      child: Text(
+                        item['name'] ?? 'Product',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
                     ),
-                    Text("₱${item['price']?.toStringAsFixed(2) ?? 'N/A'}",
-                        style: const TextStyle(color: Colors.green)),
+                    Text(
+                      "₱${item['price']?.toStringAsFixed(2) ?? 'N/A'}",
+                      style: const TextStyle(color: Colors.green),
+                    ),
                   ],
                 ),
               ),
