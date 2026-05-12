@@ -34,7 +34,7 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
       // Fetch profile
       final profileResponse = await _supabase
           .from('account')
-          .select('firstname, surname, email, phone_number, username, account_type, profile_picture_url')
+          .select('firstname, surname, email, phone_number, account_type')
           .eq('account_id', _accountId!)
           .single();
       _userProfile = profileResponse;
@@ -86,20 +86,16 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
                           children: [
                             CircleAvatar(
                               radius: 60,
-                              backgroundImage: _userProfile?['profile_picture_url'] != null
-                                  ? NetworkImage(_userProfile!['profile_picture_url'])
-                                  : null,
                               backgroundColor: Colors.green,
-                              child: _userProfile?['profile_picture_url'] == null
-                                  ? Text(
-                                      _userProfile?['firstname']?[0].toUpperCase() ?? 'U',
-                                      style: const TextStyle(
-                                        fontSize: 50,
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    )
-                                  : null,
+                              child: Text(
+                                _userProfile?['firstname']?[0].toUpperCase() ??
+                                    'U',
+                                style: const TextStyle(
+                                  fontSize: 50,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
                             Positioned(
                               bottom: 0,
@@ -123,16 +119,6 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
                           subtitle: Text('${_userProfile?['firstname'] ?? ''} ${_userProfile?['surname'] ?? ''}'),
                         ),
                       ),
-
-                      // Username (optional)
-                      if (_userProfile?['username'] != null && _userProfile!['username'].isNotEmpty)
-                        Card(
-                          child: ListTile(
-                            leading: const Icon(Icons.alternate_email, color: Color.fromARGB(255, 30, 83, 32)),
-                            title: const Text('Username', style: TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: Text(_userProfile!['username']),
-                          ),
-                        ),
 
                       // Email
                       Card(
