@@ -646,9 +646,36 @@ class DatabaseService {
     try {
       final response = await _supabase
           .from('seller_application')
-          .select('*, account(firstname, surname, email)');
+          .select('''
+            application_id,
+            account_id,
+            store_name,
+            store_description,
+            city,
+            province,
+            barangay,
+            street,
+            house_number,
+            contact_phone,
+            status,
+            submission_date,
+            review_notes,
+            date_approved,
+            account (
+              firstname,
+              surname,
+              email,
+              phone_number
+            )
+          ''')
+          .order('submission_date', ascending: false);
+
+      debugPrint('Seller Applications Response: $response');
+
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
+      debugPrint('=== GET SELLER APPLICATIONS ERROR ===');
+      debugPrint(e.toString());
       _logDbError('Failed to fetch seller applications', e);
       return [];
     }
@@ -815,9 +842,32 @@ class DatabaseService {
     try {
       final response = await _supabase
           .from('rider_application')
-          .select('*, account(firstname, surname, email, phone_number)');
+          .select('''
+            rider_app_id,
+            account_id,
+            license_number,
+            vehicle_type,
+            plate_number,
+            documents_path,
+            status,
+            application_date,
+            review_notes,
+            date_approved,
+            account (
+              firstname,
+              surname,
+              email,
+              phone_number
+            )
+          ''')
+          .order('application_date', ascending: false);
+
+      debugPrint('Rider Applications Response: $response');
+
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
+      debugPrint('=== GET RIDER APPLICATIONS ERROR ===');
+      debugPrint(e.toString());
       _logDbError('Failed to fetch rider applications', e);
       return [];
     }
