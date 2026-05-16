@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:dropdown_search/dropdown_search.dart';
 
 import 'models/address_model.dart';
 import 'services/database_service.dart';
@@ -53,13 +54,80 @@ class _AddressPageState extends State<AddressPage> {
   }
 
   Future<void> _openAddressForm([Address? address]) async {
-    final provinceController = TextEditingController(text: address?.province ?? '');
-    final cityController = TextEditingController(text: address?.city ?? '');
-    final barangayController = TextEditingController(text: address?.barangay ?? '');
     final streetController = TextEditingController(text: address?.street ?? '');
     final houseController = TextEditingController(text: address?.houseNumber ?? '');
     final zipController = TextEditingController(text: address?.zipCode ?? '');
+    var provinces = await LocationService.fetchProvinces();
+    var cities = <Map<String, dynamic>>[];
+    var barangays = <Map<String, dynamic>>[];
+    var selectedProvince =
+        (address?.province.trim().isNotEmpty ?? false) ? address!.province : null;
+    var selectedCity =
+        (address?.city.trim().isNotEmpty ?? false) ? address!.city : null;
+    var selectedBarangay =
+        (address?.barangay.trim().isNotEmpty ?? false) ? address!.barangay : null;
+    var loadingCities = false;
+    var loadingBarangays = false;
     var isDefault = address?.isDefault ?? _addresses.isEmpty;
+
+    Future<void> loadCities(StateSetter setDialogState, String provinceName) async {
+      final province = provinces.firstWhere(
+        (p) => p['name'] == provinceName,
+        orElse: () => {},
+      );
+      setDialogState(() {
+        loadingCities = true;
+        cities = [];
+        barangays = [];
+        selectedCity = null;
+        selectedBarangay = null;
+        zipController.clear();
+      });
+      final loaded = await LocationService.fetchCitiesAndMunicipalities(
+        province['code'],
+      );
+      if (!mounted) return;
+      setDialogState(() {
+        cities = loaded;
+        loadingCities = false;
+      });
+    }
+
+    Future<void> loadBarangays(StateSetter setDialogState, String cityName) async {
+      final city = cities.firstWhere(
+        (c) => c['name'] == cityName,
+        orElse: () => {},
+      );
+      setDialogState(() {
+        loadingBarangays = true;
+        barangays = [];
+        selectedBarangay = null;
+        zipController.clear();
+      });
+      final loaded = await LocationService.fetchBarangays(city['code']);
+      if (!mounted) return;
+      setDialogState(() {
+        barangays = loaded;
+        loadingBarangays = false;
+      });
+    }
+
+    if (selectedProvince != null && selectedProvince!.isNotEmpty) {
+      final province = provinces.firstWhere(
+        (p) => p['name'] == selectedProvince,
+        orElse: () => {},
+      );
+      cities = await LocationService.fetchCitiesAndMunicipalities(
+        province['code'],
+      );
+    }
+    if (selectedCity != null && selectedCity!.isNotEmpty) {
+      final city = cities.firstWhere(
+        (c) => c['name'] == selectedCity,
+        orElse: () => {},
+      );
+      barangays = await LocationService.fetchBarangays(city['code']);
+    }
 
     await showDialog<void>(
       context: context,
@@ -78,18 +146,73 @@ class _AddressPageState extends State<AddressPage> {
                   controller: streetController,
                   decoration: const InputDecoration(labelText: 'Street'),
                 ),
-                TextField(
-                  controller: barangayController,
-                  decoration: const InputDecoration(labelText: 'Barangay *'),
+                DropdownSearch<String>(
+                  items: provinces.map((p) => p['name'] as String).toList(),
+                  selectedItem: selectedProvince,
+                  popupProps: const PopupProps.menu(
+                    showSearchBox: true,
+                    fit: FlexFit.loose,
+                  ),
+                  dropdownDecoratorProps: const DropDownDecoratorProps(
+                    dropdownSearchDecoration: InputDecoration(
+                      labelText: 'Province *',
+                      prefixIcon: Icon(Icons.map),
+                    ),
+                  ),
+                  onChanged: (value) {
+                    if (value == null) return;
+                    selectedProvince = value;
+                    loadCities(setDialogState, value);
+                  },
                 ),
-                TextField(
-                  controller: cityController,
-                  decoration: const InputDecoration(labelText: 'City/Municipality *'),
-                ),
-                TextField(
-                  controller: provinceController,
-                  decoration: const InputDecoration(labelText: 'Province *'),
-                ),
+                const SizedBox(height: 12),
+                if (selectedProvince == null)
+                  _disabledLocationBox('Select a province first')
+                else if (loadingCities)
+                  _loadingLocationBox()
+                else
+                  DropdownSearch<String>(
+                    items: cities.map((c) => c['name'] as String).toList(),
+                    selectedItem: selectedCity,
+                    popupProps: const PopupProps.menu(
+                      showSearchBox: true,
+                      fit: FlexFit.loose,
+                    ),
+                    dropdownDecoratorProps: const DropDownDecoratorProps(
+                      dropdownSearchDecoration: InputDecoration(
+                        labelText: 'City/Municipality *',
+                        prefixIcon: Icon(Icons.location_city),
+                      ),
+                    ),
+                    onChanged: (value) {
+                      if (value == null) return;
+                      selectedCity = value;
+                      loadBarangays(setDialogState, value);
+                    },
+                  ),
+                const SizedBox(height: 12),
+                if (selectedCity == null)
+                  _disabledLocationBox('Select a city first')
+                else if (loadingBarangays)
+                  _loadingLocationBox()
+                else
+                  DropdownSearch<String>(
+                    items: barangays.map((b) => b['name'] as String).toList(),
+                    selectedItem: selectedBarangay,
+                    popupProps: const PopupProps.menu(
+                      showSearchBox: true,
+                      fit: FlexFit.loose,
+                    ),
+                    dropdownDecoratorProps: const DropDownDecoratorProps(
+                      dropdownSearchDecoration: InputDecoration(
+                        labelText: 'Barangay *',
+                        prefixIcon: Icon(Icons.place),
+                      ),
+                    ),
+                    onChanged: (value) {
+                      setDialogState(() => selectedBarangay = value);
+                    },
+                  ),
                 TextField(
                   controller: zipController,
                   decoration: const InputDecoration(
@@ -116,9 +239,9 @@ class _AddressPageState extends State<AddressPage> {
               onPressed: () async {
                 final accountId = _account?['account_id']?.toString();
                 if (accountId == null ||
-                    provinceController.text.trim().isEmpty ||
-                    cityController.text.trim().isEmpty ||
-                    barangayController.text.trim().isEmpty) {
+                    selectedProvince == null ||
+                    selectedCity == null ||
+                    selectedBarangay == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Fill in required address fields')),
                   );
@@ -129,9 +252,9 @@ class _AddressPageState extends State<AddressPage> {
                 final point = await LocationService.geocodeAddress(
                   houseNumber: houseController.text,
                   street: streetController.text,
-                  barangay: barangayController.text,
-                  city: cityController.text,
-                  province: provinceController.text,
+                  barangay: selectedBarangay,
+                  city: selectedCity,
+                  province: selectedProvince,
                 );
                 if (point == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -148,9 +271,9 @@ class _AddressPageState extends State<AddressPage> {
                 if (address == null) {
                   final saved = await DatabaseService.insertAddress(
                     accountId: accountId,
-                    province: provinceController.text,
-                    city: cityController.text,
-                    barangay: barangayController.text,
+                    province: selectedProvince,
+                    city: selectedCity,
+                    barangay: selectedBarangay,
                     street: streetController.text,
                     houseNumber: houseController.text,
                     zipCode: resolvedZipCode,
@@ -162,9 +285,9 @@ class _AddressPageState extends State<AddressPage> {
                 } else {
                   await DatabaseService.updateAddress(
                     addressId: address.addressId!,
-                    province: provinceController.text,
-                    city: cityController.text,
-                    barangay: barangayController.text,
+                    province: selectedProvince,
+                    city: selectedCity,
+                    barangay: selectedBarangay,
                     street: streetController.text,
                     houseNumber: houseController.text,
                     zipCode: resolvedZipCode,
@@ -189,12 +312,29 @@ class _AddressPageState extends State<AddressPage> {
       ),
     );
 
-    provinceController.dispose();
-    cityController.dispose();
-    barangayController.dispose();
     streetController.dispose();
     houseController.dispose();
     zipController.dispose();
+  }
+
+  Widget _loadingLocationBox() {
+    return Container(
+      height: 56,
+      alignment: Alignment.center,
+      child: const CircularProgressIndicator(),
+    );
+  }
+
+  Widget _disabledLocationBox(String text) {
+    return Container(
+      height: 56,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(text, style: const TextStyle(color: Colors.grey)),
+    );
   }
 
   @override

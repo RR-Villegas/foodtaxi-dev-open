@@ -7,8 +7,10 @@ import 'models/application_data.dart';
 import 'models/picked_document.dart';
 import 'services/database_service.dart';
 import 'services/input_validator.dart';
+import 'services/location_service.dart';
 import 'services/local_storage_service.dart';
 import 'utils/password_validator.dart';
+import 'package:dropdown_search/dropdown_search.dart';
 
 class RiderRegistrationPage extends StatefulWidget {
   const RiderRegistrationPage({super.key});
@@ -34,8 +36,20 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
   final _phoneController = TextEditingController();
   final _licenseController = TextEditingController();
   final _plateController = TextEditingController();
+  final _streetController = TextEditingController();
+  final _houseNumberController = TextEditingController();
+  final _zipCodeController = TextEditingController();
   final List<PickedDocument> _riderDocuments = [];
+  List<Map<String, dynamic>> _provinces = [];
+  List<Map<String, dynamic>> _cities = [];
+  List<Map<String, dynamic>> _barangays = [];
+  String? _selectedProvinceName;
+  String? _selectedCityName;
+  String? _selectedBarangayName;
   String _vehicleType = 'Motorcycle';
+  bool _loadingProvinces = true;
+  bool _loadingCities = false;
+  bool _loadingBarangays = false;
   bool _showPassword = false;
   bool _showConfirmPassword = false;
   PasswordStrength _passwordStrength = PasswordStrength.weak;
@@ -48,6 +62,7 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
       if (mounted) setState(() {});
     });
     _passwordController.addListener(_updatePasswordStrength);
+    _loadProvinces();
   }
 
   void _updatePasswordStrength() {
@@ -71,7 +86,90 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
     _phoneController.dispose();
     _licenseController.dispose();
     _plateController.dispose();
+    _streetController.dispose();
+    _houseNumberController.dispose();
+    _zipCodeController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadProvinces() async {
+    try {
+      final provinces = await LocationService.fetchProvinces();
+      if (!mounted) return;
+      setState(() {
+        _provinces = provinces;
+        _loadingProvinces = false;
+      });
+    } catch (e) {
+      if (mounted) setState(() => _loadingProvinces = false);
+    }
+  }
+
+  Future<void> _onProvinceSelected(String? provinceName) async {
+    if (provinceName == null) return;
+    final province = _provinces.firstWhere(
+      (p) => p['name'] == provinceName,
+      orElse: () => {},
+    );
+    setState(() {
+      _selectedProvinceName = provinceName;
+      _selectedCityName = null;
+      _selectedBarangayName = null;
+      _zipCodeController.clear();
+      _cities = [];
+      _barangays = [];
+      _loadingCities = true;
+    });
+
+    try {
+      final cities = await LocationService.fetchCitiesAndMunicipalities(
+        province['code'],
+      );
+      if (!mounted) return;
+      setState(() {
+        _cities = cities;
+        _loadingCities = false;
+      });
+    } catch (e) {
+      if (mounted) setState(() => _loadingCities = false);
+    }
+  }
+
+  Future<void> _onCitySelected(String? cityName) async {
+    if (cityName == null) return;
+    final city = _cities.firstWhere(
+      (c) => c['name'] == cityName,
+      orElse: () => {},
+    );
+    setState(() {
+      _selectedCityName = cityName;
+      _selectedBarangayName = null;
+      _zipCodeController.clear();
+      _barangays = [];
+      _loadingBarangays = true;
+    });
+
+    try {
+      final barangays = await LocationService.fetchBarangays(city['code']);
+      if (!mounted) return;
+      setState(() {
+        _barangays = barangays;
+        _loadingBarangays = false;
+      });
+    } catch (e) {
+      if (mounted) setState(() => _loadingBarangays = false);
+    }
+    await _refreshZipCodeFromApi();
+  }
+
+  Future<void> _refreshZipCodeFromApi() async {
+    final zipCode = await LocationService.postalCodeForAddress(
+      barangay: _selectedBarangayName,
+      city: _selectedCityName,
+      province: _selectedProvinceName,
+    );
+    if (!mounted || zipCode == null) return;
+    setState(() => _zipCodeController.text = zipCode);
   }
 
   bool _validateStep1() {
@@ -144,6 +242,38 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
   }
 
   bool _validateStep3() {
+    setState(() => _step3Error = null);
+    final street = _streetController.text.trim();
+    if (_selectedProvinceName == null) {
+      setState(() => _step3Error = 'Province is required');
+      return false;
+    }
+    if (_selectedCityName == null) {
+      setState(() => _step3Error = 'Municipality/City is required');
+      return false;
+    }
+    if (_selectedBarangayName == null) {
+      setState(() => _step3Error = 'Barangay is required');
+      return false;
+    }
+    if (street.isEmpty) {
+      setState(() => _step3Error = 'Street is required');
+      return false;
+    }
+    if (InputValidator.containsSQLInjectionPatterns(street)) {
+      setState(() => _step3Error = 'Street contains invalid characters');
+      return false;
+    }
+    final houseNumber = _houseNumberController.text.trim();
+    if (houseNumber.isNotEmpty &&
+        InputValidator.containsSQLInjectionPatterns(houseNumber)) {
+      setState(() => _step3Error = 'House number contains invalid characters');
+      return false;
+    }
+    return true;
+  }
+
+  bool _validateStep4() {
     setState(() => _step3Error = null);
     if (_riderDocuments.isEmpty) {
       setState(() => _step3Error = 'Upload your license or vehicle document');
@@ -248,16 +378,31 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
       setState(() => _currentStep = 2);
     } else if (_currentStep == 2 && _validateStep2()) {
       setState(() => _currentStep = 3);
+    } else if (_currentStep == 3 && _validateStep3()) {
+      setState(() => _currentStep = 4);
     }
   }
 
   Future<void> _submitApplication() async {
-    if (!_validateStep3()) return;
+    if (!_validateStep4()) return;
     setState(() => _isLoading = true);
 
     try {
       final currentUser = _supabase.auth.currentUser;
       final submittedWhileLoggedIn = currentUser != null;
+      final point = await LocationService.geocodeAddress(
+        houseNumber: _houseNumberController.text,
+        street: _streetController.text,
+        barangay: _selectedBarangayName,
+        city: _selectedCityName,
+        province: _selectedProvinceName,
+      );
+      if (point == null) {
+        throw Exception('Rider address could not be verified by the location API');
+      }
+      final resolvedZipCode = point.postalCode?.trim().isNotEmpty == true
+          ? point.postalCode!.trim()
+          : _zipCodeController.text.trim();
 
       final data = RiderApplicationData(
         email: _emailController.text.trim(),
@@ -268,6 +413,12 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
         licenseNumber: _licenseController.text.trim(),
         vehicleType: _vehicleType,
         plateNumber: _plateController.text.trim(),
+        province: _selectedProvinceName,
+        city: _selectedCityName,
+        barangay: _selectedBarangayName,
+        street: _streetController.text.trim(),
+        houseNumber: _houseNumberController.text.trim(),
+        zipCode: resolvedZipCode.isNotEmpty ? resolvedZipCode : null,
         documents: submittedWhileLoggedIn ? const [] : _pendingRiderDocuments(),
       );
 
@@ -307,12 +458,31 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
           licenseNumber: data.licenseNumber,
           vehicleType: data.vehicleType,
           plateNumber: data.plateNumber,
+          province: data.province,
+          city: data.city,
+          barangay: data.barangay,
+          street: data.street,
+          houseNumber: data.houseNumber,
+          zipCode: data.zipCode,
+          latitude: point.latitude,
+          longitude: point.longitude,
           documentNotes: data.documentNotes,
           documents: documents,
         );
         if (!submitted) {
           throw Exception('Rider application could not be submitted');
         }
+        await DatabaseService.saveRegistrationAddress(
+          accountId: accountId,
+          province: data.province,
+          city: data.city,
+          barangay: data.barangay,
+          street: data.street,
+          houseNumber: data.houseNumber,
+          zipCode: data.zipCode,
+          latitude: point.latitude,
+          longitude: point.longitude,
+        );
         await LocalStorageService.clearRiderApplicationData();
       }
 
@@ -477,7 +647,9 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
           const SizedBox(height: 24),
           _stepIndicator('Vehicle Details', 2),
           const SizedBox(height: 24),
-          _stepIndicator('Documents', 3),
+          _stepIndicator('Location', 3),
+          const SizedBox(height: 24),
+          _stepIndicator('Documents', 4),
         ],
       ),
     );
@@ -491,7 +663,9 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
         _line(_currentStep > 1),
         _stepIndicator('Vehicle', 2),
         _line(_currentStep > 2),
-        _stepIndicator('Docs', 3),
+        _stepIndicator('Location', 3),
+        _line(_currentStep > 3),
+        _stepIndicator('Docs', 4),
       ],
     );
   }
@@ -533,7 +707,8 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
   Widget _currentForm() {
     if (_currentStep == 1) return _step1Form();
     if (_currentStep == 2) return _step2Form();
-    return _step3Form();
+    if (_currentStep == 3) return _step3Form();
+    return _step4Form();
   }
 
   Widget _step1Form() {
@@ -647,6 +822,21 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Text(
+          'Rider Location',
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 24),
+        _locationFields(),
+        _error(_step3Error),
+      ],
+    );
+  }
+
+  Widget _step4Form() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
           'Documents',
           style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
         ),
@@ -680,7 +870,7 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
           child: ElevatedButton(
             onPressed: _isLoading
                 ? null
-                : (_currentStep < 3 ? _nextStep : _submitApplication),
+                : (_currentStep < 4 ? _nextStep : _submitApplication),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF2d8f4e),
               foregroundColor: Colors.white,
@@ -689,9 +879,87 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
             child: Text(
               _isLoading
                   ? 'Submitting...'
-                  : (_currentStep < 3 ? 'Next' : 'Submit Application'),
+                  : (_currentStep < 4 ? 'Next' : 'Submit Application'),
             ),
           ),
+        ),
+      ],
+    );
+  }
+
+  Widget _locationFields() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _loadingProvinces
+            ? _loadingLocationBox()
+            : DropdownSearch<String>(
+                items: _provinces.map((p) => p['name'] as String).toList(),
+                selectedItem: _selectedProvinceName,
+                popupProps: const PopupProps.menu(
+                  showSearchBox: true,
+                  fit: FlexFit.loose,
+                ),
+                dropdownDecoratorProps: DropDownDecoratorProps(
+                  dropdownSearchDecoration: _decoration(
+                    'Select Province *',
+                    Icons.map,
+                  ),
+                ),
+                onChanged: _onProvinceSelected,
+              ),
+        const SizedBox(height: 16),
+        _selectedProvinceName == null
+            ? _disabledLocationBox('Select a province first')
+            : _loadingCities
+                ? _loadingLocationBox()
+                : DropdownSearch<String>(
+                    items: _cities.map((c) => c['name'] as String).toList(),
+                    selectedItem: _selectedCityName,
+                    popupProps: const PopupProps.menu(
+                      showSearchBox: true,
+                      fit: FlexFit.loose,
+                    ),
+                    dropdownDecoratorProps: DropDownDecoratorProps(
+                      dropdownSearchDecoration: _decoration(
+                        'Select City / Municipality *',
+                        Icons.location_city,
+                      ),
+                    ),
+                    onChanged: _onCitySelected,
+                  ),
+        const SizedBox(height: 16),
+        _selectedCityName == null
+            ? _disabledLocationBox('Select a city first')
+            : _loadingBarangays
+                ? _loadingLocationBox()
+                : DropdownSearch<String>(
+                    items: _barangays.map((b) => b['name'] as String).toList(),
+                    selectedItem: _selectedBarangayName,
+                    popupProps: const PopupProps.menu(
+                      showSearchBox: true,
+                      fit: FlexFit.loose,
+                    ),
+                    dropdownDecoratorProps: DropDownDecoratorProps(
+                      dropdownSearchDecoration: _decoration(
+                        'Select Barangay *',
+                        Icons.place,
+                      ),
+                    ),
+                    onChanged: (value) {
+                      setState(() => _selectedBarangayName = value);
+                      _refreshZipCodeFromApi();
+                    },
+                  ),
+        const SizedBox(height: 16),
+        _field(_streetController, 'Street *', Icons.location_on_outlined),
+        _field(_houseNumberController, 'House Number', Icons.home),
+        _field(
+          _zipCodeController,
+          'Zip Code',
+          Icons.mail,
+          readOnly: true,
+          hintText: 'Auto-filled by location API',
         ),
       ],
     );
@@ -705,6 +973,7 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
     bool obscureText = false,
     String? prefixText,
     String? hintText,
+    bool readOnly = false,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -712,6 +981,7 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
         controller: controller,
         keyboardType: keyboardType,
         obscureText: obscureText,
+        readOnly: readOnly,
         decoration: _decoration(label, icon).copyWith(
           prefixText: prefixText,
           hintText: hintText,
@@ -826,6 +1096,29 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
         borderRadius: BorderRadius.circular(8),
         borderSide: const BorderSide(color: Color(0xFF2d8f4e), width: 2),
       ),
+    );
+  }
+
+  Widget _loadingLocationBox() {
+    return Container(
+      height: 56,
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey[300]!),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: const Center(child: CircularProgressIndicator()),
+    );
+  }
+
+  Widget _disabledLocationBox(String text) {
+    return Container(
+      height: 56,
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey[300]!),
+        borderRadius: BorderRadius.circular(8),
+        color: Colors.grey[100],
+      ),
+      child: Center(child: Text(text, style: const TextStyle(color: Colors.grey))),
     );
   }
 

@@ -20,6 +20,7 @@ Database done
 Latest done
 - Seller registration now requires/upload business permit documents.
 - Rider registration now uploads license/vehicle documents instead of text notes.
+- Rider registration now includes API-driven location selection.
 - Uploaded application document filenames now include seller/rider, document type, account id, and timestamp.
 - Application documents accept PDF, PNG, JPG/JPEG, WEBP; image picker uses reduced quality/size.
 - Admin application detail dialogs are wider and can show uploaded image documents or signed PDF links.
@@ -29,6 +30,10 @@ Latest done
 - Rider delivery requires an uploaded proof photo plus optional note/call note.
 - Seller can open delivery proof images from orders.
 - Address add/edit/signup/login paths now geocode through the location API and save coordinates.
+- Address manager now uses API-driven province/city/barangay dropdowns instead of manual location text entry.
+- Seller/rider registration addresses are saved to the address table after submission/login sync and on approval if missing.
+- Seller order status controls are buttons; seller changes lock after rider pickup/In Transit.
+- Koishi/Koi-shy Business is set to Pila, Laguna; Rin Kaenbyou is set to Santa Cruz, Laguna.
 - ZIP/postal code is now read from the geocoding API when available.
 - Checkout calculates delivery distance with geocoding/OSRM and charges max(10 PHP, 10 PHP per km).
 - Applied supabase_documents_delivery_updates.sql and verified columns/buckets/policies.

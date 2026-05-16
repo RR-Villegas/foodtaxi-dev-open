@@ -592,6 +592,17 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
           throw Exception('Seller application could not be submitted');
         }
 
+        await DatabaseService.saveRegistrationAddress(
+          accountId: accountId,
+          province: applicationData.province,
+          city: applicationData.city,
+          barangay: applicationData.barangay,
+          street: applicationData.street,
+          houseNumber: applicationData.houseNumber,
+          zipCode: applicationData.zipCode,
+          latitude: point.latitude,
+          longitude: point.longitude,
+        );
         await LocalStorageService.clearSellerApplicationData();
       }
 

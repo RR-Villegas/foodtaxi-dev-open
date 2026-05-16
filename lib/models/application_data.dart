@@ -85,6 +85,12 @@ class RiderApplicationData {
   final String licenseNumber;
   final String vehicleType;
   final String plateNumber;
+  final String? province;
+  final String? city;
+  final String? barangay;
+  final String? street;
+  final String? houseNumber;
+  final String? zipCode;
   final String? documentNotes;
   final List<Map<String, dynamic>> documents;
 
@@ -97,6 +103,12 @@ class RiderApplicationData {
     required this.licenseNumber,
     required this.vehicleType,
     required this.plateNumber,
+    this.province,
+    this.city,
+    this.barangay,
+    this.street,
+    this.houseNumber,
+    this.zipCode,
     this.documentNotes,
     this.documents = const [],
   });
@@ -110,6 +122,12 @@ class RiderApplicationData {
     'licenseNumber': licenseNumber,
     'vehicleType': vehicleType,
     'plateNumber': plateNumber,
+    'province': province,
+    'city': city,
+    'barangay': barangay,
+    'street': street,
+    'houseNumber': houseNumber,
+    'zipCode': zipCode,
     'documentNotes': documentNotes,
     'documents': documents,
   };
@@ -124,6 +142,12 @@ class RiderApplicationData {
       licenseNumber: json['licenseNumber'] ?? '',
       vehicleType: json['vehicleType'] ?? 'Motorcycle',
       plateNumber: json['plateNumber'] ?? '',
+      province: json['province'],
+      city: json['city'],
+      barangay: json['barangay'],
+      street: json['street'],
+      houseNumber: json['houseNumber'],
+      zipCode: json['zipCode'],
       documentNotes: json['documentNotes'],
       documents: _documentsFromJson(json['documents']),
     );

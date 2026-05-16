@@ -484,12 +484,6 @@ class _SellerDashboardState extends State<SellerDashboard> {
       );
     }
 
-    const statuses = [
-      'Processing',
-      'Ready for Pickup',
-      'Cancelled',
-    ];
-
     return RefreshIndicator(
       onRefresh: _loadDashboard,
       child: ListView.builder(
@@ -547,22 +541,7 @@ class _SellerDashboardState extends State<SellerDashboard> {
                     );
                   }),
                   const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    value: statuses.contains(status) ? status : null,
-                    decoration: const InputDecoration(labelText: 'Order Status'),
-                    items: statuses
-                        .map(
-                          (item) => DropdownMenuItem(
-                            value: item,
-                            child: Text(item),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      if (value == null || value == status) return;
-                      _updateOrderStatus(order, value);
-                    },
-                  ),
+                  _orderStateActions(order, status),
                   if (status == 'Ready for Pickup' &&
                       (order['pickup_code']?.toString() ?? '').isNotEmpty) ...[
                     const SizedBox(height: 8),
@@ -597,6 +576,45 @@ class _SellerDashboardState extends State<SellerDashboard> {
           );
         },
       ),
+    );
+  }
+
+  Widget _orderStateActions(Map<String, dynamic> order, String status) {
+    final sellerCanChange = status == 'Processing' || status == 'Ready for Pickup';
+    if (!sellerCanChange) {
+      return Chip(
+        avatar: const Icon(Icons.lock_outline, size: 18),
+        label: Text(status),
+      );
+    }
+
+    final nextStatus =
+        status == 'Processing' ? 'Ready for Pickup' : 'Processing';
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Chip(label: Text(status)),
+        FilledButton.icon(
+          onPressed: () => _updateOrderStatus(order, nextStatus),
+          icon: Icon(
+            status == 'Processing'
+                ? Icons.inventory_2_outlined
+                : Icons.settings_backup_restore,
+          ),
+          label: Text(
+            status == 'Processing'
+                ? 'Ready for Pickup'
+                : 'Back to Processing',
+          ),
+        ),
+        OutlinedButton.icon(
+          onPressed: () => _updateOrderStatus(order, 'Cancelled'),
+          icon: const Icon(Icons.cancel_outlined),
+          label: const Text('Cancel'),
+        ),
+      ],
     );
   }
 

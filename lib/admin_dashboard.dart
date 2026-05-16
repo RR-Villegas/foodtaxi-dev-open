@@ -352,6 +352,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 _detailRow('License Number', app['license_number'] ?? 'N/A'),
                 _detailRow('Vehicle Type', app['vehicle_type'] ?? 'N/A'),
                 _detailRow('Plate Number', app['plate_number'] ?? 'N/A'),
+                _detailRow('Rider Address', _formatSellerAddress(app)),
                 _detailRow('Status', app['status'] ?? 'N/A'),
                 _detailRow('Submitted', app['application_date'] ?? 'N/A'),
                 _documentsSection(app['documents_path']),

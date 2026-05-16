@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/address_model.dart';
+import 'location_service.dart';
 
 class DatabaseService {
   static final _supabase = Supabase.instance.client;
@@ -745,6 +746,15 @@ class DatabaseService {
     required String status,
   }) async {
     if (!['Processing', 'Ready for Pickup', 'Cancelled'].contains(status)) {
+      return false;
+    }
+    final order = await _supabase
+        .from('orders')
+        .select('order_status')
+        .eq('order_id', orderId)
+        .maybeSingle();
+    final currentStatus = order?['order_status']?.toString() ?? 'Processing';
+    if (!['Processing', 'Ready for Pickup'].contains(currentStatus)) {
       return false;
     }
     return updateOrderStatus(orderId: orderId, status: status);
@@ -1506,6 +1516,14 @@ class DatabaseService {
     required String licenseNumber,
     required String vehicleType,
     required String plateNumber,
+    String? province,
+    String? city,
+    String? barangay,
+    String? street,
+    String? houseNumber,
+    String? zipCode,
+    double? latitude,
+    double? longitude,
     String? documentNotes,
     List<Map<String, dynamic>> documents = const [],
   }) async {
@@ -1515,6 +1533,14 @@ class DatabaseService {
         'license_number': licenseNumber.trim(),
         'vehicle_type': vehicleType.trim(),
         'plate_number': plateNumber.trim(),
+        'province': _blankToNull(province),
+        'city': _blankToNull(city),
+        'barangay': _blankToNull(barangay),
+        'street': _blankToNull(street),
+        'house_number': _blankToNull(houseNumber),
+        'zip_code': _blankToNull(zipCode),
+        'latitude': latitude,
+        'longitude': longitude,
         'documents_path': {
           if (_blankToNull(documentNotes) != null) 'notes': documentNotes!.trim(),
           if (documents.isNotEmpty) 'files': documents,
@@ -1549,6 +1575,14 @@ class DatabaseService {
     required String licenseNumber,
     required String vehicleType,
     required String plateNumber,
+    String? province,
+    String? city,
+    String? barangay,
+    String? street,
+    String? houseNumber,
+    String? zipCode,
+    double? latitude,
+    double? longitude,
     String? documentNotes,
     List<Map<String, dynamic>> documents = const [],
   }) async {
@@ -1559,6 +1593,14 @@ class DatabaseService {
         licenseNumber: licenseNumber,
         vehicleType: vehicleType,
         plateNumber: plateNumber,
+        province: province,
+        city: city,
+        barangay: barangay,
+        street: street,
+        houseNumber: houseNumber,
+        zipCode: zipCode,
+        latitude: latitude,
+        longitude: longitude,
         documentNotes: documentNotes,
         documents: documents,
       );
@@ -1573,6 +1615,14 @@ class DatabaseService {
             'license_number': licenseNumber.trim(),
             'vehicle_type': vehicleType.trim(),
             'plate_number': plateNumber.trim(),
+            'province': _blankToNull(province),
+            'city': _blankToNull(city),
+            'barangay': _blankToNull(barangay),
+            'street': _blankToNull(street),
+            'house_number': _blankToNull(houseNumber),
+            'zip_code': _blankToNull(zipCode),
+            'latitude': latitude,
+            'longitude': longitude,
             'documents_path': {
               if (_blankToNull(documentNotes) != null)
                 'notes': documentNotes!.trim(),
@@ -1601,6 +1651,14 @@ class DatabaseService {
             license_number,
             vehicle_type,
             plate_number,
+            city,
+            province,
+            barangay,
+            street,
+            house_number,
+            zip_code,
+            latitude,
+            longitude,
             documents_path,
             status,
             application_date,
@@ -1631,11 +1689,34 @@ class DatabaseService {
     required String accountId,
   }) async {
     try {
+      final application = await _supabase
+          .from('rider_application')
+          .select('province, city, barangay, street, house_number, zip_code, latitude, longitude')
+          .eq('rider_app_id', applicationId)
+          .maybeSingle();
+      final hasAddress = _blankToNull(application?['city']?.toString()) != null &&
+          _blankToNull(application?['barangay']?.toString()) != null;
+      final point = !hasAddress
+          ? null
+          : await LocationService.geocodeAddress(
+              houseNumber: application!['house_number']?.toString(),
+              street: application['street']?.toString(),
+              barangay: application['barangay']?.toString(),
+              city: application['city']?.toString(),
+              province: application['province']?.toString(),
+            );
+      final resolvedZipCode = point?.postalCode?.trim().isNotEmpty == true
+          ? point!.postalCode!.trim()
+          : application?['zip_code']?.toString();
+
       await _supabase
           .from('rider_application')
           .update({
             'status': 'Approved',
             'date_approved': DateTime.now().toIso8601String(),
+            'zip_code': _blankToNull(resolvedZipCode),
+            'latitude': point?.latitude ?? _toDouble(application?['latitude']),
+            'longitude': point?.longitude ?? _toDouble(application?['longitude']),
           })
           .eq('rider_app_id', applicationId);
 
@@ -1643,6 +1724,19 @@ class DatabaseService {
           .from('account')
           .update({'account_type': 'Rider', 'is_verified': true})
           .eq('account_id', accountId);
+      if (application != null) {
+        await saveRegistrationAddress(
+          accountId: accountId,
+          province: application['province']?.toString(),
+          city: application['city']?.toString(),
+          barangay: application['barangay']?.toString(),
+          street: application['street']?.toString(),
+          houseNumber: application['house_number']?.toString(),
+          zipCode: resolvedZipCode,
+          latitude: point?.latitude ?? _toDouble(application['latitude']),
+          longitude: point?.longitude ?? _toDouble(application['longitude']),
+        );
+      }
       return true;
     } catch (e) {
       _logDbError('Failed to approve rider application', e);
@@ -1664,6 +1758,60 @@ class DatabaseService {
     }
   }
 
+  static Future<void> saveRegistrationAddress({
+    required String accountId,
+    String? province,
+    String? city,
+    String? barangay,
+    String? street,
+    String? houseNumber,
+    String? zipCode,
+    double? latitude,
+    double? longitude,
+  }) async {
+    if (_blankToNull(city) == null || _blankToNull(barangay) == null) return;
+
+    final existingAddresses = await _supabase
+        .from('address')
+        .select('address_id, is_default')
+        .eq('account_id', accountId);
+    final addresses = List<Map<String, dynamic>>.from(existingAddresses);
+    final shouldBeDefault =
+        !addresses.any((address) => address['is_default'] == true);
+
+    final existingMatch = await _supabase
+        .from('address')
+        .select('address_id')
+        .eq('account_id', accountId)
+        .eq('city', _blankToNull(city)!)
+        .eq('barangay', _blankToNull(barangay)!)
+        .maybeSingle();
+
+    final addressData = {
+      'province': _blankToNull(province),
+      'city': _blankToNull(city),
+      'barangay': _blankToNull(barangay),
+      'street': _blankToNull(street),
+      'house_number': _blankToNull(houseNumber),
+      'zip_code': _blankToNull(zipCode),
+      'latitude': latitude,
+      'longitude': longitude,
+      'is_default': shouldBeDefault,
+    };
+
+    if (existingMatch == null) {
+      await _supabase.from('address').insert({
+        'account_id': accountId,
+        ...addressData,
+      });
+    } else {
+      await _supabase
+          .from('address')
+          .update(addressData..remove('is_default'))
+          .eq('address_id', existingMatch['address_id']);
+    }
+  }
+
   // Approve seller application
   static Future<bool> approveSellerApplication({
     required String applicationId,
@@ -1679,12 +1827,24 @@ class DatabaseService {
     String? contactPhone,
   }) async {
     try {
+      final point = await LocationService.geocodeAddress(
+        houseNumber: houseNumber,
+        street: street,
+        barangay: barangay,
+        city: city,
+        province: province,
+      );
+      final resolvedZipCode = point?.postalCode?.trim().isNotEmpty == true
+          ? point!.postalCode!.trim()
+          : zipCode;
+
       // Update application status
       await _supabase
           .from('seller_application')
           .update({
             'status': 'Approved',
             'date_approved': DateTime.now().toIso8601String(),
+            'zip_code': _blankToNull(resolvedZipCode),
           })
           .eq('application_id', applicationId);
 
@@ -1700,22 +1860,43 @@ class DatabaseService {
           .eq('owner_account_id', accountId)
           .maybeSingle();
 
+      final storeData = {
+        'owner_account_id': accountId,
+        'store_name': storeName,
+        'slug': storeName.toLowerCase().replaceAll(' ', '-'),
+        'description': _blankToNull(storeDescription),
+        'province': _blankToNull(province),
+        'city': city,
+        'barangay': _blankToNull(barangay),
+        'street': _blankToNull(street),
+        'house_number': _blankToNull(houseNumber),
+        'zip_code': _blankToNull(resolvedZipCode),
+        'latitude': point?.latitude,
+        'longitude': point?.longitude,
+        'contact_phone': _blankToNull(normalizePhilippinePhone(contactPhone)),
+        'is_open': true,
+      };
+
       if (existingStore == null) {
-        await _supabase.from('store').insert({
-          'owner_account_id': accountId,
-          'store_name': storeName,
-          'slug': storeName.toLowerCase().replaceAll(' ', '-'),
-          'description': _blankToNull(storeDescription),
-          'province': _blankToNull(province),
-          'city': city,
-          'barangay': _blankToNull(barangay),
-          'street': _blankToNull(street),
-          'house_number': _blankToNull(houseNumber),
-          'zip_code': _blankToNull(zipCode),
-          'contact_phone': _blankToNull(normalizePhilippinePhone(contactPhone)),
-          'is_open': true,
-        });
+        await _supabase.from('store').insert(storeData);
+      } else {
+        await _supabase
+            .from('store')
+            .update(storeData)
+            .eq('store_id', existingStore['store_id']);
       }
+
+      await saveRegistrationAddress(
+        accountId: accountId,
+        province: province,
+        city: city,
+        barangay: barangay,
+        street: street,
+        houseNumber: houseNumber,
+        zipCode: resolvedZipCode,
+        latitude: point?.latitude,
+        longitude: point?.longitude,
+      );
       return true;
     } catch (e) {
       _logDbError('Failed to approve seller application', e);

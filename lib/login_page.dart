@@ -325,17 +325,30 @@ class _LoginPageState extends State<LoginPage> {
     if (!_matchesSellerApplication(data, _supabase.auth.currentUser?.email)) {
       return;
     }
+    final point = await LocationService.geocodeAddress(
+      houseNumber: data!.houseNumber,
+      street: data.street,
+      barangay: data.barangay,
+      city: data.city,
+      province: data.province,
+    );
+    if (point == null) {
+      throw Exception('Seller address could not be verified by the location API');
+    }
+    final resolvedZipCode = point.postalCode?.trim().isNotEmpty == true
+        ? point.postalCode!.trim()
+        : data.zipCode;
 
     final saved = await DatabaseService.saveSellerApplication(
       accountId: accountId,
-      storeName: data!.storeName,
+      storeName: data.storeName,
       storeDescription: data.storeDescription,
       province: data.province,
       city: data.city,
       barangay: data.barangay,
       street: data.street,
       houseNumber: data.houseNumber,
-      zipCode: data.zipCode,
+      zipCode: resolvedZipCode,
       contactPhone: data.contactPhone,
       documents: await _uploadPendingDocuments(
         data.documents,
@@ -344,7 +357,20 @@ class _LoginPageState extends State<LoginPage> {
         accountId: accountId,
       ),
     );
-    if (saved) await LocalStorageService.clearSellerApplicationData();
+    if (saved) {
+      await DatabaseService.saveRegistrationAddress(
+        accountId: accountId,
+        province: data.province,
+        city: data.city,
+        barangay: data.barangay,
+        street: data.street,
+        houseNumber: data.houseNumber,
+        zipCode: resolvedZipCode,
+        latitude: point.latitude,
+        longitude: point.longitude,
+      );
+      await LocalStorageService.clearSellerApplicationData();
+    }
   }
 
   Future<void> _syncPendingRiderApplication(String accountId) async {
@@ -352,12 +378,33 @@ class _LoginPageState extends State<LoginPage> {
     if (!_matchesRiderApplication(data, _supabase.auth.currentUser?.email)) {
       return;
     }
+    final point = await LocationService.geocodeAddress(
+      houseNumber: data!.houseNumber,
+      street: data.street,
+      barangay: data.barangay,
+      city: data.city,
+      province: data.province,
+    );
+    if (point == null) {
+      throw Exception('Rider address could not be verified by the location API');
+    }
+    final resolvedZipCode = point.postalCode?.trim().isNotEmpty == true
+        ? point.postalCode!.trim()
+        : data.zipCode;
 
     final saved = await DatabaseService.saveRiderApplication(
       accountId: accountId,
-      licenseNumber: data!.licenseNumber,
+      licenseNumber: data.licenseNumber,
       vehicleType: data.vehicleType,
       plateNumber: data.plateNumber,
+      province: data.province,
+      city: data.city,
+      barangay: data.barangay,
+      street: data.street,
+      houseNumber: data.houseNumber,
+      zipCode: resolvedZipCode,
+      latitude: point.latitude,
+      longitude: point.longitude,
       documentNotes: data.documentNotes,
       documents: await _uploadPendingDocuments(
         data.documents,
@@ -366,7 +413,20 @@ class _LoginPageState extends State<LoginPage> {
         accountId: accountId,
       ),
     );
-    if (saved) await LocalStorageService.clearRiderApplicationData();
+    if (saved) {
+      await DatabaseService.saveRegistrationAddress(
+        accountId: accountId,
+        province: data.province,
+        city: data.city,
+        barangay: data.barangay,
+        street: data.street,
+        houseNumber: data.houseNumber,
+        zipCode: resolvedZipCode,
+        latitude: point.latitude,
+        longitude: point.longitude,
+      );
+      await LocalStorageService.clearRiderApplicationData();
+    }
   }
 
   bool _matchesSellerApplication(SellerApplicationData? data, String? email) {

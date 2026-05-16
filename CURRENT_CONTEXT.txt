@@ -221,6 +221,7 @@ Latest document/delivery/location batch
   - Removed document notes textbox.
   - Step 3 uploads license/vehicle documents.
   - Same file types/size behavior as seller.
+  - Rider registration now includes API-driven province/city/barangay location selection.
 - Login pending application sync uploads any stored pending document bytes before saving seller/rider applications.
 - Admin dashboard:
   - Seller/rider application detail dialogs widened.
@@ -236,5 +237,8 @@ Latest document/delivery/location batch
 - Location/delivery:
   - LocationService now geocodes via Nominatim and routes via OSRM.
   - LocationService reads postal codes from Nominatim address details when available.
-  - Address add/edit in address/profile/signup/login paths geocodes and stores coordinates.
+  - Address add/edit in /addresses uses API-driven province/city/barangay dropdowns and geocodes/stores coordinates.
+  - Seller/rider registration addresses are saved into the address table after submission/sync and again on approval if missing.
   - Checkout estimates seller-to-buyer road distance and sets delivery fee to max(PHP 10, PHP 10/km), with fallback to old fee if APIs fail.
+  - Rider application table now has province/city/barangay/street/house_number/zip_code/latitude/longitude.
+  - Koishi/Koi-shy Business location set to Pila, Laguna; Rin Kaenbyou location set to Santa Cruz, Laguna.
