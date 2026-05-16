@@ -83,11 +83,10 @@ class InputValidator {
 
     final sanitized = phone.replaceAll(RegExp(r'\D'), '');
 
-    // Accept:
-    // 09123456789
-    // 639123456789
+    // Accept local 9xxxxxxxxx input, 09xxxxxxxxx, +639xxxxxxxxx,
+    // and 639xxxxxxxxx.
     final phoneRegex = RegExp(
-      r'^(09\d{9}|639\d{9})$',
+      r'^(9\d{9}|09\d{9}|639\d{9})$',
     );
 
     return phoneRegex.hasMatch(sanitized);

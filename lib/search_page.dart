@@ -77,46 +77,78 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Widget _filters() {
-    return ExpansionTile(
-      title: const Text('Filters'),
-      leading: const Icon(Icons.filter_list),
-      childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      children: [
-        DropdownButtonFormField<String>(
-          value: _category,
-          decoration: const InputDecoration(labelText: 'Category'),
-          items: _categories
-              .map((item) => DropdownMenuItem(value: item, child: Text(item)))
-              .toList(),
-          onChanged: (value) {
-            if (value == null) return;
-            setState(() => _category = value);
-            _search();
-          },
-        ),
-        const SizedBox(height: 12),
-        DropdownButtonFormField<String>(
-          value: _sort,
-          decoration: const InputDecoration(labelText: 'Sort'),
-          items: _sorts
-              .map((item) => DropdownMenuItem(value: item, child: Text(item)))
-              .toList(),
-          onChanged: (value) {
-            if (value == null) return;
-            setState(() => _sort = value);
-            _search();
-          },
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _sellerController,
-          decoration: const InputDecoration(
-            labelText: 'Seller name',
-            prefixIcon: Icon(Icons.storefront),
+    return Container(
+      color: const Color(0xFFEAF7EF),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: _category,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Category',
+                    filled: true,
+                    fillColor: Colors.white,
+                  ),
+                  items: _categories
+                      .map((item) => DropdownMenuItem(
+                            value: item,
+                            child: Text(item, overflow: TextOverflow.ellipsis),
+                          ))
+                      .toList(),
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => _category = value);
+                    _search();
+                  },
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: _sort,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Sort',
+                    filled: true,
+                    fillColor: Colors.white,
+                  ),
+                  items: _sorts
+                      .map((item) => DropdownMenuItem(
+                            value: item,
+                            child: Text(item, overflow: TextOverflow.ellipsis),
+                          ))
+                      .toList(),
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => _sort = value);
+                    _search();
+                  },
+                ),
+              ),
+            ],
           ),
-          onSubmitted: (_) => _search(),
-        ),
-      ],
+          const SizedBox(height: 10),
+          TextField(
+            controller: _sellerController,
+            decoration: InputDecoration(
+              labelText: 'Seller name',
+              prefixIcon: const Icon(Icons.storefront),
+              suffixIcon: IconButton(
+                onPressed: _search,
+                icon: const Icon(Icons.tune),
+                tooltip: 'Apply seller filter',
+              ),
+              filled: true,
+              fillColor: Colors.white,
+            ),
+            onSubmitted: (_) => _search(),
+          ),
+        ],
+      ),
     );
   }
 
@@ -133,6 +165,8 @@ class _SearchPageState extends State<SearchPage> {
 
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: const Color(0xFF2d8f4e),
+        foregroundColor: Colors.white,
         title: TextField(
           controller: _queryController,
           autofocus: true,
@@ -141,6 +175,8 @@ class _SearchPageState extends State<SearchPage> {
             hintText: 'Search products',
             border: InputBorder.none,
             prefixIcon: Icon(Icons.search),
+            filled: true,
+            fillColor: Colors.white,
           ),
           onSubmitted: (_) => _search(),
         ),
@@ -160,11 +196,14 @@ class _SearchPageState extends State<SearchPage> {
                 ? const Center(child: CircularProgressIndicator())
                 : _products.isEmpty
                     ? const Center(child: Text('No products found'))
-                    : GridView.builder(
+                    : LayoutBuilder(
+                        builder: (context, constraints) {
+                          final columns = constraints.maxWidth > 700 ? 4 : 2;
+                          return GridView.builder(
                         padding: const EdgeInsets.all(12),
                         gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
+                            SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: columns,
                           crossAxisSpacing: 12,
                           mainAxisSpacing: 12,
                           childAspectRatio: 0.72,
@@ -177,7 +216,11 @@ class _SearchPageState extends State<SearchPage> {
                           final seller = store is Map
                               ? store['store_name']?.toString() ?? 'Seller'
                               : 'Seller';
+                          final storeId = store is Map
+                              ? store['store_id']?.toString()
+                              : null;
                           return Card(
+                            clipBehavior: Clip.antiAlias,
                             child: InkWell(
                               onTap: productId == null
                                   ? null
@@ -190,12 +233,7 @@ class _SearchPageState extends State<SearchPage> {
                                 children: [
                                   AspectRatio(
                                     aspectRatio: 1,
-                                    child: ClipRRect(
-                                      borderRadius: const BorderRadius.vertical(
-                                        top: Radius.circular(8),
-                                      ),
-                                      child: _image(product['main_image_url']),
-                                    ),
+                                    child: _image(product['main_image_url']),
                                   ),
                                   Padding(
                                     padding: const EdgeInsets.all(8),
@@ -212,10 +250,21 @@ class _SearchPageState extends State<SearchPage> {
                                             fontWeight: FontWeight.bold,
                                           ),
                                         ),
-                                        Text(
-                                          seller,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
+                                        InkWell(
+                                          onTap: storeId == null
+                                              ? null
+                                              : () => Navigator.pushNamed(
+                                                    context,
+                                                    '/seller/$storeId',
+                                                  ),
+                                          child: Text(
+                                            seller,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              color: Colors.black54,
+                                            ),
+                                          ),
                                         ),
                                         Text(
                                           'PHP ${product['price']}',
@@ -231,6 +280,8 @@ class _SearchPageState extends State<SearchPage> {
                               ),
                             ),
                           );
+                        },
+                      );
                         },
                       ),
           ),

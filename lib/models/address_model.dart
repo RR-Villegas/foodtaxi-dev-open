@@ -7,6 +7,8 @@ class Address {
   final String? street;
   final String? houseNumber;
   final String? zipCode;
+  final double? latitude;
+  final double? longitude;
   final bool isDefault;
   final DateTime? createdAt;
 
@@ -19,6 +21,8 @@ class Address {
     this.street,
     this.houseNumber,
     this.zipCode,
+    this.latitude,
+    this.longitude,
     this.isDefault = false,
     this.createdAt,
   });
@@ -34,6 +38,8 @@ class Address {
       'street': street,
       'house_number': houseNumber,
       'zip_code': zipCode,
+      'latitude': latitude,
+      'longitude': longitude,
       'is_default': isDefault,
       'created_at': createdAt?.toIso8601String(),
     };
@@ -50,6 +56,8 @@ class Address {
       street: json['street'],
       houseNumber: json['house_number'],
       zipCode: json['zip_code'],
+      latitude: _toDouble(json['latitude']),
+      longitude: _toDouble(json['longitude']),
       isDefault: json['is_default'] ?? false,
       createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
     );
@@ -65,6 +73,8 @@ class Address {
     String? street,
     String? houseNumber,
     String? zipCode,
+    double? latitude,
+    double? longitude,
     bool? isDefault,
     DateTime? createdAt,
   }) {
@@ -77,8 +87,15 @@ class Address {
       street: street ?? this.street,
       houseNumber: houseNumber ?? this.houseNumber,
       zipCode: zipCode ?? this.zipCode,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
       isDefault: isDefault ?? this.isDefault,
       createdAt: createdAt ?? this.createdAt,
     );
+  }
+
+  static double? _toDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '');
   }
 }

@@ -178,3 +178,61 @@ Known caveats
 - image_picker was added to pubspec.yaml. pubspec.lock and generated plugin files appear modified, probably from a prior interrupted dependency run. Do not run flutter commands here unless user explicitly changes their instruction.
 - Some text contains mojibake peso/emoji characters from existing files. Avoid broad formatting unless requested.
 - No flutter analyze/run/test has been executed due to user's no-Flutter-shell instruction.
+
+Latest batch from todo.md
+- Applied supabase_app_updates.sql to Supabase project zsctswdvoknmdsimqrvr.
+  - Verified old order_items_order_id_product_id_key no longer exists.
+  - Verified order_items_order_product_variant_unique exists.
+  - Verified orders.discount_code and orders.discount_amount exist.
+  - Verified product_review and discount_coupon tables exist.
+- Added lib/seller_page.dart and /seller/<store_id> route.
+- Added lib/my_orders_page.dart and /my-orders route.
+- Buyer menu now opens My Orders.
+- Product page links to seller storefront and displays product reviews.
+- Search page restyled and seller names route to storefronts.
+- Checkout now supports coupon application and discount/fee breakdown.
+- Admin dashboard now includes coupon management.
+- Rider dashboard now shows delivery orders, pickup, and delivered/proof flow.
+- Logout now clears local storage first and uses local Supabase sign-out.
+- Login redirect no longer assumes Buyer when the account row is not ready.
+- Phone normalization/validation now accepts 9xxxxxxxxx and stores +639xxxxxxxxx.
+- Signup phone field, seller contact phone, and rider phone show +63 prefix.
+- Signup now saves zip code; zip code lookup list expanded.
+
+Latest document/delivery/location batch
+- Added file_picker dependency in pubspec.yaml for PDF/image document uploads. Do not run Flutter shell commands unless user changes instruction.
+- Added lib/models/picked_document.dart.
+- Applied supabase_documents_delivery_updates.sql to project zsctswdvoknmdsimqrvr.
+  - seller_application.documents_path jsonb.
+  - address/store latitude and longitude.
+  - orders pickup_code, picked_up_at, delivery_distance_km, delivery_proof_note.
+  - Private storage buckets: application-documents and delivery-proofs.
+  - Scoped storage policies:
+    - application docs: user folder owner can upload/read, admins can read.
+    - delivery proofs: assigned rider uploads; order buyer/seller/rider/admin can read.
+  - Verified columns, buckets, and policies exist.
+- Seller registration:
+  - Step 2 now requires business permit upload.
+  - Allows PDF/PNG/JPG/JPEG/WEBP up to 5MB.
+  - Images selected through image_picker use imageQuality 65 and max 1600px.
+  - If the user is not authenticated, compressed file bytes are temporarily stored in local signup application data and uploaded after login sync.
+- Rider registration:
+  - Removed document notes textbox.
+  - Step 3 uploads license/vehicle documents.
+  - Same file types/size behavior as seller.
+- Login pending application sync uploads any stored pending document bytes before saving seller/rider applications.
+- Admin dashboard:
+  - Seller/rider application detail dialogs widened.
+  - Uploaded documents appear with Show buttons.
+  - Images render in a dialog; PDFs show a signed URL.
+- Seller dashboard:
+  - Sellers can only set orders to Processing, Ready for Pickup, or Cancelled.
+  - Ready-for-pickup orders show a pickup code.
+  - Delivery proof image can be opened when rider delivers.
+- Rider dashboard:
+  - Pickup now requires entering/scanning pickup code and marks order In Transit.
+  - Delivery now requires a compressed proof image and optional note/call note.
+- Location/delivery:
+  - LocationService now geocodes via Nominatim and routes via OSRM.
+  - Address add/edit in address/profile/signup/login paths geocodes and stores coordinates.
+  - Checkout estimates seller-to-buyer road distance and sets delivery fee to max(PHP 10, PHP 10/km), with fallback to old fee if APIs fail.

@@ -15,6 +15,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   List<Map<String, dynamic>> _sellerApplications = [];
   List<Map<String, dynamic>> _riderApplications = [];
   List<Map<String, dynamic>> _orders = [];
+  List<Map<String, dynamic>> _coupons = [];
   bool _isLoading = false;
 
   double get _totalSales =>
@@ -26,6 +27,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
   void initState() {
     super.initState();
     _loadAdminOrders();
+    _loadCoupons();
+  }
+
+  Future<void> _loadCoupons() async {
+    final coupons = await DatabaseService.getCoupons();
+    if (!mounted) return;
+    setState(() => _coupons = coupons);
   }
 
   Future<void> _loadAdminOrders() async {
@@ -256,38 +264,42 @@ class _AdminDashboardState extends State<AdminDashboard> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(app['store_name'] ?? 'Application'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _detailRow(
-                'Applicant',
-                '${app['account']?['firstname'] ?? 'N/A'} ${app['account']?['surname'] ?? ''}',
-              ),
-              _detailRow('Email', app['account']?['email'] ?? 'N/A'),
-              _detailRow('Store Name', app['store_name'] ?? 'N/A'),
-              _detailRow('Phone', app['contact_phone'] ?? 'N/A'),
-              _detailRow('Business Address', _formatSellerAddress(app)),
-              _detailRow('Province', app['province'] ?? 'N/A'),
-              _detailRow('Municipality/City', app['city'] ?? 'N/A'),
-              _detailRow('Barangay', app['barangay'] ?? 'N/A'),
-              _detailRow('Street', app['street'] ?? 'N/A'),
-              _detailRow('House Number', app['house_number'] ?? 'N/A'),
-              _detailRow('Zip Code', app['zip_code'] ?? 'N/A'),
-              _detailRow('Status', app['status'] ?? 'N/A'),
-              _detailRow('Submitted', app['submission_date'] ?? 'N/A'),
-              if (app['store_description'] != null &&
-                  app['store_description'].isNotEmpty) ...[
-                const SizedBox(height: 8),
-                const Text(
-                  'Description:',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+        content: SizedBox(
+          width: 620,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _detailRow(
+                  'Applicant',
+                  '${app['account']?['firstname'] ?? 'N/A'} ${app['account']?['surname'] ?? ''}',
                 ),
-                const SizedBox(height: 4),
-                Text(app['store_description']),
+                _detailRow('Email', app['account']?['email'] ?? 'N/A'),
+                _detailRow('Store Name', app['store_name'] ?? 'N/A'),
+                _detailRow('Phone', app['contact_phone'] ?? 'N/A'),
+                _detailRow('Business Address', _formatSellerAddress(app)),
+                _detailRow('Province', app['province'] ?? 'N/A'),
+                _detailRow('Municipality/City', app['city'] ?? 'N/A'),
+                _detailRow('Barangay', app['barangay'] ?? 'N/A'),
+                _detailRow('Street', app['street'] ?? 'N/A'),
+                _detailRow('House Number', app['house_number'] ?? 'N/A'),
+                _detailRow('Zip Code', app['zip_code'] ?? 'N/A'),
+                _detailRow('Status', app['status'] ?? 'N/A'),
+                _detailRow('Submitted', app['submission_date'] ?? 'N/A'),
+                _documentsSection(app['documents_path']),
+                if (app['store_description'] != null &&
+                    app['store_description'].isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Description:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(app['store_description']),
+                ],
               ],
-            ],
+            ),
           ),
         ),
         actions: [
@@ -324,25 +336,27 @@ class _AdminDashboardState extends State<AdminDashboard> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(app['account']?['firstname'] ?? 'Rider Application'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _detailRow(
-                'Applicant',
-                '${app['account']?['firstname'] ?? 'N/A'} ${app['account']?['surname'] ?? ''}',
-              ),
-              _detailRow('Email', app['account']?['email'] ?? 'N/A'),
-              _detailRow('Phone', app['account']?['phone_number'] ?? 'N/A'),
-              _detailRow('License Number', app['license_number'] ?? 'N/A'),
-              _detailRow('Vehicle Type', app['vehicle_type'] ?? 'N/A'),
-              _detailRow('Plate Number', app['plate_number'] ?? 'N/A'),
-              _detailRow('Status', app['status'] ?? 'N/A'),
-              _detailRow('Submitted', app['application_date'] ?? 'N/A'),
-              if (app['documents_path'] != null)
-                _detailRow('Documents', app['documents_path'].toString()),
-            ],
+        content: SizedBox(
+          width: 620,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _detailRow(
+                  'Applicant',
+                  '${app['account']?['firstname'] ?? 'N/A'} ${app['account']?['surname'] ?? ''}',
+                ),
+                _detailRow('Email', app['account']?['email'] ?? 'N/A'),
+                _detailRow('Phone', app['account']?['phone_number'] ?? 'N/A'),
+                _detailRow('License Number', app['license_number'] ?? 'N/A'),
+                _detailRow('Vehicle Type', app['vehicle_type'] ?? 'N/A'),
+                _detailRow('Plate Number', app['plate_number'] ?? 'N/A'),
+                _detailRow('Status', app['status'] ?? 'N/A'),
+                _detailRow('Submitted', app['application_date'] ?? 'N/A'),
+                _documentsSection(app['documents_path']),
+              ],
+            ),
           ),
         ),
         actions: [
@@ -402,6 +416,98 @@ class _AdminDashboardState extends State<AdminDashboard> {
         children: [
           Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
           Text(value),
+        ],
+      ),
+    );
+  }
+
+  Widget _documentsSection(dynamic value) {
+    final documents = _documentsFromPath(value);
+    if (documents.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 8, bottom: 8),
+        child: Text('Documents: none uploaded'),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 8),
+        const Text(
+          'Documents',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 4),
+        ...documents.map((document) {
+          final fileName = document['file_name']?.toString() ?? 'Document';
+          return ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(
+              _isImageDocument(document)
+                  ? Icons.image_outlined
+                  : Icons.picture_as_pdf_outlined,
+            ),
+            title: Text(fileName),
+            subtitle: Text(document['label']?.toString() ?? ''),
+            trailing: OutlinedButton.icon(
+              onPressed: () => _showDocument(document),
+              icon: const Icon(Icons.open_in_new),
+              label: const Text('Show'),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  List<Map<String, dynamic>> _documentsFromPath(dynamic value) {
+    if (value is Map) {
+      final files = value['files'];
+      if (files is List) {
+        return files
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+      }
+    }
+    return [];
+  }
+
+  bool _isImageDocument(Map<String, dynamic> document) {
+    return (document['content_type']?.toString() ?? '').startsWith('image/');
+  }
+
+  Future<void> _showDocument(Map<String, dynamic> document) async {
+    final bucket = document['bucket']?.toString() ?? 'application-documents';
+    final path = document['path']?.toString();
+    if (path == null || path.isEmpty) return;
+
+    final url = await DatabaseService.createSignedStorageUrl(
+      bucket: bucket,
+      path: path,
+    );
+    if (!mounted || url == null) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(document['file_name']?.toString() ?? 'Document'),
+        content: SizedBox(
+          width: 720,
+          child: _isImageDocument(document)
+              ? Image.network(
+                  url,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, _, _) => SelectableText(url),
+                )
+              : SelectableText(url),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
         ],
       ),
     );
@@ -599,6 +705,181 @@ class _AdminDashboardState extends State<AdminDashboard> {
             );
           }).toList(),
         ),
+      ),
+    );
+  }
+
+  Future<void> _openCouponForm([Map<String, dynamic>? coupon]) async {
+    final codeController =
+        TextEditingController(text: coupon?['code']?.toString() ?? '');
+    final descriptionController = TextEditingController(
+      text: coupon?['description']?.toString() ?? '',
+    );
+    final valueController = TextEditingController(
+      text: coupon?['discount_value']?.toString() ?? '',
+    );
+    final minController = TextEditingController(
+      text: coupon?['min_subtotal']?.toString() ?? '0',
+    );
+    final expiryController = TextEditingController(
+      text: coupon?['expires_at']?.toString() ?? '',
+    );
+    var type = coupon?['discount_type']?.toString() ?? 'percent';
+    var active = coupon?['is_active'] != false;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(coupon == null ? 'Add Coupon' : 'Edit Coupon'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: codeController,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: const InputDecoration(labelText: 'Code'),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: type,
+                  decoration: const InputDecoration(labelText: 'Discount Type'),
+                  items: const [
+                    DropdownMenuItem(value: 'percent', child: Text('Percent')),
+                    DropdownMenuItem(value: 'amount', child: Text('Amount')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setDialogState(() => type = value);
+                  },
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: valueController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Discount Value'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: minController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Minimum Subtotal'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: expiryController,
+                  decoration: const InputDecoration(
+                    labelText: 'Expires At',
+                    hintText: '2026-12-31T23:59:59Z',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: descriptionController,
+                  decoration: const InputDecoration(labelText: 'Description'),
+                ),
+                SwitchListTile(
+                  value: active,
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Active'),
+                  onChanged: (value) => setDialogState(() => active = value),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (saved == true) {
+      final ok = await DatabaseService.saveCoupon(
+        code: codeController.text,
+        discountType: type,
+        discountValue: double.tryParse(valueController.text.trim()) ?? 0,
+        minSubtotal: double.tryParse(minController.text.trim()) ?? 0,
+        description: descriptionController.text,
+        expiresAt: expiryController.text,
+        isActive: active,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ok ? 'Coupon saved' : 'Coupon could not be saved')),
+        );
+      }
+      if (ok) _loadCoupons();
+    }
+
+    codeController.dispose();
+    descriptionController.dispose();
+    valueController.dispose();
+    minController.dispose();
+    expiryController.dispose();
+  }
+
+  Widget _buildCouponsTab() {
+    return RefreshIndicator(
+      onRefresh: _loadCoupons,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: FilledButton.icon(
+              onPressed: () => _openCouponForm(),
+              icon: const Icon(Icons.add),
+              label: const Text('Add Coupon'),
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (_coupons.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 120),
+              child: Center(child: Text('No coupons yet')),
+            )
+          else
+            ..._coupons.map((coupon) {
+              final type = coupon['discount_type']?.toString() == 'amount'
+                  ? 'PHP ${coupon['discount_value']} off'
+                  : '${coupon['discount_value']}% off';
+              return Card(
+                child: ListTile(
+                  leading: const Icon(Icons.local_offer_outlined),
+                  title: Text(coupon['code']?.toString() ?? 'COUPON'),
+                  subtitle: Text(
+                    '$type | Used ${coupon['times_used'] ?? 0} time(s)',
+                  ),
+                  trailing: Switch(
+                    value: coupon['is_active'] != false,
+                    onChanged: (value) async {
+                      await DatabaseService.saveCoupon(
+                        code: coupon['code'].toString(),
+                        discountType:
+                            coupon['discount_type']?.toString() ?? 'percent',
+                        discountValue: _toDouble(coupon['discount_value']),
+                        minSubtotal: _toDouble(coupon['min_subtotal']),
+                        description: coupon['description']?.toString(),
+                        expiresAt: coupon['expires_at']?.toString(),
+                        isActive: value,
+                      );
+                      _loadCoupons();
+                    },
+                  ),
+                  onTap: () => _openCouponForm(coupon),
+                ),
+              );
+            }),
+        ],
       ),
     );
   }
@@ -830,6 +1111,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       _buildSalesReportTab(),
       _buildSellerApplicationsTab(),
       _buildRiderApplicationsTab(),
+      _buildCouponsTab(),
     ];
 
     return Scaffold(
@@ -847,6 +1129,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 _loadSellerApplications();
               } else if (_currentIndex == 3) {
                 _loadRiderApplications();
+              } else if (_currentIndex == 4) {
+                _loadCoupons();
               } else {
                 _loadAdminOrders();
               }
@@ -891,6 +1175,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
             _loadSellerApplications();
           } else if (index == 3) {
             _loadRiderApplications();
+          } else if (index == 4) {
+            _loadCoupons();
           } else if (index == 0 || index == 1) {
             _loadAdminOrders();
           }
@@ -907,6 +1193,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
           BottomNavigationBarItem(
             icon: Icon(Icons.delivery_dining),
             label: 'Riders',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.local_offer),
+            label: 'Coupons',
           ),
         ],
       ),

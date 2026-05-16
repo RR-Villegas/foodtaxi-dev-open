@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:convert';
 import 'models/application_data.dart';
 import 'models/user_model.dart';
 import 'services/auth_service.dart';
 import 'services/database_service.dart';
 import 'services/local_storage_service.dart';
 import 'services/input_validator.dart';
+import 'services/location_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -29,7 +31,9 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _redirectLoggedInUser() async {
     if (!AuthService.isAuthenticated()) return;
-    final role = (await DatabaseService.getCurrentAccountType() ?? 'Buyer').toLowerCase();
+    final account = await DatabaseService.getCurrentAccount();
+    final role = account?['account_type']?.toString().toLowerCase();
+    if (role == null || role.isEmpty) return;
     if (!mounted) return;
 
     final route = switch (role) {
@@ -153,6 +157,17 @@ class _LoginPageState extends State<LoginPage> {
         }
 
         if (canUsePendingSignup && pendingSignup!.isStep3Complete()) {
+          final point = await LocationService.geocodeAddress(
+            houseNumber: pendingSignup.houseNumber,
+            street: pendingSignup.street,
+            barangay: pendingSignup.barangay,
+            city: pendingSignup.municipality,
+            province: pendingSignup.province,
+            zipCode: pendingSignup.zipCode,
+          );
+          if (point == null) {
+            throw Exception('Delivery address could not be verified by the location API');
+          }
           final address = await DatabaseService.insertAddress(
             accountId: accountId,
             province: pendingSignup.province,
@@ -161,6 +176,8 @@ class _LoginPageState extends State<LoginPage> {
             street: pendingSignup.street,
             houseNumber: pendingSignup.houseNumber,
             zipCode: pendingSignup.zipCode,
+            latitude: point.latitude,
+            longitude: point.longitude,
             isDefault: true,
           );
 
@@ -318,6 +335,7 @@ class _LoginPageState extends State<LoginPage> {
       houseNumber: data.houseNumber,
       zipCode: data.zipCode,
       contactPhone: data.contactPhone,
+      documents: await _uploadPendingDocuments(data.documents),
     );
     if (saved) await LocalStorageService.clearSellerApplicationData();
   }
@@ -334,6 +352,7 @@ class _LoginPageState extends State<LoginPage> {
       vehicleType: data.vehicleType,
       plateNumber: data.plateNumber,
       documentNotes: data.documentNotes,
+      documents: await _uploadPendingDocuments(data.documents),
     );
     if (saved) await LocalStorageService.clearRiderApplicationData();
   }
@@ -344,6 +363,31 @@ class _LoginPageState extends State<LoginPage> {
 
   bool _matchesRiderApplication(RiderApplicationData? data, String? email) {
     return data?.email.trim().toLowerCase() == email?.trim().toLowerCase();
+  }
+
+  Future<List<Map<String, dynamic>>> _uploadPendingDocuments(
+    List<Map<String, dynamic>> documents,
+  ) async {
+    final uploaded = <Map<String, dynamic>>[];
+    for (final document in documents) {
+      final existingPath = document['path']?.toString();
+      if (existingPath != null && existingPath.isNotEmpty) {
+        uploaded.add(Map<String, dynamic>.from(document));
+        continue;
+      }
+
+      final encoded = document['bytes_base64']?.toString();
+      if (encoded == null || encoded.isEmpty) continue;
+
+      final metadata = await DatabaseService.uploadApplicationDocument(
+        bytes: base64Decode(encoded),
+        fileName: document['file_name']?.toString() ?? 'document.bin',
+        label: document['label']?.toString() ?? 'Application document',
+        contentType: document['content_type']?.toString(),
+      );
+      if (metadata != null) uploaded.add(metadata);
+    }
+    return uploaded;
   }
 
   void _showApplicationSnackBar(String message) {

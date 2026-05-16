@@ -18,6 +18,7 @@ class _ProductPageState extends State<ProductPage> {
   final _supabase = Supabase.instance.client;
 
   Map<String, dynamic>? _product;
+  List<Map<String, dynamic>> _reviews = [];
   bool _isLoading = true;
   bool _hasError = false;
   int _quantity = 1;
@@ -51,14 +52,16 @@ class _ProductPageState extends State<ProductPage> {
     try {
       final response = await _supabase
           .from('product')
-          .select('*, store(store_name), product_variant(*)')
+          .select('*, store(store_id, store_name), product_variant(*)')
           .eq('product_id', widget.productId)
           .maybeSingle();
+      final reviews = await DatabaseService.getProductReviews(widget.productId);
 
       if (!mounted) return;
 
       setState(() {
         _product = response == null ? null : Map<String, dynamic>.from(response);
+        _reviews = reviews;
         _hasError = response == null;
         _isLoading = false;
       });
@@ -185,6 +188,14 @@ class _ProductPageState extends State<ProductPage> {
     final sellerName = store is Map
         ? store['store_name']?.toString() ?? 'Seller'
         : 'Seller';
+    final storeId = store is Map ? store['store_id']?.toString() : null;
+    final avgRating = _reviews.isEmpty
+        ? 0.0
+        : _reviews.fold<double>(
+              0,
+              (sum, review) => sum + _toDouble(review['rating']),
+            ) /
+            _reviews.length;
 
     return Scaffold(
       appBar: AppBar(
@@ -228,9 +239,20 @@ class _ProductPageState extends State<ProductPage> {
                             ),
                           ),
                           const SizedBox(height: 4),
-                          Text(
-                            sellerName,
-                            style: const TextStyle(color: Colors.black54),
+                          InkWell(
+                            onTap: storeId == null
+                                ? null
+                                : () => Navigator.pushNamed(
+                                      context,
+                                      '/seller/$storeId',
+                                    ),
+                            child: Text(
+                              sellerName,
+                              style: const TextStyle(
+                                color: Colors.green,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
                           const SizedBox(height: 12),
                           Text(
@@ -281,15 +303,19 @@ class _ProductPageState extends State<ProductPage> {
                             ],
                           ),
                           const SizedBox(height: 12),
-                          const Row(
+                          Row(
                             children: [
-                              Icon(Icons.star, color: Colors.amber, size: 18),
-                              Icon(Icons.star, color: Colors.amber, size: 18),
-                              Icon(Icons.star, color: Colors.amber, size: 18),
-                              Icon(Icons.star, color: Colors.amber, size: 18),
-                              Icon(Icons.star_border, color: Colors.amber, size: 18),
-                              SizedBox(width: 6),
-                              Text('(0 reviews)'),
+                              ...List.generate(5, (index) {
+                                return Icon(
+                                  index < avgRating.round()
+                                      ? Icons.star
+                                      : Icons.star_border,
+                                  color: Colors.amber,
+                                  size: 18,
+                                );
+                              }),
+                              const SizedBox(width: 6),
+                              Text('(${_reviews.length} reviews)'),
                             ],
                           ),
                         ],
@@ -393,7 +419,39 @@ class _ProductPageState extends State<ProductPage> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text('No reviews yet.'),
+            if (_reviews.isEmpty)
+              const Text('No reviews yet.')
+            else
+              ..._reviews.map((review) {
+                final account = review['account'];
+                final name = account is Map
+                    ? '${account['firstname'] ?? 'Buyer'} ${account['surname'] ?? ''}'
+                        .trim()
+                    : 'Buyer';
+                final rating = _toInt(review['rating']);
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    title: Row(
+                      children: [
+                        Expanded(child: Text(name.isEmpty ? 'Buyer' : name)),
+                        ...List.generate(5, (index) {
+                          return Icon(
+                            index < rating ? Icons.star : Icons.star_border,
+                            color: Colors.amber,
+                            size: 16,
+                          );
+                        }),
+                      ],
+                    ),
+                    subtitle: Text(
+                      review['comment']?.toString().trim().isEmpty ?? true
+                          ? 'No comment.'
+                          : review['comment'].toString(),
+                    ),
+                  ),
+                );
+              }),
           ],
         ),
       ),

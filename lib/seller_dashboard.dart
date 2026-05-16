@@ -609,7 +609,7 @@ class _SellerDashboardState extends State<SellerDashboard> {
     Map<String, dynamic> order,
     String status,
   ) async {
-    final ok = await DatabaseService.updateOrderStatus(
+    final ok = await DatabaseService.sellerUpdateOrderStatus(
       orderId: order['order_id'].toString(),
       status: status,
     );
@@ -619,6 +619,36 @@ class _SellerDashboardState extends State<SellerDashboard> {
       SnackBar(content: Text(ok ? 'Order updated' : 'Order could not be updated')),
     );
     if (ok) _loadDashboard();
+  }
+
+  Future<void> _showDeliveryProof(Map<String, dynamic> order) async {
+    final path = order['proof_of_delivery_url']?.toString();
+    if (path == null || path.isEmpty) return;
+    final url = await DatabaseService.createSignedStorageUrl(
+      bucket: 'delivery-proofs',
+      path: path,
+    );
+    if (!mounted || url == null) return;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delivery Proof'),
+        content: SizedBox(
+          width: 520,
+          child: Image.network(
+            url,
+            fit: BoxFit.contain,
+            errorBuilder: (_, _, _) => SelectableText(url),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildOrdersTab() {
@@ -637,8 +667,6 @@ class _SellerDashboardState extends State<SellerDashboard> {
     const statuses = [
       'Processing',
       'Ready for Pickup',
-      'In Transit',
-      'Delivered',
       'Cancelled',
     ];
 
@@ -700,7 +728,7 @@ class _SellerDashboardState extends State<SellerDashboard> {
                   }),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
-                    value: statuses.contains(status) ? status : 'Processing',
+                    value: statuses.contains(status) ? status : null,
                     decoration: const InputDecoration(labelText: 'Order Status'),
                     items: statuses
                         .map(
@@ -715,6 +743,14 @@ class _SellerDashboardState extends State<SellerDashboard> {
                       _updateOrderStatus(order, value);
                     },
                   ),
+                  if (status == 'Ready for Pickup' &&
+                      (order['pickup_code']?.toString() ?? '').isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    SelectableText(
+                      'Pickup code: ${order['pickup_code']}',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ],
                   if (buyerPhone.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     OutlinedButton.icon(
@@ -725,6 +761,14 @@ class _SellerDashboardState extends State<SellerDashboard> {
                       },
                       icon: const Icon(Icons.phone),
                       label: const Text('Call Customer'),
+                    ),
+                  ],
+                  if ((order['proof_of_delivery_url']?.toString() ?? '').isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: () => _showDeliveryProof(order),
+                      icon: const Icon(Icons.image_outlined),
+                      label: const Text('Show Delivery Proof'),
                     ),
                   ],
                 ],

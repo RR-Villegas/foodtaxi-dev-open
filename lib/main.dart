@@ -6,9 +6,11 @@ import 'profile_page.dart';
 import 'address_page.dart';
 import 'notifications_page.dart';
 import 'settings_page.dart';
+import 'my_orders_page.dart';
 import 'cart_page.dart';
 import 'search_page.dart';
 import 'buyer_dashboard.dart';
+import 'seller_page.dart';
 import 'admin_dashboard.dart';
 import 'seller_dashboard.dart';
 import 'rider_dashboard.dart';
@@ -73,6 +75,10 @@ class MyApp extends StatelessWidget {
           protection: RouteProtection.authenticated,
           child: const CartPage(),
         ),
+        '/my-orders': (context) => ProtectedRoute(
+          protection: RouteProtection.buyerOnly,
+          child: const MyOrdersPage(),
+        ),
         '/search': (context) => ProtectedRoute(
           protection: RouteProtection.authenticated,
           child: const SearchPage(),
@@ -112,6 +118,15 @@ class MyApp extends StatelessWidget {
             builder: (context) => ProtectedRoute(
               protection: RouteProtection.authenticated,
               child: ProductPage(productId: productId),
+            ),
+          );
+        }
+        if (settings.name?.startsWith('/seller/') ?? false) {
+          final storeId = settings.name!.split('/').last;
+          return MaterialPageRoute(
+            builder: (context) => ProtectedRoute(
+              protection: RouteProtection.authenticated,
+              child: SellerPage(storeId: storeId),
             ),
           );
         }
@@ -329,27 +344,48 @@ class _MyHomePageState extends State<MyHomePage> {
             // CTA
             Padding(
               padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  const Text(
-                    "Become a Seller",
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    "Grow your business with FoodTaxi Omega. Apply now!",
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 15),
-                  ElevatedButton(
-                    onPressed: () =>
-                        Navigator.pushNamed(context, '/seller-registration'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.amber,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isNarrow = constraints.maxWidth < 560;
+                  final actions = [
+                    _roleCta(
+                      title: 'Become a Seller',
+                      body: 'Grow your business with FoodTaxi Omega.',
+                      buttonText: 'Start Selling',
+                      icon: Icons.storefront,
+                      color: Colors.amber,
+                      onPressed: () =>
+                          Navigator.pushNamed(context, '/seller-registration'),
                     ),
-                    child: const Text("Start Selling"),
-                  ),
-                ],
+                    _roleCta(
+                      title: 'Become a Rider',
+                      body: 'Deliver orders and earn with FoodTaxi Omega.',
+                      buttonText: 'Start Riding',
+                      icon: Icons.delivery_dining,
+                      color: const Color(0xFF2d8f4e),
+                      onPressed: () =>
+                          Navigator.pushNamed(context, '/rider-registration'),
+                    ),
+                  ];
+
+                  if (isNarrow) {
+                    return Column(
+                      children: [
+                        actions[0],
+                        const SizedBox(height: 12),
+                        actions[1],
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    children: [
+                      Expanded(child: actions[0]),
+                      const SizedBox(width: 12),
+                      Expanded(child: actions[1]),
+                    ],
+                  );
+                },
               ),
             ),
           ],
@@ -367,6 +403,45 @@ class _MyHomePageState extends State<MyHomePage> {
           title,
           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
+      ),
+    );
+  }
+
+  Widget _roleCta({
+    required String title,
+    required String body,
+    required String buttonText,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.black12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 34, color: color),
+          const SizedBox(height: 8),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            body,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 14),
+          ElevatedButton(
+            onPressed: onPressed,
+            style: ElevatedButton.styleFrom(backgroundColor: color),
+            child: Text(buttonText),
+          ),
+        ],
       ),
     );
   }

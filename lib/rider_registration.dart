@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:convert';
 import 'models/application_data.dart';
+import 'models/picked_document.dart';
 import 'services/database_service.dart';
 import 'services/input_validator.dart';
 import 'services/local_storage_service.dart';
@@ -30,7 +34,7 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
   final _phoneController = TextEditingController();
   final _licenseController = TextEditingController();
   final _plateController = TextEditingController();
-  final _documentNotesController = TextEditingController();
+  final List<PickedDocument> _riderDocuments = [];
   String _vehicleType = 'Motorcycle';
   bool _showPassword = false;
   bool _showConfirmPassword = false;
@@ -67,7 +71,6 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
     _phoneController.dispose();
     _licenseController.dispose();
     _plateController.dispose();
-    _documentNotesController.dispose();
     super.dispose();
   }
 
@@ -142,13 +145,99 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
 
   bool _validateStep3() {
     setState(() => _step3Error = null);
-    final notes = _documentNotesController.text.trim();
-    if (notes.isNotEmpty &&
-        InputValidator.containsSQLInjectionPatterns(notes)) {
-      setState(() => _step3Error = 'Document notes contain invalid characters');
+    if (_riderDocuments.isEmpty) {
+      setState(() => _step3Error = 'Upload your license or vehicle document');
       return false;
     }
     return true;
+  }
+
+  Future<void> _pickRiderImage() async {
+    final image = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 65,
+      maxWidth: 1600,
+      maxHeight: 1600,
+    );
+    if (image == null) return;
+    _addPickedDocument(
+      PickedDocument(
+        label: 'Rider verification',
+        fileName: image.name,
+        contentType: _contentTypeFor(image.name),
+        bytes: await image.readAsBytes(),
+      ),
+    );
+  }
+
+  Future<void> _pickRiderFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['pdf', 'png', 'jpg', 'jpeg', 'webp'],
+      withData: true,
+    );
+    final file = result?.files.single;
+    final bytes = file?.bytes;
+    if (file == null || bytes == null) return;
+    _addPickedDocument(
+      PickedDocument(
+        label: 'Rider verification',
+        fileName: file.name,
+        contentType: _contentTypeFor(file.name),
+        bytes: bytes,
+      ),
+    );
+  }
+
+  void _addPickedDocument(PickedDocument document) {
+    if (document.size > 5 * 1024 * 1024) {
+      setState(() => _step3Error = 'Document must be 5MB or smaller');
+      return;
+    }
+    setState(() {
+      _step3Error = null;
+      _riderDocuments.add(document);
+    });
+  }
+
+  String _contentTypeFor(String fileName) {
+    final lower = fileName.toLowerCase();
+    if (lower.endsWith('.pdf')) return 'application/pdf';
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    return 'application/octet-stream';
+  }
+
+  Future<List<Map<String, dynamic>>> _uploadRiderDocuments() async {
+    final uploaded = <Map<String, dynamic>>[];
+    for (final document in _riderDocuments) {
+      final metadata = await DatabaseService.uploadApplicationDocument(
+        bytes: document.bytes,
+        fileName: document.fileName,
+        label: document.label,
+        contentType: document.contentType,
+      );
+      if (metadata == null) {
+        throw Exception('Could not upload ${document.fileName}');
+      }
+      uploaded.add(metadata);
+    }
+    return uploaded;
+  }
+
+  List<Map<String, dynamic>> _pendingRiderDocuments() {
+    return _riderDocuments
+        .map(
+          (document) => {
+            'label': document.label,
+            'file_name': document.fileName,
+            'content_type': document.contentType,
+            'size': document.size,
+            'bytes_base64': base64Encode(document.bytes),
+          },
+        )
+        .toList();
   }
 
   void _nextStep() {
@@ -164,6 +253,12 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
     setState(() => _isLoading = true);
 
     try {
+      final currentUser = _supabase.auth.currentUser;
+      final submittedWhileLoggedIn = currentUser != null;
+      final documents = submittedWhileLoggedIn
+          ? await _uploadRiderDocuments()
+          : _pendingRiderDocuments();
+
       final data = RiderApplicationData(
         email: _emailController.text.trim(),
         firstName: _firstNameController.text.trim(),
@@ -173,15 +268,11 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
         licenseNumber: _licenseController.text.trim(),
         vehicleType: _vehicleType,
         plateNumber: _plateController.text.trim(),
-        documentNotes: _documentNotesController.text.trim().isEmpty
-            ? null
-            : _documentNotesController.text.trim(),
+        documents: documents,
       );
 
       await LocalStorageService.saveRiderApplicationData(data);
 
-      final currentUser = _supabase.auth.currentUser;
-      final submittedWhileLoggedIn = currentUser != null;
       if (currentUser == null) {
         final authResponse = await _supabase.auth.signUp(
           email: data.email,
@@ -214,6 +305,7 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
           vehicleType: data.vehicleType,
           plateNumber: data.plateNumber,
           documentNotes: data.documentNotes,
+          documents: data.documents,
         );
         if (!submitted) {
           throw Exception('Rider application could not be submitted');
@@ -463,6 +555,8 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
           'Phone Number *',
           Icons.phone,
           keyboardType: TextInputType.phone,
+          prefixText: '+63 ',
+          hintText: '9123456789',
         ),
         _passwordField(
           controller: _passwordController,
@@ -554,12 +648,14 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
           style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 24),
-        TextField(
-          controller: _documentNotesController,
-          maxLines: 4,
-          decoration: _decoration('Document Notes', Icons.description).copyWith(
-            hintText: 'List the documents you will submit for admin review',
-          ),
+        _documentUploadSection(
+          title: 'License and Vehicle Documents *',
+          documents: _riderDocuments,
+          onPickImage: _pickRiderImage,
+          onPickFile: _pickRiderFile,
+          onRemove: (index) {
+            setState(() => _riderDocuments.removeAt(index));
+          },
         ),
         _error(_step3Error),
       ],
@@ -604,6 +700,8 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
     IconData icon, {
     TextInputType? keyboardType,
     bool obscureText = false,
+    String? prefixText,
+    String? hintText,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -611,7 +709,10 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
         controller: controller,
         keyboardType: keyboardType,
         obscureText: obscureText,
-        decoration: _decoration(label, icon),
+        decoration: _decoration(label, icon).copyWith(
+          prefixText: prefixText,
+          hintText: hintText,
+        ),
       ),
     );
   }
@@ -638,6 +739,77 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
             onPressed: onToggle,
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _documentUploadSection({
+    required String title,
+    required List<PickedDocument> documents,
+    required VoidCallback onPickImage,
+    required VoidCallback onPickFile,
+    required ValueChanged<int> onRemove,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey[300]!),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onPickImage,
+                  icon: const Icon(Icons.image_outlined),
+                  label: const Text('Image'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onPickFile,
+                  icon: const Icon(Icons.picture_as_pdf_outlined),
+                  label: const Text('PDF/File'),
+                ),
+              ),
+            ],
+          ),
+          if (documents.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text('Upload license, OR/CR, plate, or permit files.'),
+            )
+          else
+            ...documents.asMap().entries.map((entry) {
+              final index = entry.key;
+              final document = entry.value;
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                leading: Icon(
+                  document.contentType == 'application/pdf'
+                      ? Icons.picture_as_pdf
+                      : Icons.image,
+                ),
+                title: Text(
+                  document.fileName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text('${(document.size / 1024).ceil()} KB'),
+                trailing: IconButton(
+                  onPressed: () => onRemove(index),
+                  icon: const Icon(Icons.close),
+                ),
+              );
+            }),
+        ],
       ),
     );
   }

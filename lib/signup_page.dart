@@ -334,6 +334,7 @@ class _SignupPageState extends State<SignupPage> {
     _signupData.barangay = _barangayController.text.trim();
     _signupData.street = _streetController.text.trim();
     _signupData.houseNumber = _houseNumberController.text.trim();
+    _signupData.zipCode = _zipCodeController.text.trim();
 
     setState(() => _isLoading = true);
     try {
@@ -385,6 +386,18 @@ class _SignupPageState extends State<SignupPage> {
         throw Exception('Failed to create user profile');
       }
 
+      final point = await LocationService.geocodeAddress(
+        houseNumber: _signupData.houseNumber,
+        street: _signupData.street,
+        barangay: _signupData.barangay,
+        city: _signupData.municipality,
+        province: _signupData.province,
+        zipCode: _signupData.zipCode,
+      );
+      if (point == null) {
+        throw Exception('Delivery address could not be verified by the location API');
+      }
+
       // Insert address into the database
       final address = await DatabaseService.insertAddress(
         accountId: accountId,
@@ -394,6 +407,8 @@ class _SignupPageState extends State<SignupPage> {
         street: _signupData.street,
         houseNumber: _signupData.houseNumber,
         zipCode: _signupData.zipCode,
+        latitude: point.latitude,
+        longitude: point.longitude,
         isDefault: true, // Set first address as default
       );
 
@@ -479,7 +494,7 @@ class _SignupPageState extends State<SignupPage> {
     _firstNameController.dispose();
     _surnameController.dispose();
     _phoneNumberController.dispose();
-_provinceController.dispose();
+    _provinceController.dispose();
     _municipalityController.dispose();
     _barangayController.dispose();
     _streetController.dispose();
@@ -771,7 +786,8 @@ _provinceController.dispose();
           controller: _phoneNumberController,
           decoration: InputDecoration(
             labelText: 'Phone Number',
-            hintText: 'Enter your phone number',
+            hintText: '9123456789',
+            prefixText: '+63 ',
             filled: true,
             fillColor: const Color(0xFFF1F7F1),
             border: OutlineInputBorder(

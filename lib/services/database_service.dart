@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -20,6 +21,8 @@ class DatabaseService {
     String? street,
     String? houseNumber,
     String? zipCode,
+    double? latitude,
+    double? longitude,
     bool isDefault = false,
   }) async {
     try {
@@ -33,6 +36,8 @@ class DatabaseService {
             'street': _blankToNull(street),
             'house_number': _blankToNull(houseNumber),
             'zip_code': _blankToNull(zipCode),
+            'latitude': latitude,
+            'longitude': longitude,
             'is_default': isDefault,
           })
           .select()
@@ -60,9 +65,32 @@ class DatabaseService {
 
   static int _toInt(dynamic value) => _toNum(value).toInt();
 
+  static String _randomCode([int length = 6]) {
+    final random = Random.secure();
+    return List.generate(length, (_) => random.nextInt(10).toString()).join();
+  }
+
+  static String _extensionFor(String fileName) {
+    final parts = fileName.split('.');
+    if (parts.length < 2) return 'bin';
+    return parts.last.toLowerCase();
+  }
+
+  static String _contentTypeFor(String fileName, [String? fallback]) {
+    final lower = fileName.toLowerCase();
+    if (lower.endsWith('.pdf')) return 'application/pdf';
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    return fallback ?? 'application/octet-stream';
+  }
+
   static String? normalizePhilippinePhone(String? phone) {
     final digits = phone?.replaceAll(RegExp(r'\D'), '') ?? '';
     if (digits.isEmpty) return null;
+    if (digits.startsWith('9') && digits.length == 10) {
+      return '+63$digits';
+    }
     if (digits.startsWith('09') && digits.length == 11) {
       return '+63${digits.substring(1)}';
     }
@@ -230,6 +258,8 @@ class DatabaseService {
     String? street,
     String? houseNumber,
     String? zipCode,
+    double? latitude,
+    double? longitude,
     bool? isDefault,
   }) async {
     try {
@@ -241,6 +271,8 @@ class DatabaseService {
       if (houseNumber != null)
         updateData['house_number'] = _blankToNull(houseNumber);
       if (zipCode != null) updateData['zip_code'] = _blankToNull(zipCode);
+      if (latitude != null) updateData['latitude'] = latitude;
+      if (longitude != null) updateData['longitude'] = longitude;
       if (isDefault != null) updateData['is_default'] = isDefault;
 
       final response = await _supabase
@@ -309,27 +341,39 @@ class DatabaseService {
     required double totalAmount,
     required double shippingFee,
     double serviceFee = 0,
+    double discountAmount = 0,
+    double? deliveryDistanceKm,
     required String paymentMethod,
+    String? discountCode,
     String? sellerAccountId,
     String orderStatus = 'Processing',
   }) async {
     try {
       final sellerPayout = totalAmount - shippingFee - serviceFee;
+      final orderData = {
+        'buyer_account_id': accountId,
+        'seller_account_id': sellerAccountId,
+        'address_id': addressId,
+        'total_amount': totalAmount,
+        'shipping_fee': shippingFee,
+        'delivery_distance_km': deliveryDistanceKm,
+        'pickup_code': _randomCode(),
+        'service_fee': serviceFee,
+        'admin_commission': serviceFee,
+        'rider_fee': shippingFee,
+        'seller_payout': sellerPayout < 0 ? 0 : sellerPayout,
+        'payment_method': paymentMethod,
+        'order_status': orderStatus,
+      };
+
+      if (discountAmount > 0 || _blankToNull(discountCode) != null) {
+        orderData['discount_amount'] = discountAmount;
+        orderData['discount_code'] = _blankToNull(discountCode);
+      }
+
       final response = await _supabase
           .from('orders')
-          .insert({
-            'buyer_account_id': accountId,
-            'seller_account_id': sellerAccountId,
-            'address_id': addressId,
-            'total_amount': totalAmount,
-            'shipping_fee': shippingFee,
-            'service_fee': serviceFee,
-            'admin_commission': serviceFee,
-            'rider_fee': shippingFee,
-            'seller_payout': sellerPayout < 0 ? 0 : sellerPayout,
-            'payment_method': paymentMethod,
-            'order_status': orderStatus,
-          })
+          .insert(orderData)
           .select('order_id')
           .single();
 
@@ -382,6 +426,23 @@ class DatabaseService {
     }
   }
 
+  static Future<Map<String, dynamic>?> getStoreById(String storeId) async {
+    try {
+      final response = await _supabase
+          .from('store')
+          .select(
+            '*, account!store_owner_account_id_fkey(firstname, surname, profile_image_url)',
+          )
+          .eq('store_id', storeId)
+          .maybeSingle();
+
+      return response == null ? null : Map<String, dynamic>.from(response);
+    } catch (e) {
+      _logDbError('Failed to fetch store', e);
+      return null;
+    }
+  }
+
   static Future<List<Map<String, dynamic>>> getSellerProducts(
     String storeId,
   ) async {
@@ -397,6 +458,12 @@ class DatabaseService {
       _logDbError('Failed to fetch seller products', e);
       return [];
     }
+  }
+
+  static Future<List<Map<String, dynamic>>> getProductsForStore(
+    String storeId,
+  ) {
+    return getSellerProducts(storeId);
   }
 
   static Future<bool> insertProduct({
@@ -628,20 +695,50 @@ class DatabaseService {
     }
   }
 
+  static Future<Map<String, dynamic>?> getStoreForProduct(String productId) async {
+    try {
+      final response = await _supabase
+          .from('product')
+          .select('store(*)')
+          .eq('product_id', productId)
+          .maybeSingle();
+
+      final store = response?['store'];
+      return store is Map ? Map<String, dynamic>.from(store) : null;
+    } catch (e) {
+      _logDbError('Failed to fetch store for product', e);
+      return null;
+    }
+  }
+
   static Future<bool> updateOrderStatus({
     required String orderId,
     required String status,
   }) async {
     try {
+      final updateData = <String, dynamic>{'order_status': status};
+      if (status == 'Delivered') {
+        updateData['delivered_at'] = DateTime.now().toIso8601String();
+      }
       await _supabase
           .from('orders')
-          .update({'order_status': status})
+          .update(updateData)
           .eq('order_id', orderId);
       return true;
     } catch (e) {
       _logDbError('Failed to update order status', e);
       return false;
     }
+  }
+
+  static Future<bool> sellerUpdateOrderStatus({
+    required String orderId,
+    required String status,
+  }) async {
+    if (!['Processing', 'Ready for Pickup', 'Cancelled'].contains(status)) {
+      return false;
+    }
+    return updateOrderStatus(orderId: orderId, status: status);
   }
 
   static Future<List<Map<String, dynamic>>> getSellerOrders(
@@ -660,6 +757,276 @@ class DatabaseService {
     } catch (e) {
       _logDbError('Failed to fetch seller orders', e);
       return [];
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getCurrentBuyerOrders() async {
+    try {
+      final accountId = await getCurrentAccountId();
+      if (accountId == null) return [];
+
+      var response = await _supabase
+          .from('orders')
+          .select(
+            '*, address(*), order_items(*, product(name, main_image_url), product_variant(size_label), product_review(review_id, rating, comment))',
+          )
+          .eq('buyer_account_id', accountId)
+          .order('order_date', ascending: false);
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      try {
+        final accountId = await getCurrentAccountId();
+        if (accountId == null) return [];
+        final response = await _supabase
+            .from('orders')
+            .select(
+              '*, address(*), order_items(*, product(name, main_image_url), product_variant(size_label))',
+            )
+            .eq('buyer_account_id', accountId)
+            .order('order_date', ascending: false);
+        return List<Map<String, dynamic>>.from(response);
+      } catch (fallbackError) {
+        _logDbError('Failed to fetch buyer orders', fallbackError);
+        return [];
+      }
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getAvailableDeliveryOrders() async {
+    try {
+      final response = await _supabase
+          .from('orders')
+          .select(
+            '*, address(*), account!orders_buyer_account_id_fkey(firstname, surname, phone_number), order_items(*, product(name), product_variant(size_label))',
+          )
+          .order('order_date', ascending: false);
+
+      return List<Map<String, dynamic>>.from(response).where((order) {
+        final status = order['order_status']?.toString();
+        return status == 'Ready for Pickup' || status == 'In Transit';
+      }).toList();
+    } catch (e) {
+      _logDbError('Failed to fetch delivery orders', e);
+      return [];
+    }
+  }
+
+  static Future<bool> assignOrderToCurrentRider(String orderId) async {
+    try {
+      final riderAccountId = await getCurrentAccountId();
+      if (riderAccountId == null) return false;
+
+      await _supabase
+          .from('orders')
+          .update({
+            'rider_account_id': riderAccountId,
+            'order_status': 'In Transit',
+          })
+          .eq('order_id', orderId);
+      return true;
+    } catch (e) {
+      _logDbError('Failed to assign rider order', e);
+      return false;
+    }
+  }
+
+  static Future<bool> markOrderInTransitWithPickupCode({
+    required String orderId,
+    required String pickupCode,
+  }) async {
+    try {
+      final riderAccountId = await getCurrentAccountId();
+      if (riderAccountId == null) return false;
+
+      final order = await _supabase
+          .from('orders')
+          .select('pickup_code, order_status')
+          .eq('order_id', orderId)
+          .maybeSingle();
+
+      if (order == null ||
+          order['order_status']?.toString() != 'Ready for Pickup' ||
+          order['pickup_code']?.toString() != pickupCode.trim()) {
+        return false;
+      }
+
+      await _supabase
+          .from('orders')
+          .update({
+            'rider_account_id': riderAccountId,
+            'order_status': 'In Transit',
+            'picked_up_at': DateTime.now().toIso8601String(),
+          })
+          .eq('order_id', orderId);
+      return true;
+    } catch (e) {
+      _logDbError('Failed to mark order in transit', e);
+      return false;
+    }
+  }
+
+  static Future<bool> markOrderDelivered({
+    required String orderId,
+    String? proofOfDeliveryUrl,
+    String? proofNote,
+  }) async {
+    try {
+      await _supabase
+          .from('orders')
+          .update({
+            'order_status': 'Delivered',
+            'payment_status': 'Paid',
+            'proof_of_delivery_url': _blankToNull(proofOfDeliveryUrl),
+            'delivery_proof_note': _blankToNull(proofNote),
+            'delivered_at': DateTime.now().toIso8601String(),
+          })
+          .eq('order_id', orderId);
+      return true;
+    } catch (e) {
+      _logDbError('Failed to mark order delivered', e);
+      return false;
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getProductReviews(
+    String productId,
+  ) async {
+    try {
+      final response = await _supabase
+          .from('product_review')
+          .select(
+            '*, account!product_review_buyer_account_id_fkey(firstname, surname)',
+          )
+          .eq('product_id', productId)
+          .order('created_at', ascending: false);
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      _logDbError('Failed to fetch product reviews', e);
+      return [];
+    }
+  }
+
+  static Future<bool> saveProductReview({
+    required String orderItemId,
+    required String productId,
+    required int rating,
+    String? comment,
+  }) async {
+    try {
+      final accountId = await getCurrentAccountId();
+      if (accountId == null) return false;
+
+      await _supabase.from('product_review').upsert({
+        'order_item_id': orderItemId,
+        'product_id': productId,
+        'buyer_account_id': accountId,
+        'rating': rating,
+        'comment': _blankToNull(comment),
+      }, onConflict: 'order_item_id');
+      return true;
+    } catch (e) {
+      _logDbError('Failed to save product review', e);
+      return false;
+    }
+  }
+
+  static Future<Map<String, dynamic>?> validateCoupon({
+    required String code,
+    required double subtotal,
+  }) async {
+    try {
+      final coupon = await _supabase
+          .from('discount_coupon')
+          .select()
+          .eq('code', code.trim().toUpperCase())
+          .eq('is_active', true)
+          .maybeSingle();
+
+      if (coupon == null) return null;
+
+      final now = DateTime.now();
+      final startsAt = DateTime.tryParse(coupon['starts_at']?.toString() ?? '');
+      final expiresAt = DateTime.tryParse(coupon['expires_at']?.toString() ?? '');
+      final minSubtotal = _toDouble(coupon['min_subtotal']);
+      final usageLimit = coupon['usage_limit'];
+      final timesUsed = _toInt(coupon['times_used']);
+
+      if (startsAt != null && now.isBefore(startsAt)) return null;
+      if (expiresAt != null && now.isAfter(expiresAt)) return null;
+      if (subtotal < minSubtotal) return null;
+      if (usageLimit is num && timesUsed >= usageLimit.toInt()) return null;
+
+      final type = coupon['discount_type']?.toString() ?? 'percent';
+      final value = _toDouble(coupon['discount_value']);
+      final amount = type == 'amount' ? value : subtotal * (value / 100);
+
+      return {
+        ...Map<String, dynamic>.from(coupon),
+        'discount_amount': amount.clamp(0, subtotal).toDouble(),
+      };
+    } catch (e) {
+      _logDbError('Failed to validate coupon', e);
+      return null;
+    }
+  }
+
+  static Future<void> incrementCouponUsage(String code) async {
+    try {
+      final coupon = await _supabase
+          .from('discount_coupon')
+          .select('times_used')
+          .eq('code', code.trim().toUpperCase())
+          .maybeSingle();
+      if (coupon == null) return;
+
+      await _supabase
+          .from('discount_coupon')
+          .update({'times_used': _toInt(coupon['times_used']) + 1})
+          .eq('code', code.trim().toUpperCase());
+    } catch (e) {
+      _logDbError('Failed to increment coupon usage', e);
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getCoupons() async {
+    try {
+      final response = await _supabase
+          .from('discount_coupon')
+          .select()
+          .order('created_at', ascending: false);
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      _logDbError('Failed to fetch coupons', e);
+      return [];
+    }
+  }
+
+  static Future<bool> saveCoupon({
+    required String code,
+    required String discountType,
+    required double discountValue,
+    double minSubtotal = 0,
+    String? description,
+    String? expiresAt,
+    bool isActive = true,
+  }) async {
+    try {
+      await _supabase.from('discount_coupon').upsert({
+        'code': code.trim().toUpperCase(),
+        'description': _blankToNull(description),
+        'discount_type': discountType,
+        'discount_value': discountValue,
+        'min_subtotal': minSubtotal,
+        'expires_at': _blankToNull(expiresAt),
+        'is_active': isActive,
+      }, onConflict: 'code');
+      return true;
+    } catch (e) {
+      _logDbError('Failed to save coupon', e);
+      return false;
     }
   }
 
@@ -731,7 +1098,7 @@ class DatabaseService {
     try {
       var request = _supabase
           .from('product')
-          .select('*, store(store_name)')
+          .select('*, store(store_id, store_name)')
           .eq('is_active', true);
 
       final trimmedQuery = query.trim();
@@ -793,6 +1160,90 @@ class DatabaseService {
       return path;
     } catch (e) {
       _logDbError('Failed to upload profile image', e);
+      return null;
+    }
+  }
+
+  static Future<Map<String, dynamic>?> uploadApplicationDocument({
+    required Uint8List bytes,
+    required String fileName,
+    required String label,
+    String? contentType,
+  }) async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) return null;
+      final userFolder = user.id;
+      final extension = _extensionFor(fileName);
+      final path =
+          '$userFolder/applications/${DateTime.now().millisecondsSinceEpoch}.$extension';
+      final mimeType = _contentTypeFor(fileName, contentType);
+
+      await _supabase.storage.from('application-documents').uploadBinary(
+            path,
+            bytes,
+            fileOptions: FileOptions(
+              upsert: false,
+              contentType: mimeType,
+            ),
+          );
+
+      return {
+        'label': label,
+        'file_name': fileName,
+        'path': path,
+        'bucket': 'application-documents',
+        'content_type': mimeType,
+        'size': bytes.lengthInBytes,
+      };
+    } catch (e) {
+      _logDbError('Failed to upload application document', e);
+      return null;
+    }
+  }
+
+  static Future<String?> uploadDeliveryProof({
+    required Uint8List bytes,
+    required String fileName,
+    required String orderId,
+    String? contentType,
+  }) async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) return null;
+      final extension = _extensionFor(fileName);
+      final path =
+          '$orderId/${user.id}/${DateTime.now().millisecondsSinceEpoch}.$extension';
+      final mimeType = _contentTypeFor(fileName, contentType);
+
+      await _supabase.storage.from('delivery-proofs').uploadBinary(
+            path,
+            bytes,
+            fileOptions: FileOptions(
+              upsert: false,
+              contentType: mimeType,
+            ),
+          );
+
+      return path;
+    } catch (e) {
+      _logDbError('Failed to upload delivery proof', e);
+      return null;
+    }
+  }
+
+  static Future<String?> createSignedStorageUrl({
+    required String bucket,
+    required String path,
+    int expiresIn = 3600,
+  }) async {
+    try {
+      return await _supabase.storage.from(bucket).createSignedUrl(
+            path,
+            expiresIn,
+          );
+    } catch (e) {
+      _logDbError('Failed to create signed storage URL', e);
       return null;
     }
   }
@@ -877,6 +1328,7 @@ class DatabaseService {
     String? houseNumber,
     String? zipCode,
     required String contactPhone,
+    List<Map<String, dynamic>> documents = const [],
   }) async {
     try {
       await _supabase.from('seller_application').insert({
@@ -890,6 +1342,7 @@ class DatabaseService {
         'house_number': _blankToNull(houseNumber),
         'zip_code': _blankToNull(zipCode),
         'contact_phone': normalizePhilippinePhone(contactPhone),
+        'documents_path': documents.isEmpty ? null : {'files': documents},
         'status': 'Pending Review',
       });
       return true;
@@ -931,6 +1384,7 @@ class DatabaseService {
             submission_date,
             review_notes,
             date_approved,
+            documents_path,
             account (
               firstname,
               surname,
@@ -979,6 +1433,7 @@ class DatabaseService {
     String? houseNumber,
     String? zipCode,
     required String contactPhone,
+    List<Map<String, dynamic>> documents = const [],
   }) async {
     final existing = await getSellerApplicationByAccountId(accountId);
     if (existing == null) {
@@ -993,6 +1448,7 @@ class DatabaseService {
         houseNumber: houseNumber,
         zipCode: zipCode,
         contactPhone: contactPhone,
+        documents: documents,
       );
     }
 
@@ -1011,6 +1467,7 @@ class DatabaseService {
             'house_number': _blankToNull(houseNumber),
             'zip_code': _blankToNull(zipCode),
             'contact_phone': normalizePhilippinePhone(contactPhone),
+            'documents_path': documents.isEmpty ? null : {'files': documents},
             'status': 'Pending Review',
             'review_notes': null,
             'date_approved': null,
@@ -1030,6 +1487,7 @@ class DatabaseService {
     required String vehicleType,
     required String plateNumber,
     String? documentNotes,
+    List<Map<String, dynamic>> documents = const [],
   }) async {
     try {
       await _supabase.from('rider_application').insert({
@@ -1037,9 +1495,10 @@ class DatabaseService {
         'license_number': licenseNumber.trim(),
         'vehicle_type': vehicleType.trim(),
         'plate_number': plateNumber.trim(),
-        'documents_path': _blankToNull(documentNotes) == null
-            ? null
-            : {'notes': documentNotes!.trim()},
+        'documents_path': {
+          if (_blankToNull(documentNotes) != null) 'notes': documentNotes!.trim(),
+          if (documents.isNotEmpty) 'files': documents,
+        },
         'status': 'Pending Review',
       });
       return true;
@@ -1071,6 +1530,7 @@ class DatabaseService {
     required String vehicleType,
     required String plateNumber,
     String? documentNotes,
+    List<Map<String, dynamic>> documents = const [],
   }) async {
     final existing = await getRiderApplicationByAccountId(accountId);
     if (existing == null) {
@@ -1080,6 +1540,7 @@ class DatabaseService {
         vehicleType: vehicleType,
         plateNumber: plateNumber,
         documentNotes: documentNotes,
+        documents: documents,
       );
     }
 
@@ -1092,9 +1553,11 @@ class DatabaseService {
             'license_number': licenseNumber.trim(),
             'vehicle_type': vehicleType.trim(),
             'plate_number': plateNumber.trim(),
-            'documents_path': _blankToNull(documentNotes) == null
-                ? null
-                : {'notes': documentNotes!.trim()},
+            'documents_path': {
+              if (_blankToNull(documentNotes) != null)
+                'notes': documentNotes!.trim(),
+              if (documents.isNotEmpty) 'files': documents,
+            },
             'status': 'Pending Review',
             'review_notes': null,
             'date_approved': null,

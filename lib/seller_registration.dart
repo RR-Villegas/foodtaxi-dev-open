@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:convert';
 import 'models/application_data.dart';
+import 'models/picked_document.dart';
 import 'services/database_service.dart';
 import 'services/local_storage_service.dart';
 import 'services/location_service.dart';
@@ -58,6 +62,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
   bool _loadingProvinces = true;
   bool _loadingCities = false;
   bool _loadingBarangays = false;
+  final List<PickedDocument> _permitDocuments = [];
 
   @override
   void initState() {
@@ -318,7 +323,103 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
       return false;
     }
 
+    if (_permitDocuments.isEmpty) {
+      setState(() => _step2Error = 'Upload at least one business permit document');
+      return false;
+    }
+
     return true;
+  }
+
+  Future<void> _pickPermitImage() async {
+    final image = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 65,
+      maxWidth: 1600,
+      maxHeight: 1600,
+    );
+    if (image == null) return;
+
+    final bytes = await image.readAsBytes();
+    _addPickedDocument(
+      PickedDocument(
+        label: 'Business permit',
+        fileName: image.name,
+        contentType: _contentTypeFor(image.name),
+        bytes: bytes,
+      ),
+    );
+  }
+
+  Future<void> _pickPermitFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['pdf', 'png', 'jpg', 'jpeg', 'webp'],
+      withData: true,
+    );
+    final file = result?.files.single;
+    final bytes = file?.bytes;
+    if (file == null || bytes == null) return;
+
+    _addPickedDocument(
+      PickedDocument(
+        label: 'Business permit',
+        fileName: file.name,
+        contentType: _contentTypeFor(file.name),
+        bytes: bytes,
+      ),
+    );
+  }
+
+  void _addPickedDocument(PickedDocument document) {
+    if (document.size > 5 * 1024 * 1024) {
+      setState(() => _step2Error = 'Document must be 5MB or smaller');
+      return;
+    }
+    setState(() {
+      _step2Error = null;
+      _permitDocuments.add(document);
+    });
+  }
+
+  String _contentTypeFor(String fileName) {
+    final lower = fileName.toLowerCase();
+    if (lower.endsWith('.pdf')) return 'application/pdf';
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    return 'application/octet-stream';
+  }
+
+  Future<List<Map<String, dynamic>>> _uploadPermitDocuments() async {
+    final uploaded = <Map<String, dynamic>>[];
+    for (final document in _permitDocuments) {
+      final metadata = await DatabaseService.uploadApplicationDocument(
+        bytes: document.bytes,
+        fileName: document.fileName,
+        label: document.label,
+        contentType: document.contentType,
+      );
+      if (metadata == null) {
+        throw Exception('Could not upload ${document.fileName}');
+      }
+      uploaded.add(metadata);
+    }
+    return uploaded;
+  }
+
+  List<Map<String, dynamic>> _pendingPermitDocuments() {
+    return _permitDocuments
+        .map(
+          (document) => {
+            'label': document.label,
+            'file_name': document.fileName,
+            'content_type': document.contentType,
+            'size': document.size,
+            'bytes_base64': base64Encode(document.bytes),
+          },
+        )
+        .toList();
   }
 
   bool _validateStep3() {
@@ -390,6 +491,12 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
     setState(() => _isLoading = true);
 
     try {
+      final currentUser = _supabase.auth.currentUser;
+      final submittedWhileLoggedIn = currentUser != null;
+      final documents = submittedWhileLoggedIn
+          ? await _uploadPermitDocuments()
+          : _pendingPermitDocuments();
+
       final applicationData = SellerApplicationData(
         email: _emailController.text.trim(),
         firstName: _firstNameController.text.trim(),
@@ -410,12 +517,11 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
             ? _zipCodeController.text.trim()
             : null,
         contactPhone: _contactPhoneController.text.trim(),
+        documents: documents,
       );
 
       await LocalStorageService.saveSellerApplicationData(applicationData);
 
-      final currentUser = _supabase.auth.currentUser;
-      final submittedWhileLoggedIn = currentUser != null;
       if (currentUser == null) {
         final authResponse = await _supabase.auth.signUp(
           email: applicationData.email,
@@ -455,6 +561,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
           houseNumber: applicationData.houseNumber,
           zipCode: applicationData.zipCode,
           contactPhone: applicationData.contactPhone,
+          documents: applicationData.documents,
         );
 
         if (!submitted) {
@@ -941,7 +1048,8 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
           controller: _contactPhoneController,
           decoration: InputDecoration(
             labelText: 'Contact Phone *',
-            hintText: 'Enter your phone number',
+            hintText: '9123456789',
+            prefixText: '+63 ',
             prefixIcon: const Icon(Icons.phone),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
             enabledBorder: OutlineInputBorder(
@@ -954,6 +1062,16 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
             ),
           ),
           keyboardType: TextInputType.phone,
+        ),
+        const SizedBox(height: 16),
+        _documentUploadSection(
+          title: 'Business Permit *',
+          documents: _permitDocuments,
+          onPickImage: _pickPermitImage,
+          onPickFile: _pickPermitFile,
+          onRemove: (index) {
+            setState(() => _permitDocuments.removeAt(index));
+          },
         ),
         if (_step2Error != null)
           Padding(
@@ -1191,6 +1309,77 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
             ),
           ),
       ],
+    );
+  }
+
+  Widget _documentUploadSection({
+    required String title,
+    required List<PickedDocument> documents,
+    required VoidCallback onPickImage,
+    required VoidCallback onPickFile,
+    required ValueChanged<int> onRemove,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey[300]!),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onPickImage,
+                  icon: const Icon(Icons.image_outlined),
+                  label: const Text('Image'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onPickFile,
+                  icon: const Icon(Icons.picture_as_pdf_outlined),
+                  label: const Text('PDF/File'),
+                ),
+              ),
+            ],
+          ),
+          if (documents.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text('PDF, PNG, JPG, or WEBP up to 5MB.'),
+            )
+          else
+            ...documents.asMap().entries.map((entry) {
+              final index = entry.key;
+              final document = entry.value;
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                leading: Icon(
+                  document.contentType == 'application/pdf'
+                      ? Icons.picture_as_pdf
+                      : Icons.image,
+                ),
+                title: Text(
+                  document.fileName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text('${(document.size / 1024).ceil()} KB'),
+                trailing: IconButton(
+                  onPressed: () => onRemove(index),
+                  icon: const Icon(Icons.close),
+                ),
+              );
+            }),
+        ],
+      ),
     );
   }
 

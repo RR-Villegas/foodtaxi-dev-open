@@ -180,18 +180,12 @@ class AuthService {
 
   /// Clear login session (logout)
   static Future<void> clearLoginSession() async {
+    await LocalStorageService.clearSession();
     try {
-      // Sign out from Supabase
-      await _supabase.auth.signOut();
-
-      // Clear stored credentials
-      await LocalStorageService.clearSession();
-
+      await _supabase.auth.signOut(scope: SignOutScope.local);
       logSecurityEvent('LOGOUT', 'User session cleared');
     } catch (e) {
       debugPrint('Error clearing login session: $e');
-      // Even if Supabase logout fails, clear local storage
-      await LocalStorageService.clearSession();
     }
   }
 

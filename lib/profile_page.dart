@@ -5,6 +5,7 @@ import 'models/address_model.dart';
 import 'services/auth_service.dart';
 import 'services/database_service.dart';
 import 'services/input_validator.dart';
+import 'services/location_service.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -175,6 +176,22 @@ class _ProfilePageState extends State<ProfilePage> {
                 }
 
                 String? savedAddressId = address?.addressId;
+                final point = await LocationService.geocodeAddress(
+                  houseNumber: houseController.text,
+                  street: streetController.text,
+                  barangay: barangayController.text,
+                  city: cityController.text,
+                  province: provinceController.text,
+                  zipCode: zipController.text,
+                );
+                if (point == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Address could not be verified by the location API'),
+                    ),
+                  );
+                  return;
+                }
                 if (address == null) {
                   final savedAddress = await DatabaseService.insertAddress(
                     accountId: accountId,
@@ -184,6 +201,8 @@ class _ProfilePageState extends State<ProfilePage> {
                     street: streetController.text,
                     houseNumber: houseController.text,
                     zipCode: zipController.text,
+                    latitude: point.latitude,
+                    longitude: point.longitude,
                     isDefault: isDefault,
                   );
                   savedAddressId = savedAddress?.addressId;
@@ -196,6 +215,8 @@ class _ProfilePageState extends State<ProfilePage> {
                     street: streetController.text,
                     houseNumber: houseController.text,
                     zipCode: zipController.text,
+                    latitude: point.latitude,
+                    longitude: point.longitude,
                     isDefault: isDefault,
                   );
                 }

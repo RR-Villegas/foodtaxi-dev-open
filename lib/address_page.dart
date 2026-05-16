@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'models/address_model.dart';
 import 'services/database_service.dart';
+import 'services/location_service.dart';
 
 class AddressPage extends StatefulWidget {
   const AddressPage({super.key});
@@ -121,6 +122,22 @@ class _AddressPageState extends State<AddressPage> {
                 }
 
                 String? savedAddressId = address?.addressId;
+                final point = await LocationService.geocodeAddress(
+                  houseNumber: houseController.text,
+                  street: streetController.text,
+                  barangay: barangayController.text,
+                  city: cityController.text,
+                  province: provinceController.text,
+                  zipCode: zipController.text,
+                );
+                if (point == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Address could not be verified by the location API'),
+                    ),
+                  );
+                  return;
+                }
                 if (address == null) {
                   final saved = await DatabaseService.insertAddress(
                     accountId: accountId,
@@ -130,6 +147,8 @@ class _AddressPageState extends State<AddressPage> {
                     street: streetController.text,
                     houseNumber: houseController.text,
                     zipCode: zipController.text,
+                    latitude: point.latitude,
+                    longitude: point.longitude,
                     isDefault: isDefault,
                   );
                   savedAddressId = saved?.addressId;
@@ -142,6 +161,8 @@ class _AddressPageState extends State<AddressPage> {
                     street: streetController.text,
                     houseNumber: houseController.text,
                     zipCode: zipController.text,
+                    latitude: point.latitude,
+                    longitude: point.longitude,
                     isDefault: isDefault,
                   );
                 }

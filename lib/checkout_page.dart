@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'cart_model.dart';
 import 'services/database_service.dart';
+import 'services/location_service.dart';
 import 'models/address_model.dart';
 
 class CheckoutPage extends StatefulWidget {
@@ -11,16 +12,19 @@ class CheckoutPage extends StatefulWidget {
 }
 
 class _CheckoutPageState extends State<CheckoutPage> {
+  final _couponController = TextEditingController();
   List<Address> _addresses = [];
   Address? _selectedAddress;
   String? _accountId;
+  Map<String, dynamic>? _appliedCoupon;
   String _selectedPaymentMethod = 'COD';
   bool _isLoading = false;
   bool _isLoadingAddresses = true;
+  bool _isCalculatingDelivery = false;
+  double _deliveryFee = 50.0;
+  double? _deliveryDistanceKm;
   static const String _fallbackImage = 'assets/images/food1.jpg';
   
-  // Delivery fee in PHP
-  static const double _deliveryFee = 50.0;
   static const double _serviceFeeRate = 0.05;
   
   @override
@@ -47,6 +51,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
           _selectedAddress = defaultAddr ?? addresses.first;
         }
       });
+      _refreshDeliveryFee();
     } catch (e) {
       setState(() {
         _isLoadingAddresses = false;
@@ -61,7 +66,94 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   double get _subtotal => CartModel.totalPrice;
   double get _serviceFee => _subtotal * _serviceFeeRate;
-  double get _total => _subtotal + _deliveryFee + _serviceFee;
+  double get _discountAmount {
+    final value = _appliedCoupon?['discount_amount'];
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+  double get _total => _subtotal + _deliveryFee + _serviceFee - _discountAmount;
+
+  @override
+  void dispose() {
+    _couponController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _applyCoupon() async {
+    final code = _couponController.text.trim();
+    if (code.isEmpty) {
+      setState(() => _appliedCoupon = null);
+      return;
+    }
+
+    final coupon = await DatabaseService.validateCoupon(
+      code: code,
+      subtotal: _subtotal,
+    );
+
+    if (!mounted) return;
+    setState(() => _appliedCoupon = coupon);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(coupon == null ? 'Coupon is invalid or expired' : 'Coupon applied'),
+        backgroundColor: coupon == null ? Colors.red : Colors.green,
+      ),
+    );
+  }
+
+  Future<void> _refreshDeliveryFee() async {
+    final address = _selectedAddress;
+    if (address == null || CartModel.cartItems.isEmpty) return;
+
+    setState(() => _isCalculatingDelivery = true);
+    try {
+      final firstProductId = CartModel.cartItems
+          .map((item) => item['product_id']?.toString() ?? '')
+          .firstWhere((id) => id.isNotEmpty, orElse: () => '');
+      if (firstProductId.isEmpty) return;
+
+      final store = await DatabaseService.getStoreForProduct(firstProductId);
+      if (store == null) return;
+
+      final storeLat = double.tryParse(store['latitude']?.toString() ?? '');
+      final storeLon = double.tryParse(store['longitude']?.toString() ?? '');
+      final storePoint = storeLat != null && storeLon != null
+          ? GeoPoint(latitude: storeLat, longitude: storeLon)
+          : await LocationService.geocodeAddress(
+              houseNumber: store['house_number']?.toString(),
+              street: store['street']?.toString(),
+              barangay: store['barangay']?.toString(),
+              city: store['city']?.toString(),
+              province: store['province']?.toString(),
+              zipCode: store['zip_code']?.toString(),
+            );
+      final buyerPoint = address.latitude != null && address.longitude != null
+          ? GeoPoint(latitude: address.latitude!, longitude: address.longitude!)
+          : await LocationService.geocodeAddress(
+              houseNumber: address.houseNumber,
+              street: address.street,
+              barangay: address.barangay,
+              city: address.city,
+              province: address.province,
+              zipCode: address.zipCode,
+            );
+
+      if (storePoint == null || buyerPoint == null) return;
+
+      final roadDistance =
+          await LocationService.roadDistanceKm(storePoint, buyerPoint);
+      final distance = roadDistance ??
+          LocationService.straightLineDistanceKm(storePoint, buyerPoint);
+
+      if (!mounted) return;
+      setState(() {
+        _deliveryDistanceKm = distance;
+        _deliveryFee = LocationService.deliveryFeeForDistance(distance);
+      });
+    } finally {
+      if (mounted) setState(() => _isCalculatingDelivery = false);
+    }
+  }
 
   Widget _buildProductImage(dynamic imageValue, {double size = 50}) {
     final path = imageValue?.toString().trim();
@@ -175,7 +267,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
         addressId: _selectedAddress!.addressId!,
         totalAmount: _total,
         shippingFee: _deliveryFee,
+        deliveryDistanceKm: _deliveryDistanceKm,
         serviceFee: _serviceFee,
+        discountAmount: _discountAmount,
+        discountCode: _appliedCoupon?['code']?.toString(),
         paymentMethod: _selectedPaymentMethod,
         sellerAccountId: sellerAccountId,
       );
@@ -205,6 +300,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
         if (!itemSaved) {
           throw Exception('Not enough stock for ${item['name'] ?? 'an item'}');
         }
+      }
+
+      final couponCode = _appliedCoupon?['code']?.toString();
+      if (couponCode != null && couponCode.isNotEmpty) {
+        await DatabaseService.incrementCouponUsage(couponCode);
       }
 
       // Clear cart after successful order
@@ -329,6 +429,21 @@ class _CheckoutPageState extends State<CheckoutPage> {
               }
 
               try {
+                final point = await LocationService.geocodeAddress(
+                  houseNumber: houseNumberController.text,
+                  street: streetController.text,
+                  barangay: barangayController.text,
+                  city: cityController.text,
+                  province: provinceController.text,
+                );
+                if (point == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Address could not be verified by the location API'),
+                    ),
+                  );
+                  return;
+                }
                 await DatabaseService.insertAddress(
                   accountId: _accountId!,
                   province: provinceController.text.isNotEmpty ? provinceController.text : null,
@@ -337,6 +452,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   street: streetController.text.isNotEmpty ? streetController.text : null,
                   houseNumber: houseNumberController.text.isNotEmpty ? houseNumberController.text : null,
                   zipCode: null,
+                  latitude: point.latitude,
+                  longitude: point.longitude,
                   isDefault: _addresses.isEmpty,
                 );
                 Navigator.pop(context);
@@ -421,8 +538,16 @@ class _CheckoutPageState extends State<CheckoutPage> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text('Delivery Fee'),
-                              Text('₱${_deliveryFee.toStringAsFixed(2)}'),
+                              Text(
+                                _deliveryDistanceKm == null
+                                    ? 'Delivery Fee'
+                                    : 'Delivery Fee (${_deliveryDistanceKm!.toStringAsFixed(1)} km)',
+                              ),
+                              Text(
+                                _isCalculatingDelivery
+                                    ? 'Calculating...'
+                                    : '₱${_deliveryFee.toStringAsFixed(2)}',
+                              ),
                             ],
                           ),
                           const SizedBox(height: 4),
@@ -433,6 +558,19 @@ class _CheckoutPageState extends State<CheckoutPage> {
                               Text('₱${_serviceFee.toStringAsFixed(2)}'),
                             ],
                           ),
+                          if (_discountAmount > 0) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('Discount (${_appliedCoupon?['code']})'),
+                                Text(
+                                  '-PHP ${_discountAmount.toStringAsFixed(2)}',
+                                  style: const TextStyle(color: Colors.green),
+                                ),
+                              ],
+                            ),
+                          ],
                           const Divider(),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -443,6 +581,35 @@ class _CheckoutPageState extends State<CheckoutPage> {
                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.green),
                               ),
                             ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  _buildSectionTitle('Discount Coupon'),
+                  const SizedBox(height: 8),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _couponController,
+                              textCapitalization: TextCapitalization.characters,
+                              decoration: const InputDecoration(
+                                labelText: 'Coupon code',
+                                prefixIcon: Icon(Icons.local_offer_outlined),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          FilledButton(
+                            onPressed: _applyCoupon,
+                            child: const Text('Apply'),
                           ),
                         ],
                       ),
@@ -482,7 +649,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
                         ..._addresses.map((address) => RadioListTile<Address>(
                           value: address,
                           groupValue: _selectedAddress,
-                          onChanged: (value) => setState(() => _selectedAddress = value),
+                          onChanged: (value) {
+                            setState(() => _selectedAddress = value);
+                            _refreshDeliveryFee();
+                          },
                           title: Text(
                             _formatAddress(address),
                             style: TextStyle(

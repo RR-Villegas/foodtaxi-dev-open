@@ -22,8 +22,6 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
   bool _hasError = false;
   bool _isLoadingProfile = true;
 
-  int get _cartLength => CartModel.length;
-
   @override
   void dispose() {
     _navSearchController.dispose();
@@ -369,13 +367,21 @@ Widget heroSection() {
         ),
         backgroundColor: const Color.fromARGB(255, 30, 83, 32),
         actions: [
-          Center(child: Badge(
-            label: Text('$_cartLength'),
-            child: IconButton(
-              icon: const Icon(Icons.shopping_cart),
-              onPressed: () => Navigator.pushNamed(context, '/cart'),
+          Center(
+            child: ValueListenableBuilder<int>(
+              valueListenable: CartModel.itemCountNotifier,
+              builder: (context, count, child) {
+                return Badge(
+                  label: Text('$count'),
+                  child: child,
+                );
+              },
+              child: IconButton(
+                icon: const Icon(Icons.shopping_cart),
+                onPressed: () => Navigator.pushNamed(context, '/cart'),
+              ),
             ),
-          )),
+          ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.menu),
             onSelected: (value) {
@@ -384,9 +390,7 @@ Widget heroSection() {
                   Navigator.pushNamed(context, '/profile');
                   break;
                 case 'orders':
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('My Orders - Coming Soon')),
-                  );
+                  Navigator.pushNamed(context, '/my-orders');
                   break;
                 case 'location':
                   Navigator.pushNamed(context, '/addresses');

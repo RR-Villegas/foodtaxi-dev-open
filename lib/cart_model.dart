@@ -1,8 +1,22 @@
+import 'package:flutter/foundation.dart';
 
 class CartModel {
   static List<Map<String, dynamic>> cartItems = [];
+  static final ValueNotifier<int> itemCountNotifier = ValueNotifier<int>(0);
   
-  static int get length => cartItems.length;
+  static int get length => totalQuantity;
+
+  static int get totalQuantity {
+    return cartItems.fold(
+      0,
+      (sum, item) =>
+          sum + (int.tryParse(item['quantity']?.toString() ?? '') ?? 0),
+    );
+  }
+
+  static void _notifyChanged() {
+    itemCountNotifier.value = totalQuantity;
+  }
   
   static void addItem(Map<String, dynamic> item) {
     final productId = item['product_id']?.toString() ?? item['name'].toString();
@@ -19,6 +33,7 @@ class CartModel {
         'uniqueId': uniqueId,
       });
     }
+    _notifyChanged();
   }
 
   static double itemPrice(Map<String, dynamic> item) {
@@ -29,12 +44,14 @@ class CartModel {
   
   static void removeItem(String identifier) {
     cartItems.removeWhere((item) => item['uniqueId'] == identifier);
+    _notifyChanged();
   }
   
   static void updateQuantity(String identifier, int quantity) {
     final index = cartItems.indexWhere((item) => item['uniqueId'] == identifier);
     if (index != -1 && quantity > 0) {
       cartItems[index]['quantity'] = quantity;
+      _notifyChanged();
     } else if (quantity <= 0) {
       removeItem(identifier);
     }
@@ -49,5 +66,6 @@ class CartModel {
   
   static void clear() {
     cartItems.clear();
+    _notifyChanged();
   }
 }
