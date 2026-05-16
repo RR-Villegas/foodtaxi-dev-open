@@ -92,7 +92,11 @@ class _AddressPageState extends State<AddressPage> {
                 ),
                 TextField(
                   controller: zipController,
-                  decoration: const InputDecoration(labelText: 'Zip Code'),
+                  decoration: const InputDecoration(
+                    labelText: 'Zip Code',
+                    hintText: 'Auto-filled by location API',
+                  ),
+                  readOnly: true,
                 ),
                 SwitchListTile(
                   value: isDefault,
@@ -128,7 +132,6 @@ class _AddressPageState extends State<AddressPage> {
                   barangay: barangayController.text,
                   city: cityController.text,
                   province: provinceController.text,
-                  zipCode: zipController.text,
                 );
                 if (point == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -138,6 +141,10 @@ class _AddressPageState extends State<AddressPage> {
                   );
                   return;
                 }
+                final resolvedZipCode = point.postalCode?.trim().isNotEmpty == true
+                    ? point.postalCode!.trim()
+                    : zipController.text.trim();
+                zipController.text = resolvedZipCode;
                 if (address == null) {
                   final saved = await DatabaseService.insertAddress(
                     accountId: accountId,
@@ -146,7 +153,7 @@ class _AddressPageState extends State<AddressPage> {
                     barangay: barangayController.text,
                     street: streetController.text,
                     houseNumber: houseController.text,
-                    zipCode: zipController.text,
+                    zipCode: resolvedZipCode,
                     latitude: point.latitude,
                     longitude: point.longitude,
                     isDefault: isDefault,
@@ -160,7 +167,7 @@ class _AddressPageState extends State<AddressPage> {
                     barangay: barangayController.text,
                     street: streetController.text,
                     houseNumber: houseController.text,
-                    zipCode: zipController.text,
+                    zipCode: resolvedZipCode,
                     latitude: point.latitude,
                     longitude: point.longitude,
                     isDefault: isDefault,

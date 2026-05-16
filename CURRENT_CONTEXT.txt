@@ -197,7 +197,7 @@ Latest batch from todo.md
 - Login redirect no longer assumes Buyer when the account row is not ready.
 - Phone normalization/validation now accepts 9xxxxxxxxx and stores +639xxxxxxxxx.
 - Signup phone field, seller contact phone, and rider phone show +63 prefix.
-- Signup now saves zip code; zip code lookup list expanded.
+- Signup now saves zip code from the location API instead of the old city map.
 
 Latest document/delivery/location batch
 - Added file_picker dependency in pubspec.yaml for PDF/image document uploads. Do not run Flutter shell commands unless user changes instruction.
@@ -215,6 +215,7 @@ Latest document/delivery/location batch
   - Step 2 now requires business permit upload.
   - Allows PDF/PNG/JPG/JPEG/WEBP up to 5MB.
   - Images selected through image_picker use imageQuality 65 and max 1600px.
+  - Application document storage filenames include seller/rider, document type, account id, and timestamp.
   - If the user is not authenticated, compressed file bytes are temporarily stored in local signup application data and uploaded after login sync.
 - Rider registration:
   - Removed document notes textbox.
@@ -234,5 +235,6 @@ Latest document/delivery/location batch
   - Delivery now requires a compressed proof image and optional note/call note.
 - Location/delivery:
   - LocationService now geocodes via Nominatim and routes via OSRM.
+  - LocationService reads postal codes from Nominatim address details when available.
   - Address add/edit in address/profile/signup/login paths geocodes and stores coordinates.
   - Checkout estimates seller-to-buyer road distance and sets delivery fee to max(PHP 10, PHP 10/km), with fallback to old fee if APIs fail.

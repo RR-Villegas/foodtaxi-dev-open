@@ -209,13 +209,16 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
     return 'application/octet-stream';
   }
 
-  Future<List<Map<String, dynamic>>> _uploadRiderDocuments() async {
+  Future<List<Map<String, dynamic>>> _uploadRiderDocuments(String accountId) async {
     final uploaded = <Map<String, dynamic>>[];
     for (final document in _riderDocuments) {
       final metadata = await DatabaseService.uploadApplicationDocument(
         bytes: document.bytes,
         fileName: document.fileName,
         label: document.label,
+        applicationType: 'rider',
+        documentType: 'license',
+        accountId: accountId,
         contentType: document.contentType,
       );
       if (metadata == null) {
@@ -255,9 +258,6 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
     try {
       final currentUser = _supabase.auth.currentUser;
       final submittedWhileLoggedIn = currentUser != null;
-      final documents = submittedWhileLoggedIn
-          ? await _uploadRiderDocuments()
-          : _pendingRiderDocuments();
 
       final data = RiderApplicationData(
         email: _emailController.text.trim(),
@@ -268,10 +268,12 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
         licenseNumber: _licenseController.text.trim(),
         vehicleType: _vehicleType,
         plateNumber: _plateController.text.trim(),
-        documents: documents,
+        documents: submittedWhileLoggedIn ? const [] : _pendingRiderDocuments(),
       );
 
-      await LocalStorageService.saveRiderApplicationData(data);
+      if (!submittedWhileLoggedIn) {
+        await LocalStorageService.saveRiderApplicationData(data);
+      }
 
       if (currentUser == null) {
         final authResponse = await _supabase.auth.signUp(
@@ -299,13 +301,14 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
           throw Exception('Failed to create rider account profile');
         }
 
+        final documents = await _uploadRiderDocuments(accountId);
         final submitted = await DatabaseService.saveRiderApplication(
           accountId: accountId,
           licenseNumber: data.licenseNumber,
           vehicleType: data.vehicleType,
           plateNumber: data.plateNumber,
           documentNotes: data.documentNotes,
-          documents: data.documents,
+          documents: documents,
         );
         if (!submitted) {
           throw Exception('Rider application could not be submitted');

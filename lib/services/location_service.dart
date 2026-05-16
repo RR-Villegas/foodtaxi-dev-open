@@ -5,8 +5,13 @@ import 'dart:math';
 class GeoPoint {
   final double latitude;
   final double longitude;
+  final String? postalCode;
 
-  const GeoPoint({required this.latitude, required this.longitude});
+  const GeoPoint({
+    required this.latitude,
+    required this.longitude,
+    this.postalCode,
+  });
 }
 
 class LocationService {
@@ -213,11 +218,33 @@ class LocationService {
       final lat = double.tryParse(item['lat']?.toString() ?? '');
       final lon = double.tryParse(item['lon']?.toString() ?? '');
       if (lat == null || lon == null) return null;
-      return GeoPoint(latitude: lat, longitude: lon);
+      return GeoPoint(
+        latitude: lat,
+        longitude: lon,
+        postalCode: _extractPostalCode(item),
+      );
     } catch (e) {
       print('Error geocoding address: $e');
       return null;
     }
+  }
+
+  static Future<String?> postalCodeForAddress({
+    String? houseNumber,
+    String? street,
+    String? barangay,
+    String? city,
+    String? province,
+  }) async {
+    final point = await geocodeAddress(
+      houseNumber: houseNumber,
+      street: street,
+      barangay: barangay,
+      city: city,
+      province: province,
+    );
+    final postalCode = point?.postalCode?.trim();
+    return postalCode == null || postalCode.isEmpty ? null : postalCode;
   }
 
   static Future<double?> roadDistanceKm(GeoPoint from, GeoPoint to) async {
@@ -259,4 +286,16 @@ class LocationService {
   }
 
   static double _radians(double degrees) => degrees * pi / 180;
+
+  static String? _extractPostalCode(Map item) {
+    final address = item['address'];
+    if (address is! Map) return null;
+
+    for (final key in ['postcode', 'postal_code']) {
+      final value = address[key]?.toString().trim();
+      if (value != null && value.isNotEmpty) return value;
+    }
+
+    return null;
+  }
 }

@@ -163,11 +163,13 @@ class _LoginPageState extends State<LoginPage> {
             barangay: pendingSignup.barangay,
             city: pendingSignup.municipality,
             province: pendingSignup.province,
-            zipCode: pendingSignup.zipCode,
           );
           if (point == null) {
             throw Exception('Delivery address could not be verified by the location API');
           }
+          final resolvedZipCode = point.postalCode?.trim().isNotEmpty == true
+              ? point.postalCode!.trim()
+              : pendingSignup.zipCode;
           final address = await DatabaseService.insertAddress(
             accountId: accountId,
             province: pendingSignup.province,
@@ -175,7 +177,7 @@ class _LoginPageState extends State<LoginPage> {
             barangay: pendingSignup.barangay,
             street: pendingSignup.street,
             houseNumber: pendingSignup.houseNumber,
-            zipCode: pendingSignup.zipCode,
+            zipCode: resolvedZipCode,
             latitude: point.latitude,
             longitude: point.longitude,
             isDefault: true,
@@ -335,7 +337,12 @@ class _LoginPageState extends State<LoginPage> {
       houseNumber: data.houseNumber,
       zipCode: data.zipCode,
       contactPhone: data.contactPhone,
-      documents: await _uploadPendingDocuments(data.documents),
+      documents: await _uploadPendingDocuments(
+        data.documents,
+        applicationType: 'seller',
+        documentType: 'permit',
+        accountId: accountId,
+      ),
     );
     if (saved) await LocalStorageService.clearSellerApplicationData();
   }
@@ -352,7 +359,12 @@ class _LoginPageState extends State<LoginPage> {
       vehicleType: data.vehicleType,
       plateNumber: data.plateNumber,
       documentNotes: data.documentNotes,
-      documents: await _uploadPendingDocuments(data.documents),
+      documents: await _uploadPendingDocuments(
+        data.documents,
+        applicationType: 'rider',
+        documentType: 'license',
+        accountId: accountId,
+      ),
     );
     if (saved) await LocalStorageService.clearRiderApplicationData();
   }
@@ -366,8 +378,11 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<List<Map<String, dynamic>>> _uploadPendingDocuments(
-    List<Map<String, dynamic>> documents,
-  ) async {
+    List<Map<String, dynamic>> documents, {
+      required String applicationType,
+      required String documentType,
+      required String accountId,
+  }) async {
     final uploaded = <Map<String, dynamic>>[];
     for (final document in documents) {
       final existingPath = document['path']?.toString();
@@ -383,6 +398,9 @@ class _LoginPageState extends State<LoginPage> {
         bytes: base64Decode(encoded),
         fileName: document['file_name']?.toString() ?? 'document.bin',
         label: document['label']?.toString() ?? 'Application document',
+        applicationType: applicationType,
+        documentType: documentType,
+        accountId: accountId,
         contentType: document['content_type']?.toString(),
       );
       if (metadata != null) uploaded.add(metadata);
@@ -544,23 +562,6 @@ class _LoginPageState extends State<LoginPage> {
                     ),
             ),
           ),
-          const SizedBox(height: 24),
-          const Text(
-            'or sign in with',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: Colors.black54),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: const [
-              _AuthIcon(icon: Icons.facebook),
-              SizedBox(width: 12),
-              _AuthIcon(icon: Icons.g_mobiledata),
-              SizedBox(width: 12),
-              _AuthIcon(icon: Icons.code),
-            ],
-          ),
         ],
       ),
     );
@@ -589,7 +590,7 @@ class _LoginPageState extends State<LoginPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Welcome back!',
+            'Login',
             style: TextStyle(
               color: Colors.white,
               fontSize: 28,
@@ -598,7 +599,7 @@ class _LoginPageState extends State<LoginPage> {
           ),
           const SizedBox(height: 12),
           const Text(
-            'We are so happy to have you here. It’s great to see you again. We hope you had a safe and enjoyable time away.',
+            'Enter your email and password to continue to your FoodTaxi account.',
             style: TextStyle(color: Colors.white70, fontSize: 16),
           ),
           const SizedBox(height: 32),
@@ -621,23 +622,5 @@ class _LoginPageState extends State<LoginPage> {
       ),
     );
     return panel;
-  }
-}
-
-class _AuthIcon extends StatelessWidget {
-  final IconData icon;
-  const _AuthIcon({required this.icon});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 44,
-      width: 44,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F7F1),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Icon(icon, color: const Color(0xFF0F4D35)),
-    );
   }
 }

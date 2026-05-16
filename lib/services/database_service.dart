@@ -85,6 +85,15 @@ class DatabaseService {
     return fallback ?? 'application/octet-stream';
   }
 
+  static String _storageSafeSegment(String? value, {String fallback = 'document'}) {
+    final sanitized = (value ?? '')
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceAll(RegExp(r'^_|_$'), '');
+    return sanitized.isEmpty ? fallback : sanitized;
+  }
+
   static String? normalizePhilippinePhone(String? phone) {
     final digits = phone?.replaceAll(RegExp(r'\D'), '') ?? '';
     if (digits.isEmpty) return null;
@@ -1168,6 +1177,9 @@ class DatabaseService {
     required Uint8List bytes,
     required String fileName,
     required String label,
+    String? applicationType,
+    String? documentType,
+    String? accountId,
     String? contentType,
   }) async {
     try {
@@ -1175,8 +1187,15 @@ class DatabaseService {
       if (user == null) return null;
       final userFolder = user.id;
       final extension = _extensionFor(fileName);
-      final path =
-          '$userFolder/applications/${DateTime.now().millisecondsSinceEpoch}.$extension';
+      final role = _storageSafeSegment(applicationType, fallback: 'application');
+      final document = _storageSafeSegment(
+        documentType ?? label,
+        fallback: 'document',
+      );
+      final owner = _storageSafeSegment(accountId ?? user.id, fallback: 'account');
+      final storedFileName =
+          '${role}_${document}_${owner}_${DateTime.now().millisecondsSinceEpoch}.$extension';
+      final path = '$userFolder/applications/$storedFileName';
       final mimeType = _contentTypeFor(fileName, contentType);
 
       await _supabase.storage.from('application-documents').uploadBinary(
@@ -1191,6 +1210,7 @@ class DatabaseService {
       return {
         'label': label,
         'file_name': fileName,
+        'stored_file_name': storedFileName,
         'path': path,
         'bucket': 'application-documents',
         'content_type': mimeType,

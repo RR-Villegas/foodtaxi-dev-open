@@ -5,7 +5,7 @@ Done in code
 - Replaced rider dashboard product view with delivery queue, pickup, and delivered/proof flow.
 - Hardened logout by clearing local session first and using local Supabase sign-out.
 - Registration phone fields now show +63 prefix and accept hand-entered 9xxxxxxxxx numbers.
-- Signup now persists zip code; zip lookup list expanded.
+- Signup now persists zip code from the location API instead of the old city map.
 - Login no longer defaults unknown account rows into buyer route, avoiding the unauthorized buyer warning.
 - Checkout now shows fee/discount breakdown and coupon apply.
 - Admin dashboard has a Coupons tab.
@@ -20,6 +20,7 @@ Database done
 Latest done
 - Seller registration now requires/upload business permit documents.
 - Rider registration now uploads license/vehicle documents instead of text notes.
+- Uploaded application document filenames now include seller/rider, document type, account id, and timestamp.
 - Application documents accept PDF, PNG, JPG/JPEG, WEBP; image picker uses reduced quality/size.
 - Admin application detail dialogs are wider and can show uploaded image documents or signed PDF links.
 - Seller orders can only move Processing, Ready for Pickup, or Cancelled.
@@ -28,5 +29,6 @@ Latest done
 - Rider delivery requires an uploaded proof photo plus optional note/call note.
 - Seller can open delivery proof images from orders.
 - Address add/edit/signup/login paths now geocode through the location API and save coordinates.
+- ZIP/postal code is now read from the geocoding API when available.
 - Checkout calculates delivery distance with geocoding/OSRM and charges max(10 PHP, 10 PHP per km).
 - Applied supabase_documents_delivery_updates.sql and verified columns/buckets/policies.

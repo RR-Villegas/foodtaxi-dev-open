@@ -7,7 +7,6 @@ import 'services/local_storage_service.dart';
 import 'services/database_service.dart';
 import 'services/input_validator.dart';
 import 'services/location_service.dart';
-import 'services/zip_code_service.dart';
 import 'utils/password_validator.dart';
 
 class SignupPage extends StatefulWidget {
@@ -91,6 +90,7 @@ class _SignupPageState extends State<SignupPage> {
     _provinceController.text = provinceName;
     _municipalityController.clear();
     _barangayController.clear();
+    _zipCodeController.clear();
 
     setState(() {
       _cities = [];
@@ -122,11 +122,7 @@ class _SignupPageState extends State<SignupPage> {
 
     _municipalityController.text = cityName;
     _barangayController.clear();
-
-    final zipCode = ZipCodeService.fromCityName(cityName);
-    if (zipCode != null) {
-      _zipCodeController.text = zipCode;
-    }
+    _zipCodeController.clear();
 
     setState(() {
       _barangays = [];
@@ -144,6 +140,18 @@ class _SignupPageState extends State<SignupPage> {
     } catch (e) {
       if (mounted) setState(() => _loadingBarangays = false);
     }
+
+    await _refreshZipCodeFromApi();
+  }
+
+  Future<void> _refreshZipCodeFromApi() async {
+    final zipCode = await LocationService.postalCodeForAddress(
+      barangay: _barangayController.text,
+      city: _municipalityController.text,
+      province: _provinceController.text,
+    );
+    if (!mounted || zipCode == null) return;
+    setState(() => _zipCodeController.text = zipCode);
   }
 
   void _updatePasswordStrength() {
@@ -392,11 +400,15 @@ class _SignupPageState extends State<SignupPage> {
         barangay: _signupData.barangay,
         city: _signupData.municipality,
         province: _signupData.province,
-        zipCode: _signupData.zipCode,
       );
       if (point == null) {
         throw Exception('Delivery address could not be verified by the location API');
       }
+      final resolvedZipCode =
+          point.postalCode?.trim().isNotEmpty == true
+              ? point.postalCode!.trim()
+              : _signupData.zipCode;
+      _signupData.zipCode = resolvedZipCode;
 
       // Insert address into the database
       final address = await DatabaseService.insertAddress(
@@ -406,7 +418,7 @@ class _SignupPageState extends State<SignupPage> {
         barangay: _signupData.barangay,
         street: _signupData.street,
         houseNumber: _signupData.houseNumber,
-        zipCode: _signupData.zipCode,
+        zipCode: resolvedZipCode,
         latitude: point.latitude,
         longitude: point.longitude,
         isDefault: true, // Set first address as default
@@ -499,6 +511,7 @@ class _SignupPageState extends State<SignupPage> {
     _barangayController.dispose();
     _streetController.dispose();
     _houseNumberController.dispose();
+    _zipCodeController.dispose();
     super.dispose();
   }
 
@@ -870,6 +883,7 @@ class _SignupPageState extends State<SignupPage> {
                       setState(() {
                         _barangayController.text = value ?? '';
                       });
+                      _refreshZipCodeFromApi();
                     },
                   ),
         const SizedBox(height: 16),
@@ -877,7 +891,7 @@ class _SignupPageState extends State<SignupPage> {
           controller: _zipCodeController,
           decoration: InputDecoration(
             labelText: 'Zip Code',
-            hintText: 'Auto-filled from city when available',
+            hintText: 'Auto-filled by location API when available',
             filled: true,
             fillColor: const Color(0xFFF1F7F1),
             border: OutlineInputBorder(
@@ -885,6 +899,7 @@ class _SignupPageState extends State<SignupPage> {
               borderSide: BorderSide.none,
             ),
           ),
+          readOnly: true,
           keyboardType: TextInputType.number,
         ),
         const SizedBox(height: 16),

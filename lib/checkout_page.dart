@@ -451,7 +451,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   barangay: barangayController.text.isNotEmpty ? barangayController.text : null,
                   street: streetController.text.isNotEmpty ? streetController.text : null,
                   houseNumber: houseNumberController.text.isNotEmpty ? houseNumberController.text : null,
-                  zipCode: null,
+                  zipCode: point.postalCode,
                   latitude: point.latitude,
                   longitude: point.longitude,
                   isDefault: _addresses.isEmpty,

@@ -9,7 +9,6 @@ import 'services/database_service.dart';
 import 'services/local_storage_service.dart';
 import 'services/location_service.dart';
 import 'services/input_validator.dart';
-import 'services/zip_code_service.dart';
 import 'utils/password_validator.dart';
 import 'package:dropdown_search/dropdown_search.dart';
 
@@ -130,6 +129,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
       _selectedProvinceName = provinceName;
       _selectedCityName = null;
       _selectedBarangayName = null;
+      _zipCodeController.clear();
       _cities = [];
       _barangays = [];
       _loadingCities = true;
@@ -164,14 +164,10 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
     setState(() {
       _selectedCityName = cityName;
       _selectedBarangayName = null;
+      _zipCodeController.clear();
       _barangays = [];
       _loadingBarangays = true;
     });
-
-    final zipCode = ZipCodeService.fromCityName(cityName);
-    if (zipCode != null) {
-      _zipCodeController.text = zipCode;
-    }
 
     try {
       final barangays = await LocationService.fetchBarangays(city['code']);
@@ -187,6 +183,18 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
         setState(() => _loadingBarangays = false);
       }
     }
+
+    await _refreshZipCodeFromApi();
+  }
+
+  Future<void> _refreshZipCodeFromApi() async {
+    final zipCode = await LocationService.postalCodeForAddress(
+      barangay: _selectedBarangayName,
+      city: _selectedCityName,
+      province: _selectedProvinceName,
+    );
+    if (!mounted || zipCode == null) return;
+    setState(() => _zipCodeController.text = zipCode);
   }
 
   bool _validateStep1() {
@@ -391,13 +399,16 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
     return 'application/octet-stream';
   }
 
-  Future<List<Map<String, dynamic>>> _uploadPermitDocuments() async {
+  Future<List<Map<String, dynamic>>> _uploadPermitDocuments(String accountId) async {
     final uploaded = <Map<String, dynamic>>[];
     for (final document in _permitDocuments) {
       final metadata = await DatabaseService.uploadApplicationDocument(
         bytes: document.bytes,
         fileName: document.fileName,
         label: document.label,
+        applicationType: 'seller',
+        documentType: 'permit',
+        accountId: accountId,
         contentType: document.contentType,
       );
       if (metadata == null) {
@@ -493,9 +504,19 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
     try {
       final currentUser = _supabase.auth.currentUser;
       final submittedWhileLoggedIn = currentUser != null;
-      final documents = submittedWhileLoggedIn
-          ? await _uploadPermitDocuments()
-          : _pendingPermitDocuments();
+      final point = await LocationService.geocodeAddress(
+        houseNumber: _houseNumberController.text,
+        street: _streetController.text,
+        barangay: _selectedBarangayName,
+        city: _selectedCityName,
+        province: _selectedProvinceName,
+      );
+      if (point == null) {
+        throw Exception('Store address could not be verified by the location API');
+      }
+      final resolvedZipCode = point.postalCode?.trim().isNotEmpty == true
+          ? point.postalCode!.trim()
+          : _zipCodeController.text.trim();
 
       final applicationData = SellerApplicationData(
         email: _emailController.text.trim(),
@@ -513,14 +534,16 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
         houseNumber: _houseNumberController.text.isNotEmpty
             ? _houseNumberController.text.trim()
             : null,
-        zipCode: _zipCodeController.text.isNotEmpty
-            ? _zipCodeController.text.trim()
+        zipCode: resolvedZipCode.isNotEmpty
+            ? resolvedZipCode
             : null,
         contactPhone: _contactPhoneController.text.trim(),
-        documents: documents,
+        documents: submittedWhileLoggedIn ? const [] : _pendingPermitDocuments(),
       );
 
-      await LocalStorageService.saveSellerApplicationData(applicationData);
+      if (!submittedWhileLoggedIn) {
+        await LocalStorageService.saveSellerApplicationData(applicationData);
+      }
 
       if (currentUser == null) {
         final authResponse = await _supabase.auth.signUp(
@@ -550,6 +573,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
           throw Exception('Failed to create seller account profile');
         }
 
+        final documents = await _uploadPermitDocuments(accountId);
         final submitted = await DatabaseService.saveSellerApplication(
           accountId: accountId,
           storeName: applicationData.storeName,
@@ -561,7 +585,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
           houseNumber: applicationData.houseNumber,
           zipCode: applicationData.zipCode,
           contactPhone: applicationData.contactPhone,
-          documents: applicationData.documents,
+          documents: documents,
         );
 
         if (!submitted) {
@@ -1244,6 +1268,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
                   setState(() {
                     _selectedBarangayName = value;
                   });
+                  _refreshZipCodeFromApi();
                 },
               ),
 
@@ -1284,9 +1309,11 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
           controller: _zipCodeController,
           decoration: InputDecoration(
             labelText: 'Zip Code',
+            hintText: 'Auto-filled by location API when available',
             prefixIcon: const Icon(Icons.mail),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           ),
+          readOnly: true,
         ),
 
         // =========================
