@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'services/auth_service.dart';
 import 'services/database_service.dart';
+import 'widgets/notification_bell.dart';
 
 class RiderDashboard extends StatefulWidget {
   const RiderDashboard({super.key});
@@ -13,6 +15,29 @@ class _RiderDashboardState extends State<RiderDashboard> {
   final _supabase = Supabase.instance.client;
   List<Map<String, dynamic>> products = [];
   bool isLoading = true;
+
+  Future<void> _logout() async {
+    await AuthService.clearLoginSession();
+    if (!mounted) return;
+    Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+  }
+
+  void _handleMenu(String value) {
+    switch (value) {
+      case 'profile':
+        Navigator.pushNamed(context, '/profile');
+        break;
+      case 'settings':
+        Navigator.pushNamed(context, '/settings');
+        break;
+      case 'location':
+        Navigator.pushNamed(context, '/addresses');
+        break;
+      case 'logout':
+        _logout();
+        break;
+    }
+  }
 
   @override
   void initState() {
@@ -175,8 +200,47 @@ class _RiderDashboardState extends State<RiderDashboard> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Seller Dashboard'),
+        automaticallyImplyLeading: false,
+        title: const Text('Rider Dashboard'),
         backgroundColor: const Color(0xFF2d8f4e),
+        actions: [
+          const NotificationBell(),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.menu),
+            onSelected: _handleMenu,
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: 'profile',
+                child: ListTile(
+                  leading: Icon(Icons.person),
+                  title: Text('Profile'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'location',
+                child: ListTile(
+                  leading: Icon(Icons.location_on),
+                  title: Text('Delivery Location'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'settings',
+                child: ListTile(
+                  leading: Icon(Icons.settings),
+                  title: Text('Settings'),
+                ),
+              ),
+              PopupMenuDivider(),
+              PopupMenuItem(
+                value: 'logout',
+                child: ListTile(
+                  leading: Icon(Icons.logout),
+                  title: Text('Logout'),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())

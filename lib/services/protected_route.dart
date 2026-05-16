@@ -127,12 +127,18 @@ class _ProtectedRouteState extends State<ProtectedRoute> {
 
   void _redirectToHome() {
     if (mounted) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          widget.fallbackRoute ?? '/',
-          (route) => false,
-        );
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        final accountType = await AuthService.getCurrentUserType();
+        final route = switch (accountType?.toLowerCase()) {
+          'admin' => '/admin-dashboard',
+          'seller' => '/seller-dashboard',
+          'rider' => '/rider-dashboard',
+          'buyer' => '/buyer-dashboard',
+          _ => widget.fallbackRoute ?? '/login',
+        };
+
+        if (!mounted) return;
+        Navigator.pushNamedAndRemoveUntil(context, route, (route) => false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('You do not have permission to access this page'),

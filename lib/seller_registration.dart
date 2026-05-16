@@ -540,11 +540,20 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
     );
   }
 
-  void _closePage() {
+  Future<void> _closePage() async {
     if (Navigator.canPop(context)) {
       Navigator.pop(context);
     } else {
-      Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+      final role = (await DatabaseService.getCurrentAccountType())?.toLowerCase();
+      if (!mounted) return;
+      final route = switch (role) {
+        'admin' => '/admin-dashboard',
+        'seller' => '/seller-dashboard',
+        'rider' => '/rider-dashboard',
+        'buyer' => '/buyer-dashboard',
+        _ => '/',
+      };
+      Navigator.pushNamedAndRemoveUntil(context, route, (route) => false);
     }
   }
 

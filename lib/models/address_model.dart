@@ -6,6 +6,7 @@ class Address {
   final String barangay;
   final String? street;
   final String? houseNumber;
+  final String? zipCode;
   final bool isDefault;
   final DateTime? createdAt;
 
@@ -17,6 +18,7 @@ class Address {
     required this.barangay,
     this.street,
     this.houseNumber,
+    this.zipCode,
     this.isDefault = false,
     this.createdAt,
   });
@@ -31,6 +33,7 @@ class Address {
       'barangay': barangay,
       'street': street,
       'house_number': houseNumber,
+      'zip_code': zipCode,
       'is_default': isDefault,
       'created_at': createdAt?.toIso8601String(),
     };
@@ -46,6 +49,7 @@ class Address {
       barangay: json['barangay'] ?? '',
       street: json['street'],
       houseNumber: json['house_number'],
+      zipCode: json['zip_code'],
       isDefault: json['is_default'] ?? false,
       createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
     );
@@ -60,6 +64,7 @@ class Address {
     String? barangay,
     String? street,
     String? houseNumber,
+    String? zipCode,
     bool? isDefault,
     DateTime? createdAt,
   }) {
@@ -71,6 +76,7 @@ class Address {
       barangay: barangay ?? this.barangay,
       street: street ?? this.street,
       houseNumber: houseNumber ?? this.houseNumber,
+      zipCode: zipCode ?? this.zipCode,
       isDefault: isDefault ?? this.isDefault,
       createdAt: createdAt ?? this.createdAt,
     );

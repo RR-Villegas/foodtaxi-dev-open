@@ -45,26 +45,6 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
     }
   }
 
-  Future<void> _changeRole(String newRole) async {
-    if (_accountId == null) return;
-
-    final success = await DatabaseService.updateUserRole(_accountId!, newRole);
-    if (success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Role changed to $newRole successfully!')),
-      );
-      setState(() {
-        _userProfile!['account_type'] = newRole;
-      });
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to change role. Try again.')),
-        );
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -138,43 +118,9 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
                         ),
                       ),
 
-                      const SizedBox(height: 30),
-
-                      // Role Change Section
-                      const Text(
-                        'Change Role',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          _roleButton('Buyer'),
-                          _roleButton('Seller'),
-                          _roleButton('Rider'),
-                        ],
-                      ),
                     ],
                   ),
                 ),
-    );
-  }
-
-  Widget _roleButton(String role) {
-    final currentRole = _userProfile?['account_type'] ?? 'Buyer';
-    if (role == currentRole) return const SizedBox.shrink();
-
-    return Expanded(
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.green,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-        onPressed: () => _changeRole(role),
-        child: Text(role, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-      ),
     );
   }
 }

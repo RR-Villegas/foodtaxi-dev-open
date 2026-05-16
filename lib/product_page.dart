@@ -21,6 +21,7 @@ class _ProductPageState extends State<ProductPage> {
   bool _isLoading = true;
   bool _hasError = false;
   int _quantity = 1;
+  Map<String, dynamic>? _selectedVariant;
 
   @override
   void initState() {
@@ -50,7 +51,7 @@ class _ProductPageState extends State<ProductPage> {
     try {
       final response = await _supabase
           .from('product')
-          .select()
+          .select('*, store(store_name), product_variant(*)')
           .eq('product_id', widget.productId)
           .maybeSingle();
 
@@ -77,7 +78,15 @@ class _ProductPageState extends State<ProductPage> {
     if (product == null) return;
 
     for (var i = 0; i < _quantity; i++) {
-      CartModel.addItem(product);
+      CartModel.addItem({
+        ...product,
+        if (_selectedVariant != null) ...{
+          'selected_variant_id': _selectedVariant!['variant_id'],
+          'selected_size': _selectedVariant!['size_label'],
+          'price': _selectedVariant!['price'],
+          'stock_quantity': _selectedVariant!['stock_quantity'],
+        },
+      });
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -87,7 +96,7 @@ class _ProductPageState extends State<ProductPage> {
       ),
     );
 
-    Navigator.pop(context);
+    setState(() {});
   }
 
   Widget _buildImage(String? imagePath) {
@@ -154,10 +163,28 @@ class _ProductPageState extends State<ProductPage> {
     final imagePath = _resolveImagePath(product['main_image_url']);
     final stock = _toInt(product['stock_quantity']);
     final price = _toDouble(product['price']);
+    final variants = product['product_variant'];
+    final activeVariants = variants is List
+        ? variants
+            .whereType<Map>()
+            .where((variant) => variant['is_active'] != false)
+            .map((variant) => Map<String, dynamic>.from(variant))
+            .toList()
+        : <Map<String, dynamic>>[];
+    final selectedPrice = _selectedVariant == null
+        ? price
+        : _toDouble(_selectedVariant!['price']);
+    final selectedStock = _selectedVariant == null
+        ? stock
+        : _toInt(_selectedVariant!['stock_quantity']);
     final isActive = product['is_active'] != false;
-    final canPurchase = isActive && stock > 0;
+    final canPurchase = isActive && selectedStock > 0;
     final description = product['description']?.toString().trim() ?? '';
     final sku = product['sku']?.toString().trim() ?? '';
+    final store = product['store'];
+    final sellerName = store is Map
+        ? store['store_name']?.toString() ?? 'Seller'
+        : 'Seller';
 
     return Scaffold(
       appBar: AppBar(
@@ -165,169 +192,208 @@ class _ProductPageState extends State<ProductPage> {
         backgroundColor: const Color(0xFF2d8f4e),
       ),
       body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              height: 300,
-              color: Colors.grey[200],
-              child: _buildImage(imagePath),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    product['name']?.toString() ?? 'Unknown Product',
-                    style: const TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'PHP ${price.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  if (product['category'] != null)
-                    Chip(
-                      label: Text(product['category'].toString()),
-                      backgroundColor: Colors.green[100],
-                    ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      const Text(
-                        'Stock: ',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      Text(
-                        isActive ? '$stock available' : 'Hidden from buyers',
-                        style: TextStyle(
-                          color: canPurchase ? Colors.green : Colors.red,
-                          fontWeight: FontWeight.bold,
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final imageSize = constraints.maxWidth > 640
+                    ? 320.0
+                    : constraints.maxWidth * 0.44;
+
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox.square(
+                      dimension: imageSize.clamp(140, 320),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: ColoredBox(
+                          color: Colors.grey.shade200,
+                          child: _buildImage(imagePath),
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  if (description.isNotEmpty)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Description',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          description,
-                          style: const TextStyle(fontSize: 16, height: 1.5),
-                        ),
-                        const SizedBox(height: 20),
-                      ],
                     ),
-                  if (sku.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 20),
-                      child: Row(
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          Text(
+                            product['name']?.toString() ?? 'Unknown Product',
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            sellerName,
+                            style: const TextStyle(color: Colors.black54),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'PHP ${selectedPrice.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
                           const Text(
-                            'SKU: ',
+                            'Size',
                             style: TextStyle(fontWeight: FontWeight.w600),
                           ),
-                          Text(sku),
-                        ],
-                      ),
-                    ),
-                  if (canPurchase)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 16,
-                        horizontal: 16,
-                      ),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[300]!),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Quantity:',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          Row(
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
                             children: [
-                              IconButton(
-                                icon: const Icon(Icons.remove),
-                                onPressed: _quantity > 1
-                                    ? () => setState(() => _quantity--)
-                                    : null,
+                              ChoiceChip(
+                                label: Text(
+                                  'Base - PHP ${price.toStringAsFixed(2)}',
+                                ),
+                                selected: _selectedVariant == null,
+                                onSelected: (_) {
+                                  setState(() {
+                                    _selectedVariant = null;
+                                    _quantity = 1;
+                                  });
+                                },
                               ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 20,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey[300]!),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  _quantity.toString(),
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
+                              ...activeVariants.map((variant) {
+                                return ChoiceChip(
+                                  label: Text(
+                                    '${variant['size_label']} - PHP ${_toDouble(variant['price']).toStringAsFixed(2)}',
                                   ),
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.add),
-                                onPressed: _quantity < stock
-                                    ? () => setState(() => _quantity++)
-                                    : null,
-                              ),
+                                  selected: _selectedVariant?['variant_id'] ==
+                                      variant['variant_id'],
+                                  onSelected: (_) {
+                                    setState(() {
+                                      _selectedVariant = variant;
+                                      _quantity = 1;
+                                    });
+                                  },
+                                );
+                              }),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          const Row(
+                            children: [
+                              Icon(Icons.star, color: Colors.amber, size: 18),
+                              Icon(Icons.star, color: Colors.amber, size: 18),
+                              Icon(Icons.star, color: Colors.amber, size: 18),
+                              Icon(Icons.star, color: Colors.amber, size: 18),
+                              Icon(Icons.star_border, color: Colors.amber, size: 18),
+                              SizedBox(width: 6),
+                              Text('(0 reviews)'),
                             ],
                           ),
                         ],
                       ),
                     ),
-                  const SizedBox(height: 30),
-                  SizedBox(
-                    height: 56,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: canPurchase ? Colors.green : Colors.grey,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: canPurchase ? _addToCart : null,
-                      child: Text(
-                        canPurchase
-                            ? 'Add to Cart'
-                            : (isActive ? 'Out of Stock' : 'Unavailable'),
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                const Text(
+                  'Stock: ',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                Text(
+                  isActive ? '$selectedStock available' : 'Hidden from buyers',
+                  style: TextStyle(
+                    color: canPurchase ? Colors.green : Colors.red,
+                    fontWeight: FontWeight.bold,
                   ),
-                ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (canPurchase)
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Quantity',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.remove),
+                          onPressed: _quantity > 1
+                              ? () => setState(() => _quantity--)
+                              : null,
+                        ),
+                        SizedBox(
+                          width: 40,
+                          child: Center(
+                            child: Text(
+                              _quantity.toString(),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.add),
+                          onPressed: _quantity < selectedStock
+                              ? () => setState(() => _quantity++)
+                              : null,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: FilledButton(
+                onPressed: canPurchase ? _addToCart : null,
+                child: Text(
+                  canPurchase
+                      ? 'Buy'
+                      : (isActive ? 'Out of Stock' : 'Unavailable'),
+                ),
               ),
             ),
+            const SizedBox(height: 28),
+            const Text(
+              'Description',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              description.isEmpty ? 'No description yet.' : description,
+              style: const TextStyle(height: 1.5),
+            ),
+            if (sku.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text('SKU: $sku'),
+            ],
+            const SizedBox(height: 28),
+            const Text(
+              'Reviews',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text('No reviews yet.'),
           ],
         ),
       ),

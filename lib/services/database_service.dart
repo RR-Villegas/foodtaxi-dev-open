@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/address_model.dart';
@@ -58,6 +60,18 @@ class DatabaseService {
 
   static int _toInt(dynamic value) => _toNum(value).toInt();
 
+  static String? normalizePhilippinePhone(String? phone) {
+    final digits = phone?.replaceAll(RegExp(r'\D'), '') ?? '';
+    if (digits.isEmpty) return null;
+    if (digits.startsWith('09') && digits.length == 11) {
+      return '+63${digits.substring(1)}';
+    }
+    if (digits.startsWith('639') && digits.length == 12) {
+      return '+$digits';
+    }
+    return phone?.trim();
+  }
+
   // Insert user profile after signup
   // Returns existing account_id if already exists, creates new if not
   static Future<String?> insertUserProfile({
@@ -84,7 +98,7 @@ class DatabaseService {
               'firstname': firstName,
               'surname': surname,
               'email': email,
-              'phone_number': _blankToNull(phoneNumber),
+              'phone_number': _blankToNull(normalizePhilippinePhone(phoneNumber)),
               'account_type': accountType,
             })
             .eq('auth_id', authId);
@@ -99,7 +113,7 @@ class DatabaseService {
             'firstname': firstName,
             'surname': surname,
             'email': email,
-            'phone_number': _blankToNull(phoneNumber),
+            'phone_number': _blankToNull(normalizePhilippinePhone(phoneNumber)),
             'account_type': accountType,
           })
           .select('account_id')
@@ -123,7 +137,7 @@ class DatabaseService {
                   'auth_id': authId,
                   'firstname': firstName,
                   'surname': surname,
-                  'phone_number': _blankToNull(phoneNumber),
+                  'phone_number': _blankToNull(normalizePhilippinePhone(phoneNumber)),
                   'account_type': accountType,
                 })
                 .eq('account_id', accountId);
@@ -294,11 +308,13 @@ class DatabaseService {
     required String addressId,
     required double totalAmount,
     required double shippingFee,
+    double serviceFee = 0,
     required String paymentMethod,
     String? sellerAccountId,
     String orderStatus = 'Processing',
   }) async {
     try {
+      final sellerPayout = totalAmount - shippingFee - serviceFee;
       final response = await _supabase
           .from('orders')
           .insert({
@@ -307,6 +323,10 @@ class DatabaseService {
             'address_id': addressId,
             'total_amount': totalAmount,
             'shipping_fee': shippingFee,
+            'service_fee': serviceFee,
+            'admin_commission': serviceFee,
+            'rider_fee': shippingFee,
+            'seller_payout': sellerPayout < 0 ? 0 : sellerPayout,
             'payment_method': paymentMethod,
             'order_status': orderStatus,
           })
@@ -321,22 +341,26 @@ class DatabaseService {
   }
 
   // Insert order item
-  static Future<void> insertOrderItem({
+  static Future<bool> insertOrderItem({
     required String orderId,
     required String productId,
     required double unitPriceAtSale,
     required int quantity,
+    String? productVariantId,
   }) async {
     try {
       await _supabase.from('order_items').insert({
         'order_id': orderId,
         'product_id': productId,
+        'product_variant_id': _blankToNull(productVariantId),
         'quantity': quantity,
         'unit_price_at_sale': unitPriceAtSale,
         'subtotal': unitPriceAtSale * quantity,
       });
+      return true;
     } catch (e) {
       _logDbError('Failed to insert order item', e);
+      return false;
     }
   }
 
@@ -364,7 +388,7 @@ class DatabaseService {
     try {
       final response = await _supabase
           .from('product')
-          .select()
+          .select('*, product_variant(*)')
           .eq('store_id', storeId)
           .order('name');
 
@@ -385,19 +409,26 @@ class DatabaseService {
     String? sku,
     String? mainImageUrl,
     bool isActive = true,
+    List<Map<String, dynamic>> variants = const [],
   }) async {
     try {
-      await _supabase.from('product').insert({
-        'store_id': storeId,
-        'category': _blankToNull(category),
-        'name': name.trim(),
-        'description': _blankToNull(description),
-        'price': price,
-        'stock_quantity': stockQuantity,
-        'sku': _blankToNull(sku),
-        'main_image_url': _blankToNull(mainImageUrl),
-        'is_active': isActive,
-      });
+      final response = await _supabase
+          .from('product')
+          .insert({
+            'store_id': storeId,
+            'category': _blankToNull(category),
+            'name': name.trim(),
+            'description': _blankToNull(description),
+            'price': price,
+            'stock_quantity': stockQuantity,
+            'sku': _blankToNull(sku),
+            'main_image_url': _blankToNull(mainImageUrl),
+            'is_active': isActive,
+          })
+          .select('product_id')
+          .single();
+
+      await _replaceProductVariants(response['product_id'].toString(), variants);
       return true;
     } catch (e) {
       _logDbError('Failed to insert product', e);
@@ -415,6 +446,7 @@ class DatabaseService {
     String? sku,
     String? mainImageUrl,
     required bool isActive,
+    List<Map<String, dynamic>> variants = const [],
   }) async {
     try {
       await _supabase
@@ -430,6 +462,7 @@ class DatabaseService {
             'is_active': isActive,
           })
           .eq('product_id', productId);
+      await _replaceProductVariants(productId, variants);
       return true;
     } catch (e) {
       _logDbError('Failed to update product', e);
@@ -450,6 +483,136 @@ class DatabaseService {
     }
   }
 
+  static Future<bool> updateCurrentAccountProfile({
+    required String firstName,
+    required String surname,
+    String? phoneNumber,
+    String? profileImageUrl,
+  }) async {
+    try {
+      final accountId = await getCurrentAccountId();
+      if (accountId == null) return false;
+
+      final updateData = {
+        'firstname': firstName.trim(),
+        'surname': surname.trim(),
+        'phone_number': _blankToNull(normalizePhilippinePhone(phoneNumber)),
+      };
+
+      if (profileImageUrl != null) {
+        updateData['profile_image_url'] = _blankToNull(profileImageUrl);
+      }
+
+      await _supabase
+          .from('account')
+          .update(updateData)
+          .eq('account_id', accountId);
+      return true;
+    } catch (e) {
+      _logDbError('Failed to update current account profile', e);
+      return false;
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getCurrentNotifications({
+    int? limit,
+    String? type,
+    Duration? age,
+  }) async {
+    try {
+      final accountId = await getCurrentAccountId();
+      if (accountId == null) return [];
+
+      var query = _supabase
+          .from('notification')
+          .select()
+          .eq('account_id', accountId);
+
+      if (type != null && type != 'All') {
+        query = query.eq('notification_type', type);
+      }
+
+      if (age != null) {
+        query = query.gte(
+          'created_at',
+          DateTime.now().subtract(age).toIso8601String(),
+        );
+      }
+
+      final orderedQuery = query.order('created_at', ascending: false);
+      final response =
+          limit == null ? await orderedQuery : await orderedQuery.limit(limit);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      _logDbError('Failed to fetch notifications', e);
+      return [];
+    }
+  }
+
+  static Future<void> markNotificationRead(String notificationId) async {
+    try {
+      await _supabase
+          .from('notification')
+          .update({'is_read': true})
+          .eq('notification_id', notificationId);
+    } catch (e) {
+      _logDbError('Failed to mark notification read', e);
+    }
+  }
+
+  static Future<void> _replaceProductVariants(
+    String productId,
+    List<Map<String, dynamic>> variants,
+  ) async {
+    await _supabase.from('product_variant').delete().eq('product_id', productId);
+
+    final rows = variants
+        .map(
+          (variant) => {
+            'product_id': productId,
+            'size_label': variant['size_label']?.toString().trim(),
+            'price': _toDouble(variant['price']),
+            'stock_quantity': _toInt(variant['stock_quantity']),
+            'is_active': variant['is_active'] != false,
+          },
+        )
+        .where(
+          (variant) =>
+              variant['size_label'] != null &&
+              variant['size_label'].toString().isNotEmpty,
+        )
+        .toList();
+
+    if (rows.isNotEmpty) {
+      await _supabase.from('product_variant').insert(rows);
+    }
+  }
+
+  static Future<String?> uploadProductImage({
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
+    try {
+      final extension = fileName.split('.').last.toLowerCase();
+      final safeExtension = extension == fileName ? 'jpg' : extension;
+      final path =
+          'seller-products/${DateTime.now().millisecondsSinceEpoch}.$safeExtension';
+
+      await _supabase.storage
+          .from('product-images')
+          .uploadBinary(
+            path,
+            bytes,
+            fileOptions: const FileOptions(upsert: false),
+          );
+
+      return path;
+    } catch (e) {
+      _logDbError('Failed to upload product image', e);
+      return null;
+    }
+  }
+
   static Future<String?> getSellerAccountIdForProduct(String productId) async {
     try {
       final response = await _supabase
@@ -465,6 +628,22 @@ class DatabaseService {
     }
   }
 
+  static Future<bool> updateOrderStatus({
+    required String orderId,
+    required String status,
+  }) async {
+    try {
+      await _supabase
+          .from('orders')
+          .update({'order_status': status})
+          .eq('order_id', orderId);
+      return true;
+    } catch (e) {
+      _logDbError('Failed to update order status', e);
+      return false;
+    }
+  }
+
   static Future<List<Map<String, dynamic>>> getSellerOrders(
     String sellerAccountId,
   ) async {
@@ -472,7 +651,7 @@ class DatabaseService {
       final response = await _supabase
           .from('orders')
           .select(
-            '*, account!orders_buyer_account_id_fkey(firstname, surname, email), order_items(*, product(name, main_image_url))',
+            '*, account!orders_buyer_account_id_fkey(firstname, surname, email, phone_number), order_items(*, product(name, main_image_url), product_variant(size_label))',
           )
           .eq('seller_account_id', sellerAccountId)
           .order('order_date', ascending: false);
@@ -480,6 +659,22 @@ class DatabaseService {
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       _logDbError('Failed to fetch seller orders', e);
+      return [];
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getAdminOrders() async {
+    try {
+      final response = await _supabase
+          .from('orders')
+          .select(
+            '*, account!orders_buyer_account_id_fkey(firstname, surname, email), order_items(quantity, subtotal, product(name))',
+          )
+          .order('order_date', ascending: false);
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      _logDbError('Failed to fetch admin orders', e);
       return [];
     }
   }
@@ -523,9 +718,83 @@ class DatabaseService {
 
   // Get product image URL from bucket
   static String getProductImageUrl(String fileName) {
-    return _supabase.storage
-        .from('product-images/main-picture')
-        .getPublicUrl(fileName);
+    final normalized = fileName.contains('/') ? fileName : 'main-picture/$fileName';
+    return _supabase.storage.from('product-images').getPublicUrl(normalized);
+  }
+
+  static Future<List<Map<String, dynamic>>> searchProducts({
+    String query = '',
+    String? category,
+    String sort = 'New',
+    String seller = '',
+  }) async {
+    try {
+      var request = _supabase
+          .from('product')
+          .select('*, store(store_name)')
+          .eq('is_active', true);
+
+      final trimmedQuery = query.trim();
+      if (trimmedQuery.isNotEmpty) {
+        request = request.ilike('name', '%$trimmedQuery%');
+      }
+
+      if (category != null && category != 'All') {
+        request = request.eq('category', category);
+      }
+
+      final response = sort == 'Price: Low to High'
+          ? await request.order('price', ascending: true)
+          : sort == 'Price: High to Low'
+              ? await request.order('price', ascending: false)
+              : await request.order('product_id', ascending: false);
+
+      final products = List<Map<String, dynamic>>.from(response);
+      final sellerQuery = seller.trim().toLowerCase();
+      if (sellerQuery.isEmpty) return products;
+
+      return products.where((product) {
+        final store = product['store'];
+        if (store is! Map) return false;
+        return (store['store_name']?.toString().toLowerCase() ?? '')
+            .contains(sellerQuery);
+      }).toList();
+    } catch (e) {
+      _logDbError('Failed to search products', e);
+      return [];
+    }
+  }
+
+  static String getProfileImageUrl(String fileName) {
+    return _supabase.storage.from('profile-images').getPublicUrl(fileName);
+  }
+
+  static Future<String?> uploadProfileImage({
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) return null;
+
+      final extension = fileName.split('.').last.toLowerCase();
+      final safeExtension = extension == fileName ? 'jpg' : extension;
+      final path =
+          '${user.id}/${DateTime.now().millisecondsSinceEpoch}.$safeExtension';
+
+      await _supabase.storage
+          .from('profile-images')
+          .uploadBinary(
+            path,
+            bytes,
+            fileOptions: const FileOptions(upsert: false),
+          );
+
+      return path;
+    } catch (e) {
+      _logDbError('Failed to upload profile image', e);
+      return null;
+    }
   }
 
   // Insert cart item
@@ -620,7 +889,7 @@ class DatabaseService {
         'street': _blankToNull(street),
         'house_number': _blankToNull(houseNumber),
         'zip_code': _blankToNull(zipCode),
-        'contact_phone': contactPhone.trim(),
+        'contact_phone': normalizePhilippinePhone(contactPhone),
         'status': 'Pending Review',
       });
       return true;
@@ -656,6 +925,7 @@ class DatabaseService {
             barangay,
             street,
             house_number,
+            zip_code,
             contact_phone,
             status,
             submission_date,
@@ -740,7 +1010,7 @@ class DatabaseService {
             'street': _blankToNull(street),
             'house_number': _blankToNull(houseNumber),
             'zip_code': _blankToNull(zipCode),
-            'contact_phone': contactPhone.trim(),
+            'contact_phone': normalizePhilippinePhone(contactPhone),
             'status': 'Pending Review',
             'review_notes': null,
             'date_approved': null,
@@ -916,8 +1186,13 @@ class DatabaseService {
     required String applicationId,
     required String accountId,
     required String storeName,
-    required String addressLine,
+    String? storeDescription,
+    String? province,
     required String city,
+    String? barangay,
+    String? street,
+    String? houseNumber,
+    String? zipCode,
     String? contactPhone,
   }) async {
     try {
@@ -936,16 +1211,28 @@ class DatabaseService {
           .update({'account_type': 'Seller', 'is_verified': true})
           .eq('account_id', accountId);
 
-      // Create store for the seller
-      await _supabase.from('store').insert({
-        'owner_account_id': accountId,
-        'store_name': storeName,
-        'slug': storeName.toLowerCase().replaceAll(' ', '-'),
-        'address_line': addressLine,
-        'city': city,
-        'contact_phone': _blankToNull(contactPhone),
-        'is_open': true,
-      });
+      final existingStore = await _supabase
+          .from('store')
+          .select('store_id')
+          .eq('owner_account_id', accountId)
+          .maybeSingle();
+
+      if (existingStore == null) {
+        await _supabase.from('store').insert({
+          'owner_account_id': accountId,
+          'store_name': storeName,
+          'slug': storeName.toLowerCase().replaceAll(' ', '-'),
+          'description': _blankToNull(storeDescription),
+          'province': _blankToNull(province),
+          'city': city,
+          'barangay': _blankToNull(barangay),
+          'street': _blankToNull(street),
+          'house_number': _blankToNull(houseNumber),
+          'zip_code': _blankToNull(zipCode),
+          'contact_phone': _blankToNull(normalizePhilippinePhone(contactPhone)),
+          'is_open': true,
+        });
+      }
       return true;
     } catch (e) {
       _logDbError('Failed to approve seller application', e);

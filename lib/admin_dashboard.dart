@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'services/auth_service.dart';
 import 'services/database_service.dart';
+import 'widgets/notification_bell.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -12,55 +14,38 @@ class _AdminDashboardState extends State<AdminDashboard> {
   int _currentIndex = 0;
   List<Map<String, dynamic>> _sellerApplications = [];
   List<Map<String, dynamic>> _riderApplications = [];
+  List<Map<String, dynamic>> _orders = [];
   bool _isLoading = false;
-  late List<double> _dailySales;
-  final List<Map<String, dynamic>> _mockOrders = [
-    {
-      'id': 'ORD001',
-      'date': '2024-10-01',
-      'customer': 'John Doe',
-      'items': 3,
-      'total': 1250.00,
-    },
-    {
-      'id': 'ORD002',
-      'date': '2024-10-01',
-      'customer': 'Jane Smith',
-      'items': 2,
-      'total': 850.00,
-    },
-    {
-      'id': 'ORD003',
-      'date': '2024-10-02',
-      'customer': 'Bob Johnson',
-      'items': 4,
-      'total': 2100.00,
-    },
-    {
-      'id': 'ORD004',
-      'date': '2024-10-02',
-      'customer': 'Alice Brown',
-      'items': 1,
-      'total': 450.00,
-    },
-    {
-      'id': 'ORD005',
-      'date': '2024-10-03',
-      'customer': 'Charlie Wilson',
-      'items': 5,
-      'total': 3200.00,
-    },
-  ];
 
   double get _totalSales =>
-      _mockOrders.fold(0.0, (sum, order) => sum + order['total']);
-  int get _totalOrders => _mockOrders.length;
-  double get _avgOrderValue => _totalSales / _totalOrders;
+      _orders.fold(0.0, (sum, order) => sum + _toDouble(order['total_amount']));
+  int get _totalOrders => _orders.length;
+  double get _avgOrderValue => _totalOrders == 0 ? 0 : _totalSales / _totalOrders;
 
   @override
   void initState() {
     super.initState();
-    _dailySales = [800, 1450, 2100, 1800, 3200];
+    _loadAdminOrders();
+  }
+
+  Future<void> _loadAdminOrders() async {
+    setState(() => _isLoading = true);
+    try {
+      final orders = await DatabaseService.getAdminOrders();
+      if (mounted) {
+        setState(() => _orders = orders);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   Future<void> _loadSellerApplications() async {
@@ -109,8 +94,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
         applicationId: app['application_id'].toString(),
         accountId: app['account_id'].toString(),
         storeName: app['store_name']?.toString() ?? 'Store',
-        addressLine: _formatSellerAddress(app),
+        storeDescription: app['store_description']?.toString(),
+        province: app['province']?.toString(),
         city: app['city']?.toString() ?? '',
+        barangay: app['barangay']?.toString(),
+        street: app['street']?.toString(),
+        houseNumber: app['house_number']?.toString(),
+        zipCode: app['zip_code']?.toString(),
         contactPhone: app['contact_phone']?.toString(),
       );
 
@@ -561,7 +551,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: List.generate(5, (i) => _revenueBar(_dailySales[i], i)),
+              children: List.generate(5, (i) => _revenueBar(_dailySales()[i], i)),
             ),
           ),
           const SizedBox(height: 40),
@@ -571,49 +561,67 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Widget _buildSalesReportTab() {
-    return ListView.builder(
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_orders.isEmpty) {
+      return const Center(child: Text('No orders yet'));
+    }
+
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      itemCount: _mockOrders.length,
-      itemBuilder: (context, index) {
-        final order = _mockOrders[index];
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          elevation: 3,
-          child: ListTile(
-            contentPadding: const EdgeInsets.all(16),
-            leading: CircleAvatar(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              child: Text(
-                '#${order['id'].substring(3)}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            title: Text(order['customer']),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Date: ${order['date']} | Items: ${order['items']}'),
-                Text(
-                  'Total: ₱${order['total'].toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green,
-                  ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          columns: const [
+            DataColumn(label: Text('Order')),
+            DataColumn(label: Text('Customer')),
+            DataColumn(label: Text('Date')),
+            DataColumn(label: Text('Items')),
+            DataColumn(label: Text('Status')),
+            DataColumn(label: Text('Total')),
+          ],
+          rows: _orders.map((order) {
+            final orderId = order['order_id']?.toString() ?? '';
+            return DataRow(
+              onSelectChanged: (_) => _showOrderDetails(order),
+              cells: [
+                DataCell(Text(_shortId(orderId))),
+                DataCell(Text(_customerName(order))),
+                DataCell(Text(_formatDate(order['order_date']))),
+                DataCell(Text(_itemCount(order).toString())),
+                DataCell(Text(order['order_status']?.toString() ?? 'N/A')),
+                DataCell(
+                  Text('₱${_toDouble(order['total_amount']).toStringAsFixed(2)}'),
                 ),
               ],
-            ),
-            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-            onTap: () => _showOrderDetails(order),
-          ),
-        );
-      },
+            );
+          }).toList(),
+        ),
+      ),
     );
+  }
+
+  Future<void> _logout() async {
+    await AuthService.clearLoginSession();
+    if (!mounted) return;
+
+    Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+  }
+
+  void _handleMenu(String value) {
+    switch (value) {
+      case 'profile':
+        Navigator.pushNamed(context, '/profile');
+        break;
+      case 'settings':
+        Navigator.pushNamed(context, '/settings');
+        break;
+      case 'logout':
+        _logout();
+        break;
+    }
   }
 
   Widget _metricCard(String title, String value, IconData icon, Color color) {
@@ -667,20 +675,80 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
+  List<double> _dailySales() {
+    final sales = List<double>.filled(5, 0);
+    final today = DateTime.now();
+
+    for (final order in _orders) {
+      final date = DateTime.tryParse(order['order_date']?.toString() ?? '');
+      if (date == null) continue;
+
+      final daysAgo = DateTime(today.year, today.month, today.day)
+          .difference(DateTime(date.year, date.month, date.day))
+          .inDays;
+
+      if (daysAgo >= 0 && daysAgo < 5) {
+        sales[4 - daysAgo] += _toDouble(order['total_amount']);
+      }
+    }
+
+    return sales;
+  }
+
+  double _toDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  int _itemCount(Map<String, dynamic> order) {
+    final items = order['order_items'];
+    if (items is! List) return 0;
+
+    return items.fold<int>(0, (sum, item) {
+      if (item is! Map) return sum;
+      final quantity = item['quantity'];
+      if (quantity is int) return sum + quantity;
+      return sum + (int.tryParse(quantity?.toString() ?? '') ?? 0);
+    });
+  }
+
+  String _customerName(Map<String, dynamic> order) {
+    final account = order['account'];
+    if (account is! Map) return 'Unknown';
+
+    final firstName = account['firstname']?.toString() ?? '';
+    final surname = account['surname']?.toString() ?? '';
+    final name = '$firstName $surname'.trim();
+    return name.isEmpty ? account['email']?.toString() ?? 'Unknown' : name;
+  }
+
+  String _formatDate(dynamic value) {
+    final date = DateTime.tryParse(value?.toString() ?? '');
+    if (date == null) return 'N/A';
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  String _shortId(String id) {
+    if (id.length <= 8) return id;
+    return '#${id.substring(0, 8)}';
+  }
+
   void _showOrderDetails(Map<String, dynamic> order) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Order ${order['id']}'),
+        title: Text('Order ${_shortId(order['order_id']?.toString() ?? '')}'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Customer: ${order['customer']}'),
-            Text('Date: ${order['date']}'),
-            Text('Items: ${order['items']}'),
+            Text('Customer: ${_customerName(order)}'),
+            Text('Date: ${_formatDate(order['order_date'])}'),
+            Text('Items: ${_itemCount(order)}'),
+            Text('Status: ${order['order_status'] ?? 'N/A'}'),
+            Text('Payment: ${order['payment_method'] ?? 'N/A'}'),
             Text(
-              'Total: ₱${order['total']}',
+              'Total: ₱${_toDouble(order['total_amount']).toStringAsFixed(2)}',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ],
@@ -766,10 +834,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         title: const Text('Admin Panel'),
         backgroundColor: const Color(0xFF2d8f4e),
         elevation: 0,
         actions: [
+          const NotificationBell(),
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: () {
@@ -778,9 +848,37 @@ class _AdminDashboardState extends State<AdminDashboard> {
               } else if (_currentIndex == 3) {
                 _loadRiderApplications();
               } else {
-                setState(() {});
+                _loadAdminOrders();
               }
             },
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.menu, color: Colors.white),
+            onSelected: _handleMenu,
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: 'profile',
+                child: ListTile(
+                  leading: Icon(Icons.person),
+                  title: Text('Profile'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'settings',
+                child: ListTile(
+                  leading: Icon(Icons.settings),
+                  title: Text('Settings'),
+                ),
+              ),
+              PopupMenuDivider(),
+              PopupMenuItem(
+                value: 'logout',
+                child: ListTile(
+                  leading: Icon(Icons.logout),
+                  title: Text('Logout'),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -793,6 +891,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
             _loadSellerApplications();
           } else if (index == 3) {
             _loadRiderApplications();
+          } else if (index == 0 || index == 1) {
+            _loadAdminOrders();
           }
         },
         type: BottomNavigationBarType.fixed,

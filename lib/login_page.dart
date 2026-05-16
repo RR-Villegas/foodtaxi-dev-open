@@ -24,6 +24,22 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
+    _redirectLoggedInUser();
+  }
+
+  Future<void> _redirectLoggedInUser() async {
+    if (!AuthService.isAuthenticated()) return;
+    final role = (await DatabaseService.getCurrentAccountType() ?? 'Buyer').toLowerCase();
+    if (!mounted) return;
+
+    final route = switch (role) {
+      'admin' => '/admin-dashboard',
+      'seller' => '/seller-dashboard',
+      'rider' => '/rider-dashboard',
+      _ => '/buyer-dashboard',
+    };
+
+    Navigator.pushNamedAndRemoveUntil(context, route, (route) => false);
   }
 
   Future<void> _signIn() async {

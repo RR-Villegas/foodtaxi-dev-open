@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'edit_product_page.dart';
+import 'services/auth_service.dart';
 import 'services/database_service.dart';
+import 'widgets/notification_bell.dart';
 
 class SellerDashboard extends StatefulWidget {
   const SellerDashboard({super.key});
@@ -23,6 +26,29 @@ class _SellerDashboardState extends State<SellerDashboard> {
   List<Map<String, dynamic>> _orders = [];
   int _currentIndex = 0;
   bool _isLoading = true;
+
+  Future<void> _logout() async {
+    await AuthService.clearLoginSession();
+    if (!mounted) return;
+    Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+  }
+
+  void _handleMenu(String value) {
+    switch (value) {
+      case 'profile':
+        Navigator.pushNamed(context, '/profile');
+        break;
+      case 'settings':
+        Navigator.pushNamed(context, '/settings');
+        break;
+      case 'location':
+        Navigator.pushNamed(context, '/addresses');
+        break;
+      case 'logout':
+        _logout();
+        break;
+    }
+  }
 
   @override
   void initState() {
@@ -104,6 +130,30 @@ class _SellerDashboardState extends State<SellerDashboard> {
   }
 
   Future<void> _openProductForm([Map<String, dynamic>? product]) async {
+    final storeId = _store?['store_id']?.toString();
+    if (storeId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Seller store not found')),
+      );
+      return;
+    }
+
+    final saved = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EditProductPage(
+          storeId: storeId,
+          product: product,
+          categories: _categories,
+        ),
+      ),
+    );
+
+    if (saved == true) {
+      await _loadDashboard();
+    }
+    return;
+
     final formKey = GlobalKey<FormState>();
     final nameController =
         TextEditingController(text: product?['name']?.toString() ?? '');
@@ -370,10 +420,28 @@ class _SellerDashboardState extends State<SellerDashboard> {
       onRefresh: _loadDashboard,
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: _products.length,
+        itemCount: _products.length + 1,
         itemBuilder: (context, index) {
+          if (index == 0) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: FilledButton.icon(
+                  onPressed: () => _openProductForm(),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add Product'),
+                ),
+              ),
+            );
+          }
+
+          index -= 1;
           final product = _products[index];
           final active = product['is_active'] != false;
+          final variants = product['product_variant'];
+          final variantCount = variants is List ? variants.length : 0;
 
           return Card(
             margin: const EdgeInsets.only(bottom: 12),
@@ -388,6 +456,8 @@ class _SellerDashboardState extends State<SellerDashboard> {
                 children: [
                   Text(_money(product['price'])),
                   Text('Stock: ${_stock(product['stock_quantity'])}'),
+                  if (variantCount > 0)
+                    Text('$variantCount alternate size${variantCount == 1 ? '' : 's'}'),
                   Text(
                     active ? 'Active' : 'Hidden',
                     style: TextStyle(color: active ? Colors.green : Colors.grey),
@@ -535,19 +605,187 @@ class _SellerDashboardState extends State<SellerDashboard> {
     );
   }
 
+  Future<void> _updateOrderStatus(
+    Map<String, dynamic> order,
+    String status,
+  ) async {
+    final ok = await DatabaseService.updateOrderStatus(
+      orderId: order['order_id'].toString(),
+      status: status,
+    );
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(ok ? 'Order updated' : 'Order could not be updated')),
+    );
+    if (ok) _loadDashboard();
+  }
+
+  Widget _buildOrdersTab() {
+    if (_orders.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: _loadDashboard,
+        child: ListView(
+          children: const [
+            SizedBox(height: 160),
+            Center(child: Text('No orders to process')),
+          ],
+        ),
+      );
+    }
+
+    const statuses = [
+      'Processing',
+      'Ready for Pickup',
+      'In Transit',
+      'Delivered',
+      'Cancelled',
+    ];
+
+    return RefreshIndicator(
+      onRefresh: _loadDashboard,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: _orders.length,
+        itemBuilder: (context, index) {
+          final order = _orders[index];
+          final buyer = order['account'];
+          final buyerName = buyer is Map
+              ? '${buyer['firstname'] ?? 'Buyer'} ${buyer['surname'] ?? ''}'.trim()
+              : 'Buyer';
+          final buyerPhone =
+              buyer is Map ? buyer['phone_number']?.toString() ?? '' : '';
+          final items = order['order_items'];
+          final orderItems = items is List ? items : const [];
+          final status = order['order_status']?.toString() ?? 'Processing';
+
+          return Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          buyerName.isEmpty ? 'Buyer' : buyerName,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      Text(_money(order['total_amount'])),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ...orderItems.map((item) {
+                    if (item is! Map) return const SizedBox.shrink();
+                    final product = item['product'];
+                    final variant = item['product_variant'];
+                    final productName = product is Map
+                        ? product['name']?.toString() ?? 'Product'
+                        : 'Product';
+                    final size = variant is Map
+                        ? variant['size_label']?.toString() ?? ''
+                        : '';
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        '${item['quantity'] ?? 1}x $productName${size.isEmpty ? '' : ' ($size)'}',
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: statuses.contains(status) ? status : 'Processing',
+                    decoration: const InputDecoration(labelText: 'Order Status'),
+                    items: statuses
+                        .map(
+                          (item) => DropdownMenuItem(
+                            value: item,
+                            child: Text(item),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value == null || value == status) return;
+                      _updateOrderStatus(order, value);
+                    },
+                  ),
+                  if (buyerPhone.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Customer phone: $buyerPhone')),
+                        );
+                      },
+                      icon: const Icon(Icons.phone),
+                      label: const Text('Call Customer'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final storeName = _store?['store_name']?.toString() ?? 'Seller Dashboard';
 
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         title: Text(storeName),
         backgroundColor: const Color(0xFF2d8f4e),
         actions: [
+          const NotificationBell(),
           IconButton(
             onPressed: _loadDashboard,
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.menu),
+            onSelected: _handleMenu,
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: 'profile',
+                child: ListTile(
+                  leading: Icon(Icons.person),
+                  title: Text('Profile'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'location',
+                child: ListTile(
+                  leading: Icon(Icons.location_on),
+                  title: Text('Shop Location'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'settings',
+                child: ListTile(
+                  leading: Icon(Icons.settings),
+                  title: Text('Settings'),
+                ),
+              ),
+              PopupMenuDivider(),
+              PopupMenuItem(
+                value: 'logout',
+                child: ListTile(
+                  leading: Icon(Icons.logout),
+                  title: Text('Logout'),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -555,15 +793,9 @@ class _SellerDashboardState extends State<SellerDashboard> {
           ? const Center(child: CircularProgressIndicator())
           : _currentIndex == 0
               ? _buildProductsTab()
-              : _buildSalesTab(),
-      floatingActionButton: _currentIndex == 0 && _store != null
-          ? FloatingActionButton.extended(
-              onPressed: () => _openProductForm(),
-              backgroundColor: const Color(0xFF2d8f4e),
-              icon: const Icon(Icons.add),
-              label: const Text('Product'),
-            )
-          : null,
+              : _currentIndex == 1
+                  ? _buildOrdersTab()
+                  : _buildSalesTab(),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) {
@@ -574,6 +806,11 @@ class _SellerDashboardState extends State<SellerDashboard> {
             icon: Icon(Icons.inventory_2_outlined),
             selectedIcon: Icon(Icons.inventory_2),
             label: 'Products',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.receipt_long_outlined),
+            selectedIcon: Icon(Icons.receipt_long),
+            label: 'Orders',
           ),
           NavigationDestination(
             icon: Icon(Icons.bar_chart_outlined),

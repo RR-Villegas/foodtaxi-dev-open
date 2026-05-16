@@ -21,6 +21,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
   
   // Delivery fee in PHP
   static const double _deliveryFee = 50.0;
+  static const double _serviceFeeRate = 0.05;
   
   @override
   void initState() {
@@ -59,7 +60,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   double get _subtotal => CartModel.totalPrice;
-  double get _total => _subtotal + _deliveryFee;
+  double get _serviceFee => _subtotal * _serviceFeeRate;
+  double get _total => _subtotal + _deliveryFee + _serviceFee;
 
   Widget _buildProductImage(dynamic imageValue, {double size = 50}) {
     final path = imageValue?.toString().trim();
@@ -173,6 +175,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         addressId: _selectedAddress!.addressId!,
         totalAmount: _total,
         shippingFee: _deliveryFee,
+        serviceFee: _serviceFee,
         paymentMethod: _selectedPaymentMethod,
         sellerAccountId: sellerAccountId,
       );
@@ -189,14 +192,19 @@ class _CheckoutPageState extends State<CheckoutPage> {
         }
 
         final quantity = item['quantity'] ?? 1;
-        final price = (item['price'] as num).toDouble();
+        final price = CartModel.itemPrice(item);
 
-        await DatabaseService.insertOrderItem(
+        final itemSaved = await DatabaseService.insertOrderItem(
           orderId: orderId,
           productId: productId,
+          productVariantId: item['selected_variant_id']?.toString(),
           unitPriceAtSale: price,
           quantity: quantity,
         );
+
+        if (!itemSaved) {
+          throw Exception('Not enough stock for ${item['name'] ?? 'an item'}');
+        }
       }
 
       // Clear cart after successful order
@@ -385,6 +393,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
                                         item['name'] ?? 'Unknown',
                                         style: const TextStyle(fontWeight: FontWeight.bold),
                                       ),
+                                      if ((item['selected_size']?.toString() ?? '').isNotEmpty)
+                                        Text('Size: ${item['selected_size']}'),
                                       Text(
                                         'Qty: ${item['quantity'] ?? 1} × ₱${item['price']}',
                                         style: const TextStyle(color: Colors.grey),
@@ -393,7 +403,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                                   ),
                                 ),
                                 Text(
-                                  '₱${(item['price'] * (item['quantity'] ?? 1)).toStringAsFixed(2)}',
+                                  '₱${(CartModel.itemPrice(item) * (item['quantity'] ?? 1)).toStringAsFixed(2)}',
                                   style: const TextStyle(fontWeight: FontWeight.bold),
                                 ),
                               ],
@@ -413,6 +423,14 @@ class _CheckoutPageState extends State<CheckoutPage> {
                             children: [
                               const Text('Delivery Fee'),
                               Text('₱${_deliveryFee.toStringAsFixed(2)}'),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Service Fee'),
+                              Text('₱${_serviceFee.toStringAsFixed(2)}'),
                             ],
                           ),
                           const Divider(),

@@ -97,7 +97,7 @@ class _CartPageState extends State<CartPage> {
                 final item = CartModel.cartItems[index];
                 
                 // Safe calculation for total per item
-                final double price = (item['price'] is num) ? (item['price'] as num).toDouble() : 0.0;
+                final double price = CartModel.itemPrice(item);
                 final int quantity = item['quantity'] ?? 1;
                 final double itemTotal = price * quantity;
                 
@@ -128,6 +128,8 @@ class _CartPageState extends State<CartPage> {
                                   item['name'] ?? 'Unknown Product',
                                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                                 ),
+                                if ((item['selected_size']?.toString() ?? '').isNotEmpty)
+                                  Text('Size: ${item['selected_size']}'),
                                 Text('₱${price.toStringAsFixed(2)}'),
                                 Text(
                                   'Total: ₱${itemTotal.toStringAsFixed(2)}',

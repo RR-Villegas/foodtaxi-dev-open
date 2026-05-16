@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'login_page.dart';
 import 'signup_page.dart';
-import 'user_details.dart';
+import 'profile_page.dart';
+import 'address_page.dart';
+import 'notifications_page.dart';
+import 'settings_page.dart';
 import 'cart_page.dart';
 import 'search_page.dart';
 import 'buyer_dashboard.dart';
@@ -16,6 +19,7 @@ import 'rider_registration.dart';
 import 'application_status_page.dart';
 import 'reset_password_page.dart';
 import 'services/database_service.dart';
+import 'services/auth_service.dart';
 import 'services/protected_route.dart';
 
 void main() async {
@@ -51,7 +55,19 @@ class MyApp extends StatelessWidget {
         '/reset-password': (context) => const ResetPasswordPage(),
         '/profile': (context) => ProtectedRoute(
           protection: RouteProtection.authenticated,
-          child: UserDetailsPage(),
+          child: const ProfilePage(),
+        ),
+        '/addresses': (context) => ProtectedRoute(
+          protection: RouteProtection.authenticated,
+          child: const AddressPage(),
+        ),
+        '/notifications': (context) => ProtectedRoute(
+          protection: RouteProtection.authenticated,
+          child: const NotificationsPage(),
+        ),
+        '/settings': (context) => ProtectedRoute(
+          protection: RouteProtection.authenticated,
+          child: const SettingsPage(),
         ),
         '/cart': (context) => ProtectedRoute(
           protection: RouteProtection.authenticated,
@@ -133,8 +149,24 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   void initState() {
     super.initState();
+    _redirectLoggedInUser();
     testSupabase();
     _loadProductsFromDatabase();
+  }
+
+  Future<void> _redirectLoggedInUser() async {
+    if (!AuthService.isAuthenticated()) return;
+    final accountType = await DatabaseService.getCurrentAccountType();
+    if (!mounted || accountType == null) return;
+
+    final route = switch (accountType.toLowerCase()) {
+      'admin' => '/admin-dashboard',
+      'seller' => '/seller-dashboard',
+      'rider' => '/rider-dashboard',
+      _ => '/buyer-dashboard',
+    };
+
+    Navigator.pushNamedAndRemoveUntil(context, route, (route) => false);
   }
 
   Future<void> testSupabase() async {

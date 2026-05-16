@@ -1,0 +1,180 @@
+FoodTaxi Mobile 2 - current implementation context
+Last updated in this chat.
+
+Important workflow note
+- Do not run Flutter shell commands in this workspace. The user reports flutter/dart commands stall.
+- Work has been done through file edits and direct Supabase SQL only.
+
+Supabase project
+- Project ref: zsctswdvoknmdsimqrvr
+- Public URL used by app: https://zsctswdvoknmdsimqrvr.supabase.co
+
+Major database changes made
+- Added public.product_variant:
+  - variant_id uuid primary key
+  - product_id uuid references product(product_id) on delete cascade
+  - size_label text
+  - price numeric
+  - stock_quantity integer
+  - is_active boolean
+  - created_at timestamp
+- Added public.order_items.product_variant_id uuid references product_variant(variant_id).
+- Added public.account.profile_image_url text.
+- Added public.notification:
+  - notification_id uuid primary key
+  - account_id uuid references account(account_id) on delete cascade
+  - notification_type text default System
+  - title text
+  - body text
+  - is_read boolean
+  - created_at timestamp
+- notification_type check values:
+  - System
+  - Commerce
+  - Delivery
+  - Account
+  - Promotion
+- Added orders money/process columns:
+  - service_fee
+  - admin_commission
+  - rider_fee
+  - seller_payout
+  - proof_of_delivery_url
+  - delivered_at
+- Added app_private.decrement_order_item_stock() trigger function.
+  - BEFORE INSERT on public.order_items.
+  - If product_variant_id is present, decrements product_variant.stock_quantity by quantity.
+  - If no variant, decrements product.stock_quantity by quantity.
+  - Raises insufficient stock error if stock is too low.
+  - Variant branch updates new.product_id from the selected variant's product_id.
+- Added/adjusted RLS policies:
+  - Admins can create stores.
+  - Admins can update accounts.
+  - Admins can update seller/rider applications.
+  - Admins can view all orders/order_items.
+  - Sellers can update their own order status.
+  - Product variant public read and store owner manage.
+- User-scoped notification select/update.
+- Notification index added on account_id, notification_type, created_at desc.
+  - Profile image storage bucket policies scoped by auth.uid folder.
+
+Data cleanup/normalization
+- Deleted mock seller account seller@foodtaxi.com and its public history:
+  - account, store, products, variants, related order_items/orders, applications, verification, addresses.
+  - Verified related counts were 0.
+- Existing account.phone_number and seller_application.contact_phone normalized to +639xxxxxxxxx.
+- Future account/seller phones normalized in DatabaseService.normalizePhilippinePhone().
+
+Storage
+- product-images bucket already existed and is public.
+- Existing seeded product images are under product-images/main-picture/<filename>.
+- DatabaseService.getProductImageUrl(fileName):
+  - If fileName contains '/', use as-is.
+  - Otherwise prefixes main-picture/.
+- New seller product uploads go to product-images/seller-products/<timestamp>.<ext>.
+- profile-images bucket added and public.
+- New profile uploads go to profile-images/<auth.uid>/<timestamp>.<ext>.
+
+New/changed files
+- lib/edit_product_page.dart:
+  - Full-page add/edit product UI.
+  - Product image upload via image_picker.
+  - Product variants for alternate size/price/stock.
+- lib/address_page.dart:
+  - Dedicated address management page.
+  - Add/edit address, set main location.
+- lib/notifications_page.dart:
+  - Full notification list page.
+  - Filters notifications by type and time range: 24hr, 1w, 1m, 6m, 1yr, Full.
+  - Read more opens a full message dialog/window.
+- lib/widgets/notification_bell.dart:
+  - Bell opens a top-left rectangle notification panel.
+  - Panel has X close button, latest 3 notifications, type chips, per-item X dismiss/read, Read more dialog/window, and More link.
+- lib/settings_page.dart:
+  - Settings shell page.
+  - Notifications setting links to the notification page with filters.
+- lib/profile_page.dart:
+  - Rebuilt editable profile page.
+  - Clickable profile avatar and Change Photo.
+  - Name, phone, role/email display.
+  - Address summary routes to /addresses.
+- lib/services/database_service.dart:
+  - Product variants CRUD via insert/update product.
+  - Image upload helpers.
+  - Profile update helper.
+  - Notification fetch/update helpers.
+  - Notification fetch accepts type and age filters.
+  - Product search helper supports name query, category, sort, and seller-name filtering.
+  - Order status update.
+  - Order insert now records service/admin/rider/seller payout values.
+  - insertOrderItem returns bool and supports productVariantId.
+- lib/product_page.dart:
+  - Product details layout redesigned:
+    image square on left, product/seller/price/size/rating on right.
+    Description and Reviews sections below.
+  - Product select query includes store(store_name) and product_variant(*).
+  - Buy button adds to cart and stays on product page.
+  - Variant selection writes selected_variant_id, selected_size, variant price/stock into cart item.
+- lib/buyer_dashboard.dart:
+  - Product cards no longer add directly to cart.
+  - Cards show square image, name, price, stars, review count placeholder, Buy button.
+  - Buy opens product page.
+  - Fixed setState-after-dispose by checking mounted in async profile/products fetches.
+  - Increased horizontal card height to avoid bottom overflow.
+  - Added centered app-bar search field and filter button.
+  - Search opens /search and passes the typed query.
+- lib/search_page.dart:
+  - Rebuilt from placeholder to real fetched search.
+  - Searches product names.
+  - Filters by category and seller name.
+  - Sorts by New, Popular placeholder, Price low-high, Price high-low.
+  - Product results open product detail page.
+- lib/cart_model.dart:
+  - Cart unique id is product_id::selected_variant_id.
+  - CartModel.itemPrice parses numeric or string prices.
+- lib/cart_page.dart / lib/checkout_page.dart:
+  - Use CartModel.itemPrice for variants whose prices arrive as strings.
+  - Checkout passes productVariantId to insertOrderItem.
+  - Checkout throws a visible stock error if order item insert fails.
+- lib/main.dart:
+  - /profile now routes to ProfilePage, not old UserDetailsPage.
+  - Added /addresses and /notifications.
+  - Home redirects logged-in users to role dashboard.
+- lib/login_page.dart:
+  - Login route redirects already logged-in users to role dashboard.
+- lib/services/protected_route.dart:
+  - Unauthorized fallback routes logged-in users to their own role dashboard, not public main.
+- lib/admin_dashboard.dart, lib/seller_dashboard.dart, lib/rider_dashboard.dart:
+  - Stale back button suppressed where needed.
+  - Added profile/location/settings/logout style menus.
+  - Added notification bell to admin/seller/rider.
+- lib/user_details.dart:
+  - Old role-changing buttons removed.
+  - This file is no longer the /profile route.
+
+Current user-reported issues recently fixed
+- buyer_dashboard setState after dispose at buyer_dashboard.dart:66.
+  - Fixed by mounted checks in _fetchProfile and _fetchProducts.
+- Product card overflow in buyer dashboard screenshot.
+  - Fixed by increasing horizontal list height to 292 and using normal FilledButton sizing.
+- User asked for basic notifications top-left with rectangle design.
+  - Implemented in NotificationBell as a top-left overlay rectangle with X and Read more.
+- User asked notification type support.
+  - Added notification.notification_type and service/page filters.
+- User asked settings > notifications page with sorting/filtering.
+  - Added SettingsPage and notification page filters.
+- User asked middle nav search bar with filter right side and fetched search page.
+  - Added buyer app-bar search/filter and rebuilt SearchPage.
+- Small Doro order failing while base product worked.
+  - Live Doro data:
+    product_id 37ff8a2e-34c7-440b-8158-79f85b919d4f
+    base stock 6
+    Big Doro variant dfe16d5f-4c26-4711-a020-7cced47a485a stock 10 price 300
+    Small Doro variant 9dcb05b3-762e-4e55-bf83-becd2bd8707c stock 10 price 100
+  - Trigger loosened to decrement by variant_id.
+  - Dart price parsing fixed because variant numeric values can arrive as strings.
+
+Known caveats
+- image_picker was added to pubspec.yaml. pubspec.lock and generated plugin files appear modified, probably from a prior interrupted dependency run. Do not run flutter commands here unless user explicitly changes their instruction.
+- Some text contains mojibake peso/emoji characters from existing files. Avoid broad formatting unless requested.
+- No flutter analyze/run/test has been executed due to user's no-Flutter-shell instruction.

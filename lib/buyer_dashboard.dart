@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'services/auth_service.dart';
 import 'services/database_service.dart';
 import 'cart_model.dart';
 
@@ -12,6 +13,7 @@ class BuyerDashboard extends StatefulWidget {
 
 class _BuyerDashboardState extends State<BuyerDashboard> {
   final _supabase = Supabase.instance.client;
+  final _navSearchController = TextEditingController();
 
   List<Map<String, dynamic>> _products = [];
   Map<String, List<Map<String, dynamic>>> _groupedProducts = {};
@@ -21,6 +23,12 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
   bool _isLoadingProfile = true;
 
   int get _cartLength => CartModel.length;
+
+  @override
+  void dispose() {
+    _navSearchController.dispose();
+    super.dispose();
+  }
 
   // Product categories mapping
   static const Map<String, String> categoryNames = {
@@ -43,6 +51,7 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
     try {
       final user = _supabase.auth.currentUser;
       if (user == null) {
+        if (!mounted) return;
         setState(() => _isLoadingProfile = false);
         return;
       }
@@ -50,10 +59,11 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
       if (accountId != null) {
         final response = await _supabase
             .from('account')
-            .select('firstname, surname, email')
+            .select('firstname, surname, email, phone_number, profile_image_url')
             .eq('account_id', accountId)
             .maybeSingle();
         if (response != null) {
+          if (!mounted) return;
           setState(() {
             _userProfile = response;
           });
@@ -62,6 +72,7 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
     } catch (e) {
       print('Profile fetch error: $e');
     } finally {
+      if (!mounted) return;
       setState(() => _isLoadingProfile = false);
     }
   }
@@ -80,9 +91,9 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
           TextButton(
             onPressed: () async {
               Navigator.pop(context); // close dialog
-              await _supabase.auth.signOut();
+              await AuthService.clearLoginSession();
               if (mounted) {
-                Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+                Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
               }
             },
             child: const Text('Yes'),
@@ -94,7 +105,9 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
 
   Future<void> _fetchProducts() async {
     try {
-      _products = await DatabaseService.fetchProducts();
+      final products = await DatabaseService.fetchProducts();
+      if (!mounted) return;
+      _products = products;
       
       // Group by category with display names
       Map<String, List<Map<String, dynamic>>> grouped = {};
@@ -110,25 +123,16 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
       
       _groupedProducts = grouped;
 
-      setState(() {
-        _isLoading = false;
-      });
+      if (!mounted) return;
+      setState(() => _isLoading = false);
     } catch (e) {
       print('Products fetch error: $e');
+      if (!mounted) return;
       setState(() {
         _hasError = true;
         _isLoading = false;
       });
     }
-  }
-
-  void _addToCart(Map<String, dynamic> product) {
-    CartModel.addItem(product);
-    setState(() {}); // rebuild for badge
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${product['name']} added to cart!')),
-    );
   }
 
   Widget sectionTitle(String title) {
@@ -149,7 +153,7 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
 
   Widget horizontalList(List<Map<String, dynamic>> items) {
     return SizedBox(
-      height: 190,
+      height: 292,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -163,7 +167,7 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
                 ? () => Navigator.pushNamed(context, '/product/$productId')
                 : null,
             child: Container(
-              width: 150,
+              width: 170,
               margin: const EdgeInsets.only(right: 12),
               child: Card(
                 shape: RoundedRectangleBorder(
@@ -172,26 +176,26 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
                 elevation: 3,
                 child: Column(
                   children: [
-                    ClipRRect(
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(16),
-                      ),
-                      child: Image.network(
-                        DatabaseService.getProductImageUrl(item['main_image_url']),
-                        height: 100,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Image.asset(
-                          'assets/images/burger.jpg', // fallback
-                          height: 100,
-                          width: double.infinity,
+                    AspectRatio(
+                      aspectRatio: 1,
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(16),
+                        ),
+                        child: Image.network(
+                          DatabaseService.getProductImageUrl(item['main_image_url']),
                           fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => Image.asset(
+                            'assets/images/burger.jpg',
+                            fit: BoxFit.cover,
+                          ),
                         ),
                       ),
                     ),
                     Padding(
                       padding: const EdgeInsets.all(6),
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             item['name'],
@@ -207,18 +211,32 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
+                          const SizedBox(height: 2),
+                          const Row(
+                            children: [
+                              Icon(Icons.star, size: 14, color: Colors.amber),
+                              Icon(Icons.star, size: 14, color: Colors.amber),
+                              Icon(Icons.star, size: 14, color: Colors.amber),
+                              Icon(Icons.star, size: 14, color: Colors.amber),
+                              Icon(Icons.star_border, size: 14, color: Colors.amber),
+                              SizedBox(width: 4),
+                              Text('(0)', style: TextStyle(fontSize: 12)),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          const SizedBox(height: 4),
                           SizedBox(
                             width: double.infinity,
-                            height: 28,
-                            child: ElevatedButton(
-                              onPressed: () => _addToCart(item),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green,
-                                padding: EdgeInsets.zero,
-                              ),
-                              child: const Text('Add'),
+                            child: FilledButton(
+                              onPressed: productId != null
+                                  ? () => Navigator.pushNamed(
+                                        context,
+                                        '/product/$productId',
+                                      )
+                                  : null,
+                              child: const Text('Buy'),
                             ),
-                          )
+                          ),
                         ],
                       ),
                     )
@@ -229,6 +247,14 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
           );
         },
       ),
+    );
+  }
+
+  void _openSearch({bool filters = false}) {
+    Navigator.pushNamed(
+      context,
+      '/search',
+      arguments: _navSearchController.text.trim(),
     );
   }
 
@@ -309,7 +335,38 @@ Widget heroSection() {
     return Scaffold(
   appBar: AppBar(
         automaticallyImplyLeading: false,
-        title: const Text("FoodTaxi Omega"),
+        title: Row(
+          children: [
+            const Text('FoodTaxi'),
+            const SizedBox(width: 12),
+            Expanded(
+              child: SizedBox(
+                height: 40,
+                child: TextField(
+                  controller: _navSearchController,
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    hintText: 'Search products',
+                    filled: true,
+                    fillColor: Colors.white,
+                    prefixIcon: const Icon(Icons.search),
+                    contentPadding: EdgeInsets.zero,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                  onSubmitted: (_) => _openSearch(),
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Filters',
+              onPressed: () => _openSearch(filters: true),
+              icon: const Icon(Icons.filter_list),
+            ),
+          ],
+        ),
         backgroundColor: const Color.fromARGB(255, 30, 83, 32),
         actions: [
           Center(child: Badge(
@@ -332,12 +389,10 @@ Widget heroSection() {
                   );
                   break;
                 case 'location':
-                  Navigator.pushNamed(context, '/profile');
+                  Navigator.pushNamed(context, '/addresses');
                   break;
                 case 'settings':
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Settings - Coming Soon')),
-                  );
+                  Navigator.pushNamed(context, '/settings');
                   break;
                 case 'logout':
                   _logout();

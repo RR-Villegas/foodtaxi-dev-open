@@ -5,10 +5,11 @@ class CartModel {
   static int get length => cartItems.length;
   
   static void addItem(Map<String, dynamic> item) {
-    // Create unique ID for each product instance
-    final uniqueId = DateTime.now().millisecondsSinceEpoch.toString() + item['name'];
+    final productId = item['product_id']?.toString() ?? item['name'].toString();
+    final variantId = item['selected_variant_id']?.toString() ?? 'base';
+    final uniqueId = '$productId::$variantId';
     
-    final index = cartItems.indexWhere((cartItem) => cartItem['uniqueId'] == uniqueId || cartItem['name'] == item['name']);
+    final index = cartItems.indexWhere((cartItem) => cartItem['uniqueId'] == uniqueId);
     if (index != -1) {
       cartItems[index]['quantity'] = (cartItems[index]['quantity'] ?? 0) + 1;
     } else {
@@ -18,6 +19,12 @@ class CartModel {
         'uniqueId': uniqueId,
       });
     }
+  }
+
+  static double itemPrice(Map<String, dynamic> item) {
+    final value = item['price'];
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0;
   }
   
   static void removeItem(String identifier) {
@@ -34,7 +41,10 @@ class CartModel {
   }
   
   static double get totalPrice {
-    return cartItems.fold(0.0, (sum, item) => sum + (item['price'] * (item['quantity'] ?? 1)));
+    return cartItems.fold(
+      0.0,
+      (sum, item) => sum + (itemPrice(item) * (item['quantity'] ?? 1)),
+    );
   }
   
   static void clear() {
