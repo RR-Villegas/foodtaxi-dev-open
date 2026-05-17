@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'services/auth_service.dart';
 import 'services/database_service.dart';
 import 'cart_model.dart';
+import 'widgets/adaptive_menu_item.dart';
 
 class BuyerDashboard extends StatefulWidget {
   const BuyerDashboard({super.key});
@@ -14,6 +15,7 @@ class BuyerDashboard extends StatefulWidget {
 class _BuyerDashboardState extends State<BuyerDashboard> {
   final _supabase = Supabase.instance.client;
   final _navSearchController = TextEditingController();
+  final _navSearchFocusNode = FocusNode();
 
   List<Map<String, dynamic>> _products = [];
   Map<String, List<Map<String, dynamic>>> _groupedProducts = {};
@@ -21,10 +23,12 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
   bool _isLoading = true;
   bool _hasError = false;
   bool _isLoadingProfile = true;
+  bool _isLoggingOut = false;
 
   @override
   void dispose() {
     _navSearchController.dispose();
+    _navSearchFocusNode.dispose();
     super.dispose();
   }
 
@@ -36,11 +40,22 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
     'Specialty Foods & International Cuisine': '🌍 Specialty',
     'Organic and Health Foods': '🥗 Health Foods',
     'Meal Kits & Prepped Foods': '🍱 Meal Kits',
+    'Fresh Produce': '🥬 Fresh Produce',
+    'Meat, Seafood & Poultry': '🥩 Meat & Seafood',
+    'Dairy, Eggs & Chilled Goods': '🥚 Dairy & Eggs',
+    'Frozen Foods': '❄️ Frozen',
+    'Condiments, Sauces & Spices': '🌶️ Sauces & Spices',
+    'Rice, Grains & Pasta': '🍚 Grains',
+    'Ready-to-Eat Meals': '🍽️ Ready Meals',
+    'Local Delicacies': '🏡 Local Delicacies',
   };
 
 @override
   void initState() {
     super.initState();
+    _navSearchFocusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
     _fetchProfile();
     _fetchProducts();
   }
@@ -68,7 +83,7 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
         }
       }
     } catch (e) {
-      print('Profile fetch error: $e');
+      debugPrint('Profile fetch error: $e');
     } finally {
       if (!mounted) return;
       setState(() => _isLoadingProfile = false);
@@ -76,6 +91,7 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
   }
 
   Future<void> _logout() async {
+    if (_isLoggingOut) return;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -88,6 +104,8 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
           ),
           TextButton(
             onPressed: () async {
+              if (_isLoggingOut) return;
+              setState(() => _isLoggingOut = true);
               Navigator.pop(context); // close dialog
               await AuthService.clearLoginSession();
               if (mounted) {
@@ -124,7 +142,7 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
       if (!mounted) return;
       setState(() => _isLoading = false);
     } catch (e) {
-      print('Products fetch error: $e');
+      debugPrint('Products fetch error: $e');
       if (!mounted) return;
       setState(() {
         _hasError = true;
@@ -182,7 +200,7 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
 
   Widget horizontalList(List<Map<String, dynamic>> items) {
     return SizedBox(
-      height: 292,
+      height: 306,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -195,11 +213,19 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
 
           return GestureDetector(
             onTap: productId != null
-                ? () => Navigator.pushNamed(context, '/product/$productId')
+                ? () async {
+                    await DatabaseService.trackProductClick(
+                      productId: productId,
+                      storeId: item['store_id']?.toString(),
+                    );
+                    if (mounted) {
+                      Navigator.pushNamed(context, '/product/$productId');
+                    }
+                  }
                 : null,
             child: Container(
               width: 170,
-              margin: const EdgeInsets.only(right: 12),
+              margin: const EdgeInsets.only(right: 12, bottom: 12),
               child: Card(
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
@@ -223,13 +249,14 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
                         ),
                       ),
                     ),
-                    Padding(
+                    Expanded(
+                      child: Padding(
                       padding: const EdgeInsets.all(6),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            item['name'],
+                            DatabaseService.displayProductName(item['name']),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(fontWeight: FontWeight.w600),
@@ -237,8 +264,8 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
                           const SizedBox(height: 2),
                           Text(
                             '₱${item['price']}',
-                            style: const TextStyle(
-                              color: Colors.green,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.primary,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -253,10 +280,10 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 4),
-                          const SizedBox(height: 4),
+                          const Spacer(),
                           SizedBox(
                             width: double.infinity,
+                            height: 34,
                             child: FilledButton(
                               onPressed: productId != null
                                   ? () => Navigator.pushNamed(
@@ -268,6 +295,7 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
                             ),
                           ),
                         ],
+                      ),
                       ),
                     )
                   ],
@@ -290,6 +318,8 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
 
   // ✅ HERO (UNCHANGED EXACTLY)
 Widget heroSection() {
+  final scheme = Theme.of(context).colorScheme;
+
   return Container(
     height: 250,
     width: double.infinity,
@@ -298,14 +328,13 @@ Widget heroSection() {
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          const Color(0xFF2d8f4e),
-          const Color(0xFF2d8f4e).withOpacity(0.85),
+          scheme.primary,
+          scheme.primary.withAlpha(217),
         ],
       ),
     ),
     child: Stack(
       children: [
-        // faint background image (same style as main.dart)
         Positioned.fill(
           child: Opacity(
             opacity: 0.10,
@@ -316,38 +345,37 @@ Widget heroSection() {
           ),
         ),
 
-        // centered content
         Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: const [
+            children: [
               Text(
                 "Your Philippine Marketplace",
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Colors.white,
+                  color: scheme.onPrimary,
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               Text(
                 "for Specialty Foods",
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Colors.white,
+                  color: scheme.onPrimary,
                   fontSize: 24,
                   fontWeight: FontWeight.w300,
                 ),
               ),
-              SizedBox(height: 14),
+              const SizedBox(height: 14),
               Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Text(
-                  "Order fresh meals, snacks, and fast food favorites delivered fast to your doorstep.",
+                  "Shop local food, specialty goods, and pantry finds delivered from nearby sellers.",
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: Colors.white,
+                    color: scheme.onPrimary,
                     fontSize: 16,
                   ),
                 ),
@@ -367,18 +395,22 @@ Widget heroSection() {
         automaticallyImplyLeading: false,
         title: Row(
           children: [
-            const Text('FoodTaxi'),
+            const Text('FoodTaxi Omega'),
             const SizedBox(width: 12),
-            Expanded(
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: _navSearchFocusNode.hasFocus ? 140 : 70,
               child: SizedBox(
                 height: 40,
                 child: TextField(
                   controller: _navSearchController,
+                  focusNode: _navSearchFocusNode,
                   textInputAction: TextInputAction.search,
                   decoration: InputDecoration(
-                    hintText: 'Search products',
+                    hintText:
+                        _navSearchFocusNode.hasFocus ? 'Search products' : 'Search',
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: Theme.of(context).colorScheme.surface,
                     prefixIcon: const Icon(Icons.search),
                     contentPadding: EdgeInsets.zero,
                     border: OutlineInputBorder(
@@ -390,15 +422,14 @@ Widget heroSection() {
                 ),
               ),
             ),
-            IconButton(
-              tooltip: 'Filters',
-              onPressed: () => _openSearch(filters: true),
-              icon: const Icon(Icons.filter_list),
-            ),
           ],
         ),
-        backgroundColor: const Color.fromARGB(255, 30, 83, 32),
         actions: [
+          IconButton(
+            tooltip: 'Filters',
+            onPressed: () => _openSearch(filters: true),
+            icon: const Icon(Icons.filter_list),
+          ),
           Center(
             child: ValueListenableBuilder<int>(
               valueListenable: CartModel.itemCountNotifier,
@@ -438,70 +469,66 @@ Widget heroSection() {
             itemBuilder: (context) => [
               PopupMenuItem<String>(
                 enabled: false,
-                child: _userProfile != null 
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${_userProfile!['firstname'] ?? ''} ${_userProfile!['surname'] ?? ''}',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        Text(_userProfile!['email'] ?? '', style: const TextStyle(fontSize: 12)),
-                      ],
+                child: _userProfile != null
+                  ? SizedBox(
+                      width: 220,
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            backgroundImage:
+                                (_userProfile!['profile_image_url']?.toString() ?? '').isNotEmpty
+                                    ? NetworkImage(_userProfile!['profile_image_url'].toString())
+                                    : null,
+                            child: (_userProfile!['profile_image_url']?.toString() ?? '').isEmpty
+                                ? const Icon(Icons.person)
+                                : null,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${_userProfile!['firstname'] ?? ''} ${_userProfile!['surname'] ?? ''}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                Text(
+                                  _userProfile!['email'] ?? '',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     )
                   : const Text('Profile'),
               ),
               const PopupMenuDivider(),
               const PopupMenuItem<String>(
                 value: 'profile',
-                child: Row(
-                  children: [
-                    Icon(Icons.person, size: 20),
-                    SizedBox(width: 12),
-                    Text('Profile'),
-                  ],
-                ),
+                child: AdaptiveMenuItem(icon: Icons.person, title: 'Profile'),
               ),
               const PopupMenuItem<String>(
                 value: 'orders',
-                child: Row(
-                  children: [
-                    Icon(Icons.receipt, size: 20),
-                    SizedBox(width: 12),
-                    Text('My Orders'),
-                  ],
-                ),
+                child: AdaptiveMenuItem(icon: Icons.receipt, title: 'My Orders'),
               ),
               const PopupMenuItem<String>(
                 value: 'location',
-                child: Row(
-                  children: [
-                    Icon(Icons.location_on, size: 20),
-                    SizedBox(width: 12),
-                    Text('My Location'),
-                  ],
-                ),
+                child: AdaptiveMenuItem(icon: Icons.location_on, title: 'My Location'),
               ),
               const PopupMenuItem<String>(
                 value: 'settings',
-                child: Row(
-                  children: [
-                    Icon(Icons.settings, size: 20),
-                    SizedBox(width: 12),
-                    Text('Settings'),
-                  ],
-                ),
+                child: AdaptiveMenuItem(icon: Icons.settings, title: 'Settings'),
               ),
               const PopupMenuDivider(),
-              PopupMenuItem<String>(
+              const PopupMenuItem<String>(
                 value: 'logout',
-                child: const Row(
-                  children: [
-                    Icon(Icons.logout, size: 20),
-                    SizedBox(width: 12),
-                    Text('Logout'),
-                  ],
-                ),
+                child: AdaptiveMenuItem(icon: Icons.logout, title: 'Logout'),
               ),
             ],
           ),
@@ -532,7 +559,6 @@ Widget heroSection() {
                 ),
 
       floatingActionButton: FloatingActionButton(
-        backgroundColor: Colors.green,
         onPressed: () => Navigator.pushNamed(context, '/cart'),
         child: const Icon(Icons.shopping_cart),
       ),

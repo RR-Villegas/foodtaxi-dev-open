@@ -130,10 +130,7 @@ class MyApp extends StatelessWidget {
         if (settings.name?.startsWith('/product/') ?? false) {
           final productId = settings.name!.split('/').last;
           return MaterialPageRoute(
-            builder: (context) => ProtectedRoute(
-              protection: RouteProtection.authenticated,
-              child: ProductPage(productId: productId),
-            ),
+            builder: (context) => ProductPage(productId: productId),
           );
         }
         if (settings.name?.startsWith('/seller/') ?? false) {
@@ -176,6 +173,14 @@ class _MyHomePageState extends State<MyHomePage> {
     'Specialty Foods & International Cuisine': '🌍 Specialty',
     'Organic and Health Foods': '🥗 Health Foods',
     'Meal Kits & Prepped Foods': '🍱 Meal Kits',
+    'Fresh Produce': '🥬 Fresh Produce',
+    'Meat, Seafood & Poultry': '🥩 Meat & Seafood',
+    'Dairy, Eggs & Chilled Goods': '🥚 Dairy & Eggs',
+    'Frozen Foods': '❄️ Frozen',
+    'Condiments, Sauces & Spices': '🌶️ Sauces & Spices',
+    'Rice, Grains & Pasta': '🍚 Grains',
+    'Ready-to-Eat Meals': '🍽️ Ready Meals',
+    'Local Delicacies': '🏡 Local Delicacies',
   };
 
   @override
@@ -204,8 +209,10 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> testSupabase() async {
     try {
       await supabase.from('product').select().limit(1);
+      if (!mounted) return;
       setState(() => status = "");
     } catch (e) {
+      if (!mounted) return;
       setState(() => status = "❌ Connection Failed: $e");
     }
   }
@@ -227,14 +234,53 @@ class _MyHomePageState extends State<MyHomePage> {
         grouped[displayName]!.add(product);
       }
 
+      if (!mounted) return;
       setState(() {
         foodCategories = grouped;
         isLoadingProducts = false;
       });
     } catch (e) {
-      print('Error loading products: $e');
+      debugPrint('Error loading products: $e');
+      if (!mounted) return;
       setState(() => isLoadingProducts = false);
     }
+  }
+
+  double _rating(Map<String, dynamic> product) {
+    final value = product['average_rating'];
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  int _reviewCount(Map<String, dynamic> product) {
+    final value = product['review_count'];
+    if (value is int) return value;
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  double _price(Map<String, dynamic> product) {
+    final value = product['price'];
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  Widget _stars(double rating) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(5, (index) {
+        final filled = rating >= index + 1;
+        final half = !filled && rating > index && rating < index + 1;
+        return Icon(
+          filled
+              ? Icons.star
+              : half
+                  ? Icons.star_half
+                  : Icons.star_border,
+          size: 14,
+          color: Colors.amber,
+        );
+      }),
+    );
   }
 
   @override
@@ -282,7 +328,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   end: Alignment.bottomCenter,
                   colors: [
                     Theme.of(context).colorScheme.primary,
-                    Theme.of(context).colorScheme.primary.withOpacity(0.8),
+                    Theme.of(context).colorScheme.primary.withAlpha(204),
                   ],
                 ),
               ),
@@ -317,7 +363,7 @@ class _MyHomePageState extends State<MyHomePage> {
                         ),
                         SizedBox(height: 16),
                         Text(
-                          "Delivering fresh, local, and international goods right to your door.",
+                          "Shop local food, specialty goods, and pantry finds from nearby sellers.",
                           textAlign: TextAlign.center,
                           style: TextStyle(color: Colors.white, fontSize: 16),
                         ),
@@ -465,26 +511,40 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Widget horizontalFoodList(List<Map<String, dynamic>> items) {
     return SizedBox(
-      height: 200,
+      height: 324,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
         itemCount: items.length,
         itemBuilder: (context, index) {
           final item = items[index];
           final imageUrl = item['main_image_url'] as String?;
-          final productId = item['product_id'] as String?;
+          final productId = item['product_id']?.toString();
+          final rating = _rating(item);
+          final reviewCount = _reviewCount(item);
 
           return GestureDetector(
             onTap: productId != null
-                ? () => Navigator.pushNamed(context, '/product/$productId')
+                ? () async {
+                    await DatabaseService.trackProductClick(
+                      productId: productId,
+                      storeId: item['store_id']?.toString(),
+                    );
+                    if (mounted) {
+                      Navigator.pushNamed(context, '/product/$productId');
+                    }
+                  }
                 : null,
             child: Container(
-              width: 150,
-              margin: const EdgeInsets.all(10),
+              width: 170,
+              margin: const EdgeInsets.only(right: 12, bottom: 12),
               child: Card(
+                clipBehavior: Clip.antiAlias,
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
+                    AspectRatio(
+                      aspectRatio: 1,
                       child: imageUrl != null
                           ? Image.network(
                               DatabaseService.getProductImageUrl(imageUrl),
@@ -505,13 +565,47 @@ class _MyHomePageState extends State<MyHomePage> {
                     Padding(
                       padding: const EdgeInsets.all(6),
                       child: Text(
-                        item['name'] ?? 'Product',
+                              DatabaseService.displayProductName(item['name']),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),
                     Text(
-                      "₱${item['price']?.toStringAsFixed(2) ?? 'N/A'}",
-                      style: const TextStyle(color: Colors.green),
+                      "PHP ${_price(item).toStringAsFixed(2)}",
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _stars(rating),
+                        const SizedBox(width: 4),
+                        Text(
+                          '($reviewCount)',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(6, 0, 6, 6),
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: 34,
+                        child: FilledButton(
+                          onPressed: productId != null
+                              ? () => Navigator.pushNamed(
+                                    context,
+                                    '/product/$productId',
+                                  )
+                              : null,
+                          child: const Text('View'),
+                        ),
+                      ),
                     ),
                   ],
                 ),

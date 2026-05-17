@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'services/database_service.dart';
+import 'services/input_validator.dart';
 
 class EditProductPage extends StatefulWidget {
   final String storeId;
@@ -139,12 +140,19 @@ class _EditProductPageState extends State<EditProductPage> {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isSaving = true);
+    final productName = InputValidator.cleanProductTitle(_nameController.text);
+    final baseSize = InputValidator.cleanDisplayText(
+      _baseSizeController.text,
+      fallback: 'Default',
+    );
     final variants = _variants
         .where((variant) => variant.sizeController.text.trim().isNotEmpty)
         .map(
           (variant) => {
-            'product_name': _nameController.text.trim(),
-            'size_label': variant.sizeController.text.trim(),
+            'product_name': productName,
+            'size_label': InputValidator.cleanDisplayText(
+              variant.sizeController.text,
+            ),
             'price': double.parse(variant.priceController.text.trim()),
             'stock_quantity': int.parse(variant.stockController.text.trim()),
             'stock_unit_quantity': int.parse(
@@ -158,12 +166,12 @@ class _EditProductPageState extends State<EditProductPage> {
     final ok = _isEditing
         ? await DatabaseService.updateProduct(
             productId: widget.product!['product_id'].toString(),
-            name: _nameController.text,
+            name: productName,
             category: _category,
             price: double.parse(_priceController.text.trim()),
             stockQuantity: int.parse(_stockController.text.trim()),
             stockMode: _stockMode,
-            baseSizeLabel: _baseSizeController.text,
+            baseSizeLabel: baseSize,
             baseUnitQuantity: int.parse(_baseUnitQuantityController.text.trim()),
             mainImageUrl: _imagePath,
             description: _descriptionController.text,
@@ -172,12 +180,12 @@ class _EditProductPageState extends State<EditProductPage> {
           )
         : await DatabaseService.insertProduct(
             storeId: widget.storeId,
-            name: _nameController.text,
+            name: productName,
             category: _category,
             price: double.parse(_priceController.text.trim()),
             stockQuantity: int.parse(_stockController.text.trim()),
             stockMode: _stockMode,
-            baseSizeLabel: _baseSizeController.text,
+            baseSizeLabel: baseSize,
             baseUnitQuantity: int.parse(_baseUnitQuantityController.text.trim()),
             mainImageUrl: _imagePath,
             description: _descriptionController.text,
@@ -227,7 +235,14 @@ class _EditProductPageState extends State<EditProductPage> {
   }
 
   String? _requiredText(String? value) {
-    return (value?.trim().isEmpty ?? true) ? 'Required' : null;
+    final cleaned = InputValidator.cleanDisplayText(value);
+    return cleaned.isEmpty ? 'Required' : null;
+  }
+
+  String? _productNameValidator(String? value) {
+    return InputValidator.isValidProductName(value?.trim() ?? '')
+        ? null
+        : 'Enter a valid product name';
   }
 
   String? _priceValidator(String? value) {
@@ -290,7 +305,7 @@ class _EditProductPageState extends State<EditProductPage> {
             TextFormField(
               controller: _nameController,
               decoration: const InputDecoration(labelText: 'Product Name *'),
-              validator: _requiredText,
+              validator: _productNameValidator,
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 12),

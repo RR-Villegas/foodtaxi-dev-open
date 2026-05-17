@@ -69,28 +69,33 @@ Latest done
   - Approved nearby riders get Ready for Pickup messages.
 - Buyer checkout now has a Bulk delivery option that pools delivery across 10-20 orders and stores delivery mode on the order.
 - Settings now has theme selection: Default, Dark Mode, Koishi Komeiji, Komeiji Satori, Rin Kaenbyou, Utsuho Reiuji.
+- Brevo Edge Function is now deployed and ACTIVE in Supabase.
+- Buyer product cards reserve stable height and ellipsize long names to prevent mobile RenderFlex overflow.
+- Seller storefront product tiles now ellipsize names, include Buy buttons, and All Products uses search-style rows instead of oversized grid cards.
+- Buyer dashboard category rows have visible horizontal scrollbars and safer card sizing.
+- Buyer dashboard search now animates between compact and focused widths.
+- Buyer logout is guarded against double-submit and clears Supabase globally plus local session data.
+- Product clicks are tracked in product_click with a 30-second per-account/product rate limit and 7-day read window.
+- Category lists now include more food/product categories.
+- Product pages are visible anonymously; buying redirects to login when not authenticated.
+- Main and buyer dashboard taglines now describe local marketplace shopping more accurately.
+- Search seller filter now shows a focused dropdown once at least one letter is typed.
+- Hamburger menus on buyer, seller, rider, and admin now show profile image beside name/email.
+- Product detail pages now support product reports; admin has a Reports tab for store/product reports with search and type filtering.
+- Main anonymous dashboard product rows now match buyer dashboard card behavior more closely, including ratings, ellipsis, click tracking, and anonymous product-page access.
+- Main page product loading now guards setState after navigation/dispose, reducing the logout/product-click return-to-main issue.
+- Replaced remaining print calls found by rg with debugPrint.
+
+To do (recheck)
+- Verify implementation of input validator
+- Some yellow: input_validator, address_page, buyer_dashboard, profile_page
+- Product titles is not very clean.
+- Add protection against directly talking to the database (unauthorized)
+- Clean warnings on supabase without compromising the app.
+- The icon inside the hamburger dropdown doesn't really change from white, making it blend on white bg, make it adjust on how bright/dark bg is (white<->dark)
 
 To do
-- Deploy the Brevo Edge Function. The local function exists, but Supabase project currently reports no deployed Edge Functions. (recheck again)
-- Buyer, In mobile, the item box have a 7px oveflow.
-- Theme optimization, fix the icons blending with background, make it darker/lighter (depends on theme)
-- Buyer, Long text breaks small box (especially in storefront):
-Another exception was thrown: A RenderFlex overflowed by 7.0 pixels on the bottom.
-Another exception was thrown: A RenderFlex overflowed by 7.0 pixels on the bottom.
-Another exception was thrown: A RenderFlex overflowed by 7.0 pixels on the bottom.
-Make it so that it will do "Strawberry Pastry...", so that it doesn't move the other stuff.
-- Buyer, in storefront page, add the buy button on each products
-- Buyer, in dashboard, there is no scrolling (left-right) on each section (eg baking).
-- Some pages are unaffected by the themes
-- Make the navbar also change accordingly to the theme
-- Make the changes also reflect to the main.dart
-- Buyer, clicking logout doesn't fully log out, had to log out twice to actually proceed (console logs 2 logout, bug)
-- Buyer, Shorten the search when not selected, enlarge when selected (with animation)
-- Buyer, in the filter, when there's atleast a letter, the list/dropdown will appear (only appears when it is selected)
-- Add a way to track clicks (eg. clicking on the product > storepage), must rate limit every account and/or ip for 30 seconds. (eg click product, + click, click again too early, not register). This will be the backbone of the trending section (buyer dashboard/main/seller storefront), clicks are tracked every day and only lasts for a week.
-- General, add the profile image on the hamburger dropdown (beside the name/email on the left, you can enlarge the dropdown a bit to accommodate)
-- Database, add/expand the categories, i felt that this is too small.
-- Rename the tagline at the main/buyer's dashboard, it is not accurate.
-- Buyer, storefront all products is too big, make it like the rectangle when you search a product.
-- Add report product
-- Admin, report section (filtered by store or product)
+- in main.dart, the product box is really unbalanced in terms of element placement (price looks ugly af), it also destroys the space because of long text, please do "Alaska Condens..." to preserve element placement. 
+- Move Become Seller and Rider to Create account, create account becomes a dropdown: Buy Products, Become Seller, Become Rider
+- Themes should only be per account, not leak on logout.
+- I think there's a stray space above the hero in main.dart (i remember having a debug element for supabase there.)

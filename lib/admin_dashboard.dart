@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'services/auth_service.dart';
 import 'services/database_service.dart';
+import 'widgets/adaptive_menu_item.dart';
 import 'widgets/notification_bell.dart';
 
 class AdminDashboard extends StatefulWidget {
@@ -16,12 +17,17 @@ class _AdminDashboardState extends State<AdminDashboard> {
   List<Map<String, dynamic>> _riderApplications = [];
   List<Map<String, dynamic>> _orders = [];
   List<Map<String, dynamic>> _coupons = [];
+  List<Map<String, dynamic>> _storeReports = [];
+  List<Map<String, dynamic>> _productReports = [];
+  Map<String, dynamic>? _account;
   bool _isLoading = false;
   final _salesSearchController = TextEditingController();
+  final _reportSearchController = TextEditingController();
   String _salesStatusFilter = 'All';
   String _salesDateFilter = 'All';
   String _sellerApplicationFilter = 'Pending Review';
   String _riderApplicationFilter = 'Pending Review';
+  String _reportTypeFilter = 'All';
 
   static const List<String> _orderStatusFilters = [
     'All',
@@ -42,6 +48,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
     'Today',
     '7 Days',
     '30 Days',
+  ];
+  static const List<String> _reportTypeFilters = [
+    'All',
+    'Store',
+    'Product',
   ];
 
   List<Map<String, dynamic>> get _successfulOrders => _orders
@@ -103,6 +114,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   @override
   void dispose() {
     _salesSearchController.dispose();
+    _reportSearchController.dispose();
     super.dispose();
   }
 
@@ -111,12 +123,30 @@ class _AdminDashboardState extends State<AdminDashboard> {
     super.initState();
     _loadAdminOrders();
     _loadCoupons();
+    _loadReports();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    final account = await DatabaseService.getCurrentAccount();
+    if (!mounted) return;
+    setState(() => _account = account);
   }
 
   Future<void> _loadCoupons() async {
     final coupons = await DatabaseService.getCoupons();
     if (!mounted) return;
     setState(() => _coupons = coupons);
+  }
+
+  Future<void> _loadReports() async {
+    final storeReports = await DatabaseService.getAdminStoreReports();
+    final productReports = await DatabaseService.getAdminProductReports();
+    if (!mounted) return;
+    setState(() {
+      _storeReports = storeReports;
+      _productReports = productReports;
+    });
   }
 
   Future<void> _loadAdminOrders() async {
@@ -691,7 +721,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 Text(app['contact_phone'] ?? ''),
                 Chip(
                   label: Text(app['status'] ?? 'Pending'),
-                  backgroundColor: statusColor.withOpacity(0.3),
+                  backgroundColor: statusColor.withAlpha(77),
                   labelStyle: TextStyle(color: statusColor),
                 ),
               ],
@@ -759,7 +789,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 Text(app['plate_number'] ?? ''),
                 Chip(
                   label: Text(app['status'] ?? 'Pending'),
-                  backgroundColor: statusColor.withOpacity(0.3),
+                  backgroundColor: statusColor.withAlpha(77),
                   labelStyle: TextStyle(color: statusColor),
                 ),
               ],
@@ -1119,6 +1149,138 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
+  List<Map<String, dynamic>> get _filteredReports {
+    final query = _reportSearchController.text.trim().toLowerCase();
+    final reports = <Map<String, dynamic>>[
+      ..._storeReports.map((report) => {'type': 'Store', 'data': report}),
+      ..._productReports.map((report) => {'type': 'Product', 'data': report}),
+    ];
+
+    return reports.where((entry) {
+      final type = entry['type']?.toString() ?? '';
+      if (_reportTypeFilter != 'All' && type != _reportTypeFilter) {
+        return false;
+      }
+      if (query.isEmpty) return true;
+      final report = entry['data'];
+      if (report is! Map) return false;
+      final store = report['store'];
+      final product = report['product'];
+      final reporter = report['account'];
+      final reporterText = reporter is Map
+          ? '${reporter['firstname'] ?? ''} ${reporter['surname'] ?? ''} ${reporter['email'] ?? ''}'
+          : '';
+      final haystack = [
+        type,
+        report['reason'],
+        report['details'],
+        report['status'],
+        report['store_id'],
+        report['product_id'],
+        store is Map ? store['store_name'] : '',
+        product is Map ? product['name'] : '',
+        reporterText,
+      ].map((value) => value?.toString().toLowerCase() ?? '').join(' ');
+      return haystack.contains(query);
+    }).toList()
+      ..sort((a, b) {
+        final aData = a['data'];
+        final bData = b['data'];
+        final aDate = aData is Map ? aData['created_at']?.toString() ?? '' : '';
+        final bDate = bData is Map ? bData['created_at']?.toString() ?? '' : '';
+        return bDate.compareTo(aDate);
+      });
+  }
+
+  String _reportTarget(Map<String, dynamic> entry) {
+    final type = entry['type']?.toString() ?? '';
+    final report = entry['data'];
+    if (report is! Map) return 'Unknown';
+    if (type == 'Product') {
+      final product = report['product'];
+      if (product is Map) return product['name']?.toString() ?? 'Product';
+      return report['product_id']?.toString() ?? 'Product';
+    }
+    final store = report['store'];
+    if (store is Map) return store['store_name']?.toString() ?? 'Store';
+    return report['store_id']?.toString() ?? 'Store';
+  }
+
+  String _reporterName(Map<String, dynamic> report) {
+    final account = report['account'];
+    if (account is! Map) return 'Unknown reporter';
+    final first = account['firstname']?.toString() ?? '';
+    final last = account['surname']?.toString() ?? '';
+    final name = '$first $last'.trim();
+    return name.isEmpty ? account['email']?.toString() ?? 'Unknown reporter' : name;
+  }
+
+  Widget _buildReportsTab() {
+    final reports = _filteredReports;
+    return RefreshIndicator(
+      onRefresh: _loadReports,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          TextField(
+            controller: _reportSearchController,
+            decoration: const InputDecoration(
+              labelText: 'Search reports',
+              prefixIcon: Icon(Icons.search),
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            children: _reportTypeFilters.map((filter) {
+              return ChoiceChip(
+                label: Text(filter),
+                selected: _reportTypeFilter == filter,
+                onSelected: (_) => setState(() => _reportTypeFilter = filter),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 12),
+          if (reports.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 120),
+              child: Center(child: Text('No reports found')),
+            )
+          else
+            ...reports.map((entry) {
+              final type = entry['type']?.toString() ?? 'Report';
+              final report = entry['data'];
+              if (report is! Map<String, dynamic>) {
+                return const SizedBox.shrink();
+              }
+              return Card(
+                child: ListTile(
+                  leading: Icon(
+                    type == 'Product'
+                        ? Icons.inventory_2_outlined
+                        : Icons.storefront_outlined,
+                  ),
+                  title: Text('$type: ${_reportTarget(entry)}'),
+                  subtitle: Text(
+                    [
+                      'Reason: ${report['reason'] ?? 'N/A'}',
+                      'Reporter: ${_reporterName(report)}',
+                      'Status: ${report['status'] ?? 'Pending'}',
+                      'Date: ${_formatDate(report['created_at'])}',
+                      if ((report['details']?.toString().trim() ?? '').isNotEmpty)
+                        'Details: ${report['details']}',
+                    ].join('\n'),
+                  ),
+                  isThreeLine: true,
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
   Future<void> _logout() async {
     await AuthService.clearLoginSession();
     if (!mounted) return;
@@ -1148,7 +1310,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withAlpha(26),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -1294,7 +1456,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           end: Alignment.bottomCenter,
           colors: [
             const Color(0xFF2d8f4e),
-            const Color(0xFF2d8f4e).withOpacity(0.85),
+            const Color(0xFF2d8f4e).withAlpha(217),
           ],
         ),
       ),
@@ -1344,6 +1506,46 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
+  Widget _profileMenuHeader() {
+    final account = _account;
+    if (account == null) return const Text('Profile');
+    final imageUrl = account['profile_image_url']?.toString() ?? '';
+    final first = account['firstname']?.toString() ?? '';
+    final last = account['surname']?.toString() ?? '';
+    final name = '$first $last'.trim();
+    return SizedBox(
+      width: 220,
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundImage: imageUrl.isNotEmpty ? NetworkImage(imageUrl) : null,
+            child: imageUrl.isEmpty ? const Icon(Icons.person) : null,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name.isEmpty ? 'Admin' : name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  account['email']?.toString() ?? '',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final tabs = [
@@ -1352,6 +1554,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       _buildSellerApplicationsTab(),
       _buildRiderApplicationsTab(),
       _buildCouponsTab(),
+      _buildReportsTab(),
     ];
 
     return Scaffold(
@@ -1371,6 +1574,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 _loadRiderApplications();
               } else if (_currentIndex == 4) {
                 _loadCoupons();
+              } else if (_currentIndex == 5) {
+                _loadReports();
               } else {
                 _loadAdminOrders();
               }
@@ -1379,28 +1584,24 @@ class _AdminDashboardState extends State<AdminDashboard> {
           PopupMenuButton<String>(
             icon: const Icon(Icons.menu, color: Colors.white),
             onSelected: _handleMenu,
-            itemBuilder: (context) => const [
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                enabled: false,
+                child: _profileMenuHeader(),
+              ),
+              const PopupMenuDivider(),
               PopupMenuItem(
                 value: 'profile',
-                child: ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Profile'),
-                ),
+                child: const AdaptiveMenuItem(icon: Icons.person, title: 'Profile'),
               ),
               PopupMenuItem(
                 value: 'settings',
-                child: ListTile(
-                  leading: Icon(Icons.settings),
-                  title: Text('Settings'),
-                ),
+                child: const AdaptiveMenuItem(icon: Icons.settings, title: 'Settings'),
               ),
-              PopupMenuDivider(),
+              const PopupMenuDivider(),
               PopupMenuItem(
                 value: 'logout',
-                child: ListTile(
-                  leading: Icon(Icons.logout),
-                  title: Text('Logout'),
-                ),
+                child: const AdaptiveMenuItem(icon: Icons.logout, title: 'Logout'),
               ),
             ],
           ),
@@ -1417,6 +1618,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
             _loadRiderApplications();
           } else if (index == 4) {
             _loadCoupons();
+          } else if (index == 5) {
+            _loadReports();
           } else if (index == 0 || index == 1) {
             _loadAdminOrders();
           }
@@ -1437,6 +1640,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
           BottomNavigationBarItem(
             icon: Icon(Icons.local_offer),
             label: 'Coupons',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.report_outlined),
+            label: 'Reports',
           ),
         ],
       ),

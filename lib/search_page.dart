@@ -18,6 +18,14 @@ class _SearchPageState extends State<SearchPage> {
     'Specialty Foods & International Cuisine',
     'Organic and Health Foods',
     'Meal Kits & Prepped Foods',
+    'Fresh Produce',
+    'Meat, Seafood & Poultry',
+    'Dairy, Eggs & Chilled Goods',
+    'Frozen Foods',
+    'Condiments, Sauces & Spices',
+    'Rice, Grains & Pasta',
+    'Ready-to-Eat Meals',
+    'Local Delicacies',
   ];
 
   static const _sorts = [
@@ -29,6 +37,7 @@ class _SearchPageState extends State<SearchPage> {
 
   final _queryController = TextEditingController();
   final _sellerController = TextEditingController();
+  final _sellerFocusNode = FocusNode();
   List<Map<String, dynamic>> _products = [];
   bool _isLoading = false;
   String _category = 'All';
@@ -38,6 +47,12 @@ class _SearchPageState extends State<SearchPage> {
   @override
   void initState() {
     super.initState();
+    _sellerController.addListener(() {
+      if (mounted) setState(() {});
+    });
+    _sellerFocusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
     _search();
   }
 
@@ -45,6 +60,7 @@ class _SearchPageState extends State<SearchPage> {
   void dispose() {
     _queryController.dispose();
     _sellerController.dispose();
+    _sellerFocusNode.dispose();
     super.dispose();
   }
 
@@ -123,7 +139,15 @@ class _SearchPageState extends State<SearchPage> {
       child: InkWell(
         onTap: productId == null
             ? null
-            : () => Navigator.pushNamed(context, '/product/$productId'),
+            : () async {
+                await DatabaseService.trackProductClick(
+                  productId: productId,
+                  storeId: storeId,
+                );
+                if (mounted) {
+                  Navigator.pushNamed(context, '/product/$productId');
+                }
+              },
         child: Padding(
           padding: const EdgeInsets.all(10),
           child: Row(
@@ -142,7 +166,7 @@ class _SearchPageState extends State<SearchPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      product['name']?.toString() ?? 'Product',
+                      DatabaseService.displayProductName(product['name']),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -192,9 +216,56 @@ class _SearchPageState extends State<SearchPage> {
     );
   }
 
+  List<String> get _sellerSuggestions {
+    final query = _sellerController.text.trim().toLowerCase();
+    if (!_sellerFocusNode.hasFocus || query.isEmpty) return [];
+    final names = <String>{};
+    for (final product in _products) {
+      final store = product['store'];
+      if (store is! Map) continue;
+      final name = store['store_name']?.toString().trim();
+      if (name == null || name.isEmpty) continue;
+      if (name.toLowerCase().contains(query)) names.add(name);
+    }
+    final sorted = names.toList()..sort();
+    return sorted.take(6).toList();
+  }
+
+  Widget _sellerSuggestionList() {
+    final suggestions = _sellerSuggestions;
+    if (suggestions.isEmpty) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(top: 6),
+      constraints: const BoxConstraints(maxHeight: 180),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Theme.of(context).dividerColor),
+      ),
+      child: ListView.separated(
+        shrinkWrap: true,
+        itemCount: suggestions.length,
+        separatorBuilder: (_, _) => const Divider(height: 1),
+        itemBuilder: (context, index) {
+          final suggestion = suggestions[index];
+          return ListTile(
+            dense: true,
+            leading: const Icon(Icons.storefront),
+            title: Text(suggestion, overflow: TextOverflow.ellipsis),
+            onTap: () {
+              _sellerController.text = suggestion;
+              _sellerFocusNode.unfocus();
+              _search();
+            },
+          );
+        },
+      ),
+    );
+  }
+
   Widget _filters() {
     return Container(
-      color: const Color(0xFFEAF7EF),
+      color: Theme.of(context).colorScheme.primaryContainer,
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
       child: Column(
         children: [
@@ -207,7 +278,6 @@ class _SearchPageState extends State<SearchPage> {
                   decoration: const InputDecoration(
                     labelText: 'Category',
                     filled: true,
-                    fillColor: Colors.white,
                   ),
                   items: _categories
                       .map((item) => DropdownMenuItem(
@@ -230,7 +300,6 @@ class _SearchPageState extends State<SearchPage> {
                   decoration: const InputDecoration(
                     labelText: 'Sort',
                     filled: true,
-                    fillColor: Colors.white,
                   ),
                   items: _sorts
                       .map((item) => DropdownMenuItem(
@@ -250,6 +319,7 @@ class _SearchPageState extends State<SearchPage> {
           const SizedBox(height: 10),
           TextField(
             controller: _sellerController,
+            focusNode: _sellerFocusNode,
             decoration: InputDecoration(
               labelText: 'Seller name',
               prefixIcon: const Icon(Icons.storefront),
@@ -259,10 +329,10 @@ class _SearchPageState extends State<SearchPage> {
                 tooltip: 'Apply seller filter',
               ),
               filled: true,
-              fillColor: Colors.white,
             ),
             onSubmitted: (_) => _search(),
           ),
+          _sellerSuggestionList(),
         ],
       ),
     );
@@ -281,18 +351,16 @@ class _SearchPageState extends State<SearchPage> {
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFF2d8f4e),
-        foregroundColor: Colors.white,
         title: TextField(
           controller: _queryController,
           autofocus: true,
           textInputAction: TextInputAction.search,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             hintText: 'Search products',
             border: InputBorder.none,
-            prefixIcon: Icon(Icons.search),
+            prefixIcon: const Icon(Icons.search),
             filled: true,
-            fillColor: Colors.white,
+            fillColor: Theme.of(context).colorScheme.surface,
           ),
           onSubmitted: (_) => _search(),
         ),

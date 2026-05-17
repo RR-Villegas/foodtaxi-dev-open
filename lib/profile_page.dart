@@ -5,7 +5,6 @@ import 'models/address_model.dart';
 import 'services/auth_service.dart';
 import 'services/database_service.dart';
 import 'services/input_validator.dart';
-import 'services/location_service.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -62,7 +61,21 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _saveProfile() async {
+    final firstName = _cleanText(_firstNameController.text);
+    final surname = _cleanText(_surnameController.text);
     final phone = _phoneController.text.trim();
+    if (!InputValidator.isValidName(firstName)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid first name')),
+      );
+      return;
+    }
+    if (!InputValidator.isValidName(surname)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid surname')),
+      );
+      return;
+    }
     if (phone.isNotEmpty && !InputValidator.isValidPhoneNumber(phone)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Enter a valid Philippine phone number')),
@@ -72,8 +85,8 @@ class _ProfilePageState extends State<ProfilePage> {
 
     setState(() => _isSaving = true);
     final ok = await DatabaseService.updateCurrentAccountProfile(
-      firstName: _firstNameController.text,
-      surname: _surnameController.text,
+      firstName: firstName,
+      surname: surname,
       phoneNumber: phone,
       profileImageUrl: _profileImagePath,
     );
@@ -127,133 +140,8 @@ class _ProfilePageState extends State<ProfilePage> {
         .join(', ');
   }
 
-  Future<void> _openAddressForm([Address? address]) async {
-    final provinceController = TextEditingController(text: address?.province ?? '');
-    final cityController = TextEditingController(text: address?.city ?? '');
-    final barangayController = TextEditingController(text: address?.barangay ?? '');
-    final streetController = TextEditingController(text: address?.street ?? '');
-    final houseController = TextEditingController(text: address?.houseNumber ?? '');
-    final zipController = TextEditingController(text: address?.zipCode ?? '');
-    var isDefault = address?.isDefault ?? _addresses.isEmpty;
-
-    await showDialog<void>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(address == null ? 'Add Address' : 'Edit Address'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(controller: houseController, decoration: const InputDecoration(labelText: 'House Number')),
-                TextField(controller: streetController, decoration: const InputDecoration(labelText: 'Street')),
-                TextField(controller: barangayController, decoration: const InputDecoration(labelText: 'Barangay *')),
-                TextField(controller: cityController, decoration: const InputDecoration(labelText: 'City/Municipality *')),
-                TextField(controller: provinceController, decoration: const InputDecoration(labelText: 'Province *')),
-                TextField(
-                  controller: zipController,
-                  decoration: const InputDecoration(
-                    labelText: 'Zip Code',
-                    hintText: 'Auto-filled by location API',
-                  ),
-                  readOnly: true,
-                ),
-                SwitchListTile(
-                  value: isDefault,
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Main location'),
-                  onChanged: (value) => setDialogState(() => isDefault = value),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            FilledButton(
-              onPressed: () async {
-                final accountId = _account?['account_id']?.toString();
-                if (accountId == null ||
-                    provinceController.text.trim().isEmpty ||
-                    cityController.text.trim().isEmpty ||
-                    barangayController.text.trim().isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Fill in required address fields')),
-                  );
-                  return;
-                }
-
-                String? savedAddressId = address?.addressId;
-                final point = await LocationService.geocodeAddress(
-                  houseNumber: houseController.text,
-                  street: streetController.text,
-                  barangay: barangayController.text,
-                  city: cityController.text,
-                  province: provinceController.text,
-                );
-                if (point == null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Address could not be verified by the location API'),
-                    ),
-                  );
-                  return;
-                }
-                final resolvedZipCode = point.postalCode?.trim().isNotEmpty == true
-                    ? point.postalCode!.trim()
-                    : zipController.text.trim();
-                zipController.text = resolvedZipCode;
-                if (address == null) {
-                  final savedAddress = await DatabaseService.insertAddress(
-                    accountId: accountId,
-                    province: provinceController.text,
-                    city: cityController.text,
-                    barangay: barangayController.text,
-                    street: streetController.text,
-                    houseNumber: houseController.text,
-                    zipCode: resolvedZipCode,
-                    latitude: point.latitude,
-                    longitude: point.longitude,
-                    isDefault: isDefault,
-                  );
-                  savedAddressId = savedAddress?.addressId;
-                } else {
-                  await DatabaseService.updateAddress(
-                    addressId: address.addressId!,
-                    province: provinceController.text,
-                    city: cityController.text,
-                    barangay: barangayController.text,
-                    street: streetController.text,
-                    houseNumber: houseController.text,
-                    zipCode: resolvedZipCode,
-                    latitude: point.latitude,
-                    longitude: point.longitude,
-                    isDefault: isDefault,
-                  );
-                }
-
-                if (isDefault) {
-                  if (savedAddressId != null) {
-                    await DatabaseService.setDefaultAddress(accountId, savedAddressId);
-                  }
-                }
-
-                if (!mounted || !context.mounted) return;
-                Navigator.pop(context);
-                _loadProfile();
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    provinceController.dispose();
-    cityController.dispose();
-    barangayController.dispose();
-    streetController.dispose();
-    houseController.dispose();
-    zipController.dispose();
+  String _cleanText(String text) {
+    return InputValidator.cleanDisplayText(text);
   }
 
   Widget _avatar() {
@@ -273,7 +161,6 @@ class _ProfilePageState extends State<ProfilePage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profile'),
-        backgroundColor: const Color(0xFF2d8f4e),
         actions: [
           IconButton(
             tooltip: 'Logout',

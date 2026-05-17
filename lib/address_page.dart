@@ -3,6 +3,7 @@ import 'package:dropdown_search/dropdown_search.dart';
 
 import 'models/address_model.dart';
 import 'services/database_service.dart';
+import 'services/input_validator.dart';
 import 'services/location_service.dart';
 
 class AddressPage extends StatefulWidget {
@@ -51,6 +52,10 @@ class _AddressPageState extends State<AddressPage> {
         .where((part) => part != null && part.trim().isNotEmpty)
         .map((part) => part!)
         .join(', ');
+  }
+
+  String _cleanAddressText(String text) {
+    return InputValidator.cleanDisplayText(text);
   }
 
   Future<void> _openAddressForm([Address? address]) async {
@@ -249,9 +254,11 @@ class _AddressPageState extends State<AddressPage> {
                 }
 
                 String? savedAddressId = address?.addressId;
+                final houseNumber = _cleanAddressText(houseController.text);
+                final street = _cleanAddressText(streetController.text);
                 final point = await LocationService.geocodeAddress(
-                  houseNumber: houseController.text,
-                  street: streetController.text,
+                  houseNumber: houseNumber,
+                  street: street,
                   barangay: selectedBarangay,
                   city: selectedCity,
                   province: selectedProvince,
@@ -275,8 +282,8 @@ class _AddressPageState extends State<AddressPage> {
                     province: selectedProvince,
                     city: selectedCity,
                     barangay: selectedBarangay,
-                    street: streetController.text,
-                    houseNumber: houseController.text,
+                    street: street,
+                    houseNumber: houseNumber,
                     zipCode: resolvedZipCode,
                     latitude: point.latitude,
                     longitude: point.longitude,
@@ -289,8 +296,8 @@ class _AddressPageState extends State<AddressPage> {
                     province: selectedProvince,
                     city: selectedCity,
                     barangay: selectedBarangay,
-                    street: streetController.text,
-                    houseNumber: houseController.text,
+                    street: street,
+                    houseNumber: houseNumber,
                     zipCode: resolvedZipCode,
                     latitude: point.latitude,
                     longitude: point.longitude,
@@ -350,7 +357,6 @@ class _AddressPageState extends State<AddressPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
-        backgroundColor: const Color(0xFF2d8f4e),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openAddressForm(),

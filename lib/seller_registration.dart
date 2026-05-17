@@ -110,7 +110,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
         });
       }
     } catch (e) {
-      print('Error loading provinces: $e');
+      debugPrint('Error loading provinces: $e');
       if (mounted) {
         setState(() => _loadingProvinces = false);
       }
@@ -146,7 +146,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
         });
       }
     } catch (e) {
-      print('Error loading cities: $e');
+      debugPrint('Error loading cities: $e');
       if (mounted) {
         setState(() => _loadingCities = false);
       }
@@ -178,7 +178,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
         });
       }
     } catch (e) {
-      print('Error loading barangays: $e');
+      debugPrint('Error loading barangays: $e');
       if (mounted) {
         setState(() => _loadingBarangays = false);
       }

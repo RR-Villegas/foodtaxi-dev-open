@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'edit_product_page.dart';
 import 'services/auth_service.dart';
 import 'services/database_service.dart';
+import 'widgets/adaptive_menu_item.dart';
 import 'widgets/notification_bell.dart';
 
 class SellerDashboard extends StatefulWidget {
@@ -19,9 +20,18 @@ class _SellerDashboardState extends State<SellerDashboard> {
     'Specialty Foods & International Cuisine',
     'Organic and Health Foods',
     'Meal Kits & Prepped Foods',
+    'Fresh Produce',
+    'Meat, Seafood & Poultry',
+    'Dairy, Eggs & Chilled Goods',
+    'Frozen Foods',
+    'Condiments, Sauces & Spices',
+    'Rice, Grains & Pasta',
+    'Ready-to-Eat Meals',
+    'Local Delicacies',
   ];
 
   Map<String, dynamic>? _store;
+  Map<String, dynamic>? _account;
   List<Map<String, dynamic>> _products = [];
   List<Map<String, dynamic>> _orders = [];
   List<Map<String, dynamic>> _coupons = [];
@@ -73,6 +83,7 @@ class _SellerDashboardState extends State<SellerDashboard> {
     setState(() => _isLoading = true);
     try {
       final accountId = await DatabaseService.getCurrentAccountId();
+      final account = await DatabaseService.getCurrentAccount();
       final store = await DatabaseService.getCurrentSellerStore();
       final storeId = store?['store_id']?.toString();
 
@@ -89,6 +100,7 @@ class _SellerDashboardState extends State<SellerDashboard> {
       if (mounted) {
         setState(() {
           _store = store;
+          _account = account;
           _products = products;
           _orders = orders;
           _coupons = coupons;
@@ -115,6 +127,46 @@ class _SellerDashboardState extends State<SellerDashboard> {
   int _stock(dynamic value) {
     if (value is int) return value;
     return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  Widget _profileMenuHeader() {
+    final account = _account;
+    if (account == null) return const Text('Profile');
+    final imageUrl = account['profile_image_url']?.toString() ?? '';
+    final first = account['firstname']?.toString() ?? '';
+    final last = account['surname']?.toString() ?? '';
+    final name = '$first $last'.trim();
+    return SizedBox(
+      width: 220,
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundImage: imageUrl.isNotEmpty ? NetworkImage(imageUrl) : null,
+            child: imageUrl.isEmpty ? const Icon(Icons.person) : null,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name.isEmpty ? 'Seller' : name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  account['email']?.toString() ?? '',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   double _number(dynamic value) {
@@ -274,7 +326,9 @@ class _SellerDashboardState extends State<SellerDashboard> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Product'),
-        content: Text('Hide ${product['name'] ?? 'this product'} from buyers?'),
+        content: Text(
+          'Hide ${DatabaseService.displayProductName(product['name'])} from buyers?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -385,7 +439,7 @@ class _SellerDashboardState extends State<SellerDashboard> {
                 borderRadius: BorderRadius.circular(8),
                 child: _buildProductImage(product['main_image_url']),
               ),
-              title: Text(product['name']?.toString() ?? 'Product'),
+              title: Text(DatabaseService.displayProductName(product['name'])),
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -802,7 +856,7 @@ class _SellerDashboardState extends State<SellerDashboard> {
                     final product = item['product'];
                     final variant = item['product_variant'];
                     final productName = product is Map
-                        ? product['name']?.toString() ?? 'Product'
+                        ? DatabaseService.displayProductName(product['name'])
                         : 'Product';
                     final size = variant is Map
                         ? variant['size_label']?.toString() ?? ''
@@ -1090,35 +1144,31 @@ class _SellerDashboardState extends State<SellerDashboard> {
           PopupMenuButton<String>(
             icon: const Icon(Icons.menu),
             onSelected: _handleMenu,
-            itemBuilder: (context) => const [
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                enabled: false,
+                child: _profileMenuHeader(),
+              ),
+              const PopupMenuDivider(),
               PopupMenuItem(
                 value: 'profile',
-                child: ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Profile'),
-                ),
+                child: const AdaptiveMenuItem(icon: Icons.person, title: 'Profile'),
               ),
               PopupMenuItem(
                 value: 'location',
-                child: ListTile(
-                  leading: Icon(Icons.location_on),
-                  title: Text('Shop Location'),
+                child: const AdaptiveMenuItem(
+                  icon: Icons.location_on,
+                  title: 'Shop Location',
                 ),
               ),
               PopupMenuItem(
                 value: 'settings',
-                child: ListTile(
-                  leading: Icon(Icons.settings),
-                  title: Text('Settings'),
-                ),
+                child: const AdaptiveMenuItem(icon: Icons.settings, title: 'Settings'),
               ),
-              PopupMenuDivider(),
+              const PopupMenuDivider(),
               PopupMenuItem(
                 value: 'logout',
-                child: ListTile(
-                  leading: Icon(Icons.logout),
-                  title: Text('Logout'),
-                ),
+                child: const AdaptiveMenuItem(icon: Icons.logout, title: 'Logout'),
               ),
             ],
           ),

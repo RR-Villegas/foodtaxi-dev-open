@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/address_model.dart';
+import 'input_validator.dart';
 import 'location_service.dart';
 
 class DatabaseService {
@@ -11,6 +12,10 @@ class DatabaseService {
 
   static void _logDbError(String message, Object error) {
     debugPrint('DB Error: $message: $error');
+  }
+
+  static String displayProductName(dynamic value) {
+    return InputValidator.cleanProductTitle(value?.toString());
   }
 
   // Insert address for a user
@@ -784,6 +789,23 @@ class DatabaseService {
     }
   }
 
+  static Future<void> trackProductClick({
+    required String productId,
+    String? storeId,
+  }) async {
+    try {
+      final accountId = await getCurrentAccountId();
+      if (accountId == null) return;
+      await _supabase.from('product_click').insert({
+        'product_id': productId,
+        'store_id': _blankToNull(storeId),
+        'account_id': accountId,
+      });
+    } catch (e) {
+      _logDbError('Failed to track product click', e);
+    }
+  }
+
   static Future<bool> updateOrderStatus({
     required String orderId,
     required String status,
@@ -1187,7 +1209,7 @@ class DatabaseService {
           .eq('seller_account_id', sellerAccountId)
           .eq('order_status', 'Delivered')
           .limit(1);
-      return delivered is List && delivered.isNotEmpty;
+      return delivered.isNotEmpty;
     } catch (e) {
       _logDbError('Failed to check delivered store order', e);
       return false;
@@ -1274,6 +1296,59 @@ class DatabaseService {
     } catch (e) {
       _logDbError('Failed to report store', e);
       return false;
+    }
+  }
+
+  static Future<bool> reportProduct({
+    required String productId,
+    String? storeId,
+    required String reason,
+    String? details,
+  }) async {
+    try {
+      final accountId = await getCurrentAccountId();
+      if (accountId == null) return false;
+      await _supabase.from('product_report').insert({
+        'product_id': productId,
+        'store_id': _blankToNull(storeId),
+        'reporter_account_id': accountId,
+        'reason': reason.trim(),
+        'details': _blankToNull(details),
+      });
+      return true;
+    } catch (e) {
+      _logDbError('Failed to report product', e);
+      return false;
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getAdminStoreReports() async {
+    try {
+      final response = await _supabase
+          .from('store_report')
+          .select(
+            '*, store(store_id, store_name), account!store_report_reporter_account_id_fkey(account_id, firstname, surname, email)',
+          )
+          .order('created_at', ascending: false);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      _logDbError('Failed to fetch store reports', e);
+      return [];
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getAdminProductReports() async {
+    try {
+      final response = await _supabase
+          .from('product_report')
+          .select(
+            '*, product(product_id, name), store(store_id, store_name), account!product_report_reporter_account_id_fkey(account_id, firstname, surname, email)',
+          )
+          .order('created_at', ascending: false);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      _logDbError('Failed to fetch product reports', e);
+      return [];
     }
   }
 

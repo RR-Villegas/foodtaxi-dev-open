@@ -3,6 +3,7 @@ import 'package:image_picker/image_picker.dart';
 
 import 'services/auth_service.dart';
 import 'services/database_service.dart';
+import 'widgets/adaptive_menu_item.dart';
 import 'widgets/notification_bell.dart';
 
 class RiderDashboard extends StatefulWidget {
@@ -15,6 +16,7 @@ class RiderDashboard extends StatefulWidget {
 class _RiderDashboardState extends State<RiderDashboard> {
   List<Map<String, dynamic>> _orders = [];
   List<Map<String, dynamic>> _historyOrders = [];
+  Map<String, dynamic>? _account;
   bool _isLoading = true;
   int _currentIndex = 0;
   String _overviewRange = 'Day';
@@ -51,14 +53,56 @@ class _RiderDashboardState extends State<RiderDashboard> {
   }
 
   Future<void> _loadOrders() async {
+    final account = await DatabaseService.getCurrentAccount();
     final orders = await DatabaseService.getAvailableDeliveryOrders();
     final historyOrders = await DatabaseService.getCurrentRiderOrders();
     if (!mounted) return;
     setState(() {
+      _account = account;
       _orders = orders;
       _historyOrders = historyOrders;
       _isLoading = false;
     });
+  }
+
+  Widget _profileMenuHeader() {
+    final account = _account;
+    if (account == null) return const Text('Profile');
+    final imageUrl = account['profile_image_url']?.toString() ?? '';
+    final first = account['firstname']?.toString() ?? '';
+    final last = account['surname']?.toString() ?? '';
+    final name = '$first $last'.trim();
+    return SizedBox(
+      width: 220,
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundImage: imageUrl.isNotEmpty ? NetworkImage(imageUrl) : null,
+            child: imageUrl.isEmpty ? const Icon(Icons.person) : null,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name.isEmpty ? 'Rider' : name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  account['email']?.toString() ?? '',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   String _money(dynamic value) {
@@ -590,35 +634,31 @@ class _RiderDashboardState extends State<RiderDashboard> {
           PopupMenuButton<String>(
             icon: const Icon(Icons.menu),
             onSelected: _handleMenu,
-            itemBuilder: (context) => const [
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                enabled: false,
+                child: _profileMenuHeader(),
+              ),
+              const PopupMenuDivider(),
               PopupMenuItem(
                 value: 'profile',
-                child: ListTile(
-                  leading: Icon(Icons.person),
-                  title: Text('Profile'),
-                ),
+                child: const AdaptiveMenuItem(icon: Icons.person, title: 'Profile'),
               ),
               PopupMenuItem(
                 value: 'location',
-                child: ListTile(
-                  leading: Icon(Icons.location_on),
-                  title: Text('Delivery Location'),
+                child: const AdaptiveMenuItem(
+                  icon: Icons.location_on,
+                  title: 'Delivery Location',
                 ),
               ),
               PopupMenuItem(
                 value: 'settings',
-                child: ListTile(
-                  leading: Icon(Icons.settings),
-                  title: Text('Settings'),
-                ),
+                child: const AdaptiveMenuItem(icon: Icons.settings, title: 'Settings'),
               ),
-              PopupMenuDivider(),
+              const PopupMenuDivider(),
               PopupMenuItem(
                 value: 'logout',
-                child: ListTile(
-                  leading: Icon(Icons.logout),
-                  title: Text('Logout'),
-                ),
+                child: const AdaptiveMenuItem(icon: Icons.logout, title: 'Logout'),
               ),
             ],
           ),

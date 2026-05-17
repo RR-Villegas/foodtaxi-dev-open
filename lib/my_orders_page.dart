@@ -13,6 +13,7 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
   List<Map<String, dynamic>> _orders = [];
   bool _isLoading = true;
   String _statusFilter = 'All';
+
   static const List<String> _statusFilters = [
     'All',
     'Processing',
@@ -30,6 +31,7 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
   Future<void> _loadOrders() async {
     final orders = await DatabaseService.getCurrentBuyerOrders();
     if (!mounted) return;
+
     setState(() {
       _orders = orders;
       _isLoading = false;
@@ -40,17 +42,21 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
     final amount = value is num
         ? value.toDouble()
         : double.tryParse(value?.toString() ?? '') ?? 0;
+
     return 'PHP ${amount.toStringAsFixed(2)}';
   }
 
   List<Map<String, dynamic>> get _visibleOrders {
     if (_statusFilter == 'All') return _orders;
+
     return _orders
         .where((order) => order['order_status']?.toString() == _statusFilter)
         .toList();
   }
 
   Widget _statusSelector() {
+    final scheme = Theme.of(context).colorScheme;
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
@@ -61,6 +67,13 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
                 child: ChoiceChip(
                   label: Text(status),
                   selected: _statusFilter == status,
+                  selectedColor: scheme.primaryContainer,
+                  checkmarkColor: scheme.onPrimaryContainer,
+                  labelStyle: TextStyle(
+                    color: _statusFilter == status
+                        ? scheme.onPrimaryContainer
+                        : scheme.onSurface,
+                  ),
                   onSelected: (_) => setState(() => _statusFilter = status),
                 ),
               ),
@@ -72,9 +85,11 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
 
   Future<void> _reviewItem(Map item) async {
     var rating = 5;
+
     final commentController = TextEditingController(
       text: _existingReview(item)?['comment']?.toString() ?? '',
     );
+
     final existingRating = _existingReview(item)?['rating'];
     if (existingRating is num) rating = existingRating.toInt();
 
@@ -90,6 +105,7 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: List.generate(5, (index) {
                   final value = index + 1;
+
                   return IconButton(
                     onPressed: () => setDialogState(() => rating = value),
                     icon: Icon(
@@ -135,26 +151,35 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
       rating: rating,
       comment: commentController.text,
     );
+
     commentController.dispose();
 
     if (!mounted) return;
+
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(ok ? 'Review saved' : 'Review could not be saved')),
+      SnackBar(
+        content: Text(ok ? 'Review saved' : 'Review could not be saved'),
+      ),
     );
+
     if (ok) _loadOrders();
   }
 
   Map<String, dynamic>? _existingReview(Map item) {
     final review = item['product_review'];
+
     if (review is List && review.isNotEmpty && review.first is Map) {
       return Map<String, dynamic>.from(review.first as Map);
     }
+
     if (review is Map) return Map<String, dynamic>.from(review);
+
     return null;
   }
 
   String _formatAddress(dynamic value) {
     if (value is! Map) return 'No delivery address linked';
+
     final parts = [
       value['house_number'],
       value['street'],
@@ -166,6 +191,7 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
         .map((part) => part?.toString().trim() ?? '')
         .where((part) => part.isNotEmpty)
         .toList();
+
     return parts.isEmpty ? 'No delivery address linked' : parts.join(', ');
   }
 
@@ -176,20 +202,25 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
       'In Transit',
       'Delivered',
     ];
+
     final index = states.indexWhere(
       (item) => item.toLowerCase() == status.toLowerCase(),
     );
+
     return index < 0 ? 0 : index;
   }
 
   Widget _statusFlow(String status) {
+    final scheme = Theme.of(context).colorScheme;
     final current = _statusIndex(status);
+
     const labels = [
       'Processing',
       'Ready for Pickup',
       'In Transit',
       'Delivered',
     ];
+
     const icons = [
       Icons.inventory_2_outlined,
       Icons.storefront_outlined,
@@ -200,12 +231,15 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
     return Row(
       children: List.generate(labels.length, (index) {
         final active = index <= current && status != 'Cancelled';
+
         return Expanded(
           child: Column(
             children: [
               Icon(
                 icons[index],
-                color: active ? const Color(0xFF2d8f4e) : Colors.grey,
+                color: active
+                    ? scheme.primary
+                    : scheme.onSurface.withAlpha(120),
                 size: 20,
               ),
               const SizedBox(height: 4),
@@ -214,8 +248,10 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 11,
-                  color: active ? Colors.black87 : Colors.black45,
-                  fontWeight: active ? FontWeight.w600 : null,
+                  color: active
+                      ? scheme.onSurface
+                      : scheme.onSurface.withAlpha(140),
+                  fontWeight: active ? FontWeight.w600 : FontWeight.w500,
                 ),
               ),
             ],
@@ -226,10 +262,13 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
   }
 
   void _openOrderStatus(Map<String, dynamic> order) {
+    final scheme = Theme.of(context).colorScheme;
     final status = order['order_status']?.toString() ?? 'Processing';
+
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
+      backgroundColor: scheme.surface,
       builder: (context) => Padding(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
         child: Column(
@@ -238,10 +277,18 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
           children: [
             Text(
               'Order ${_shortId(order['order_id'])}',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: scheme.onSurface,
+              ),
             ),
             const SizedBox(height: 8),
-            Chip(label: Text(status)),
+            Chip(
+              label: Text(status),
+              backgroundColor: scheme.secondaryContainer,
+              labelStyle: TextStyle(color: scheme.onSecondaryContainer),
+            ),
             const SizedBox(height: 18),
             _statusFlow(status),
             const SizedBox(height: 18),
@@ -270,6 +317,7 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
   }
 
   Widget _orderCard(Map<String, dynamic> order) {
+    final scheme = Theme.of(context).colorScheme;
     final items = order['order_items'];
     final orderItems = items is List ? items.whereType<Map>().toList() : [];
     final status = order['order_status']?.toString() ?? 'Processing';
@@ -290,43 +338,72 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
                   Expanded(
                     child: Text(
                       'Order ${_shortId(order['order_id'])}',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: scheme.onSurface,
+                      ),
                     ),
                   ),
-                  Chip(label: Text(status)),
+                  Chip(
+                    label: Text(status),
+                    backgroundColor: scheme.secondaryContainer,
+                    labelStyle: TextStyle(
+                      color: scheme.onSecondaryContainer,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.location_on_outlined, size: 18),
+                  Icon(
+                    Icons.location_on_outlined,
+                    size: 18,
+                    color: scheme.primary,
+                  ),
                   const SizedBox(width: 6),
-                  Expanded(child: Text(_formatAddress(order['address']))),
+                  Expanded(
+                    child: Text(
+                      _formatAddress(order['address']),
+                      style: TextStyle(color: scheme.onSurface),
+                    ),
+                  ),
                 ],
               ),
               const Divider(),
               ...orderItems.map((item) {
                 final product = item['product'];
                 final variant = item['product_variant'];
+
                 final productName = product is Map
                     ? product['name']?.toString() ?? 'Product'
                     : 'Product';
+
                 final size = variant is Map
                     ? variant['size_label']?.toString() ?? ''
                     : '';
+
                 final reviewed = _existingReview(item) != null;
 
                 return ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: Text(productName),
+                  title: Text(
+                    productName,
+                    style: TextStyle(color: scheme.onSurface),
+                  ),
                   subtitle: Text(
                     '${item['quantity'] ?? 1} item${size.isEmpty ? '' : ' | $size'}',
+                    style: TextStyle(
+                      color: scheme.onSurface.withAlpha(170),
+                    ),
                   ),
                   trailing: canReview
                       ? TextButton.icon(
                           onPressed: () => _reviewItem(item),
-                          icon: Icon(reviewed ? Icons.edit : Icons.rate_review),
+                          icon: Icon(
+                            reviewed ? Icons.edit : Icons.rate_review,
+                          ),
                           label: Text(reviewed ? 'Edit' : 'Review'),
                         )
                       : null,
@@ -336,10 +413,16 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Total'),
+                  Text(
+                    'Total',
+                    style: TextStyle(color: scheme.onSurface),
+                  ),
                   Text(
                     _money(order['total_amount']),
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: scheme.onSurface,
+                    ),
                   ),
                 ],
               ),
@@ -355,7 +438,10 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
                       '/order-receipt',
                       arguments: order,
                     ),
-                    icon: const Icon(Icons.receipt_long_outlined),
+                    icon: Icon(
+                      Icons.receipt_long_outlined,
+                      color: scheme.primary,
+                    ),
                   ),
                 ],
               ),
@@ -368,27 +454,33 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('My Orders'),
-        backgroundColor: const Color(0xFF2d8f4e),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
+              color: scheme.primary,
               onRefresh: _loadOrders,
               child: _orders.isEmpty
                   ? ListView(
-                      children: const [
-                        SizedBox(height: 180),
-                        Center(child: Text('No orders yet')),
+                      children: [
+                        const SizedBox(height: 180),
+                        Center(
+                          child: Text(
+                            'No orders yet',
+                            style: TextStyle(color: scheme.onSurface),
+                          ),
+                        ),
                       ],
                     )
                   : ListView.builder(
                       padding: const EdgeInsets.all(16),
-                      itemCount: _visibleOrders.isEmpty
-                          ? 2
-                          : _visibleOrders.length + 1,
+                      itemCount:
+                          _visibleOrders.isEmpty ? 2 : _visibleOrders.length + 1,
                       itemBuilder: (context, index) {
                         if (index == 0) {
                           return Padding(
@@ -396,12 +488,19 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
                             child: _statusSelector(),
                           );
                         }
+
                         if (_visibleOrders.isEmpty) {
-                          return const Padding(
-                            padding: EdgeInsets.only(top: 120),
-                            child: Center(child: Text('No orders in this state')),
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 120),
+                            child: Center(
+                              child: Text(
+                                'No orders in this state',
+                                style: TextStyle(color: scheme.onSurface),
+                              ),
+                            ),
                           );
                         }
+
                         return _orderCard(_visibleOrders[index - 1]);
                       },
                     ),
@@ -412,6 +511,7 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
   String _shortId(dynamic value) {
     final id = value?.toString() ?? '';
     if (id.length <= 8) return id;
+
     return id.substring(0, 8);
   }
 }

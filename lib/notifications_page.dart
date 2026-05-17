@@ -109,7 +109,6 @@ class _NotificationsPageState extends State<NotificationsPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Notifications'),
-        backgroundColor: const Color(0xFF2d8f4e),
       ),
       body: Column(
         children: [

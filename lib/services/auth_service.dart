@@ -6,6 +6,7 @@ import 'local_storage_service.dart';
 /// Authorization service for route protection and permission checks
 class AuthService {
   static final _supabase = Supabase.instance.client;
+  static bool _isClearingSession = false;
 
   /// Check if user is authenticated
   static bool isAuthenticated() {
@@ -180,12 +181,20 @@ class AuthService {
 
   /// Clear login session (logout)
   static Future<void> clearLoginSession() async {
-    await LocalStorageService.clearSession();
+    if (_isClearingSession) return;
+    _isClearingSession = true;
     try {
-      await _supabase.auth.signOut(scope: SignOutScope.local);
+      await LocalStorageService.clearSession();
+      await _supabase.auth.signOut(scope: SignOutScope.global);
       logSecurityEvent('LOGOUT', 'User session cleared');
     } catch (e) {
       debugPrint('Error clearing login session: $e');
+      try {
+        await _supabase.auth.signOut(scope: SignOutScope.local);
+      } catch (_) {}
+    } finally {
+      await LocalStorageService.clearSession();
+      _isClearingSession = false;
     }
   }
 

@@ -79,6 +79,10 @@ class _ProductPageState extends State<ProductPage> {
   void _addToCart() {
     final product = _product;
     if (product == null) return;
+    if (Supabase.instance.client.auth.currentUser == null) {
+      Navigator.pushNamed(context, '/login');
+      return;
+    }
 
     for (var i = 0; i < _quantity; i++) {
       CartModel.addItem({
@@ -98,12 +102,81 @@ class _ProductPageState extends State<ProductPage> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${product['name']} x$_quantity added to cart!'),
+        content: Text(
+          '${DatabaseService.displayProductName(product['name'])} x$_quantity added to cart!',
+        ),
         duration: const Duration(seconds: 2),
       ),
     );
 
     setState(() {});
+  }
+
+  Future<void> _reportProduct() async {
+    final product = _product;
+    if (product == null) return;
+    if (Supabase.instance.client.auth.currentUser == null) {
+      Navigator.pushNamed(context, '/login');
+      return;
+    }
+
+    final reasonController = TextEditingController();
+    final detailsController = TextEditingController();
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Report Product'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: reasonController,
+              decoration: const InputDecoration(labelText: 'Reason'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: detailsController,
+              decoration: const InputDecoration(labelText: 'Details'),
+              minLines: 2,
+              maxLines: 4,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Submit'),
+          ),
+        ],
+      ),
+    );
+
+    if (saved == true) {
+      final store = product['store'];
+      final ok = reasonController.text.trim().isNotEmpty &&
+          await DatabaseService.reportProduct(
+            productId: widget.productId,
+            storeId: store is Map ? store['store_id']?.toString() : null,
+            reason: reasonController.text,
+            details: detailsController.text,
+          );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              ok ? 'Product report submitted' : 'Product report could not be submitted',
+            ),
+          ),
+        );
+      }
+    }
+
+    reasonController.dispose();
+    detailsController.dispose();
   }
 
   Widget _buildImage(String? imagePath) {
@@ -141,7 +214,6 @@ class _ProductPageState extends State<ProductPage> {
       return Scaffold(
         appBar: AppBar(
           title: const Text('Product Details'),
-          backgroundColor: const Color(0xFF2d8f4e),
         ),
         body: const Center(child: CircularProgressIndicator()),
       );
@@ -151,7 +223,6 @@ class _ProductPageState extends State<ProductPage> {
       return Scaffold(
         appBar: AppBar(
           title: const Text('Product Details'),
-          backgroundColor: const Color(0xFF2d8f4e),
         ),
         body: const Center(
           child: Column(
@@ -223,7 +294,13 @@ class _ProductPageState extends State<ProductPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Product Details'),
-        backgroundColor: const Color(0xFF2d8f4e),
+        actions: [
+          IconButton(
+            tooltip: 'Report product',
+            onPressed: _reportProduct,
+            icon: const Icon(Icons.flag_outlined),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -255,7 +332,7 @@ class _ProductPageState extends State<ProductPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            product['name']?.toString() ?? 'Unknown Product',
+                            DatabaseService.displayProductName(product['name']),
                             style: const TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
@@ -421,6 +498,11 @@ class _ProductPageState extends State<ProductPage> {
                       : (isActive ? 'Out of Stock' : 'Unavailable'),
                 ),
               ),
+            ),
+            TextButton.icon(
+              onPressed: _reportProduct,
+              icon: const Icon(Icons.flag_outlined),
+              label: const Text('Report Product'),
             ),
             const SizedBox(height: 28),
             const Text(

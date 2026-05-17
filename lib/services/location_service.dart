@@ -1,4 +1,5 @@
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'dart:math';
 
@@ -58,7 +59,7 @@ class LocationService {
 
       return [];
     } catch (e) {
-      print('Error fetching provinces: $e');
+      debugPrint('Error fetching provinces: $e');
       return [];
     }
   }
@@ -114,7 +115,7 @@ class LocationService {
 
       return results;
     } catch (e) {
-      print('Error fetching cities/municipalities: $e');
+      debugPrint('Error fetching cities/municipalities: $e');
       return [];
     }
   }
@@ -151,7 +152,7 @@ class LocationService {
 
       return [];
     } catch (e) {
-      print('Error fetching barangays: $e');
+      debugPrint('Error fetching barangays: $e');
       return [];
     }
   }
@@ -297,7 +298,7 @@ class LocationService {
           postalCode: _extractPostalCode(item),
         );
       } catch (e) {
-        print('Error geocoding address "$query": $e');
+        debugPrint('Error geocoding address "$query": $e');
       }
     }
 
@@ -340,7 +341,7 @@ class LocationService {
           ? null
           : double.parse(distanceMeters.toString()) / 1000;
     } catch (e) {
-      print('Error fetching route distance: $e');
+      debugPrint('Error fetching route distance: $e');
       return null;
     }
   }

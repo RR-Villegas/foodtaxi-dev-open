@@ -54,7 +54,6 @@ class _CartPageState extends State<CartPage> {
       return Scaffold(
         appBar: AppBar(
           title: const Text('My Cart'),
-          backgroundColor: const Color(0xFF2d8f4e),
         ),
         body: const Center(
           child: Column(
@@ -77,7 +76,6 @@ class _CartPageState extends State<CartPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text('My Cart (${CartModel.cartItems.length} items)'),
-        backgroundColor: const Color(0xFF2d8f4e),
         actions: [
           IconButton(
             icon: const Icon(Icons.clear_all),

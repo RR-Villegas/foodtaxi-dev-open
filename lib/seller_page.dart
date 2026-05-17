@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'cart_model.dart';
 import 'services/database_service.dart';
 
 class SellerPage extends StatefulWidget {
@@ -261,7 +262,15 @@ class _SellerPageState extends State<SellerPage> {
         child: InkWell(
           onTap: productId == null
               ? null
-              : () => Navigator.pushNamed(context, '/product/$productId'),
+              : () async {
+                  await DatabaseService.trackProductClick(
+                    productId: productId,
+                    storeId: widget.storeId,
+                  );
+                  if (mounted) {
+                    Navigator.pushNamed(context, '/product/$productId');
+                  }
+                },
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -269,22 +278,23 @@ class _SellerPageState extends State<SellerPage> {
                 aspectRatio: 1,
                 child: _image(product['main_image_url']),
               ),
-              Padding(
+              Expanded(
+                child: Padding(
                 padding: const EdgeInsets.all(10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      product['name']?.toString() ?? 'Product',
-                      maxLines: 2,
+                      DatabaseService.displayProductName(product['name']),
+                      maxLines: compact ? 1 : 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       _money(product['price']),
-                      style: const TextStyle(
-                        color: Colors.green,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -299,7 +309,6 @@ class _SellerPageState extends State<SellerPage> {
                           '($reviewCount)',
                           style: const TextStyle(
                             fontSize: 12,
-                            color: Colors.black54,
                           ),
                         ),
                       ],
@@ -308,14 +317,28 @@ class _SellerPageState extends State<SellerPage> {
                       const SizedBox(height: 4),
                       Text(
                         '${_stock(product)} in stock',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.black54,
-                        ),
+                        style: const TextStyle(fontSize: 12),
                       ),
                     ],
+                    const Spacer(),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 34,
+                      child: FilledButton(
+                        onPressed: productId == null
+                            ? null
+                            : () {
+                                CartModel.addItem(product);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Added to cart')),
+                                );
+                              },
+                        child: const Text('Buy'),
+                      ),
+                    ),
                   ],
                 ),
+              ),
               ),
             ],
           ),
@@ -329,7 +352,7 @@ class _SellerPageState extends State<SellerPage> {
       padding: const EdgeInsets.fromLTRB(16, 22, 16, 10),
       child: Row(
         children: [
-          Icon(icon, color: const Color(0xFF2d8f4e)),
+          Icon(icon, color: Theme.of(context).colorScheme.primary),
           const SizedBox(width: 8),
           Text(
             title,
@@ -342,7 +365,7 @@ class _SellerPageState extends State<SellerPage> {
 
   Widget _horizontalSection(List<Map<String, dynamic>> products) {
     return SizedBox(
-      height: 258,
+      height: 292,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -350,6 +373,86 @@ class _SellerPageState extends State<SellerPage> {
         itemBuilder: (context, index) => _productTile(
           products[index],
           compact: true,
+        ),
+      ),
+    );
+  }
+
+  Widget _productRow(Map<String, dynamic> product) {
+    final productId = product['product_id']?.toString();
+    final rating = _rating(product);
+    final reviewCount = _reviewCount(product);
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: productId == null
+            ? null
+            : () async {
+                await DatabaseService.trackProductClick(
+                  productId: productId,
+                  storeId: widget.storeId,
+                );
+                if (mounted) {
+                  Navigator.pushNamed(context, '/product/$productId');
+                }
+              },
+        child: SizedBox(
+          height: 126,
+          child: Row(
+            children: [
+              AspectRatio(
+                aspectRatio: 1,
+                child: _image(product['main_image_url']),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        DatabaseService.displayProductName(product['name']),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _money(product['price']),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          _stars(rating),
+                          const SizedBox(width: 4),
+                          Text('($reviewCount)'),
+                        ],
+                      ),
+                      const Spacer(),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: FilledButton(
+                          onPressed: productId == null
+                              ? null
+                              : () {
+                                  CartModel.addItem(product);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Added to cart')),
+                                  );
+                                },
+                          child: const Text('Buy'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -373,7 +476,6 @@ class _SellerPageState extends State<SellerPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(storeName),
-        backgroundColor: const Color(0xFF2d8f4e),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -385,7 +487,7 @@ class _SellerPageState extends State<SellerPage> {
                     child: Container(
                       width: double.infinity,
                       padding: const EdgeInsets.fromLTRB(20, 22, 20, 24),
-                      color: const Color(0xFFEAF7EF),
+                      color: Theme.of(context).colorScheme.primaryContainer,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -465,20 +567,18 @@ class _SellerPageState extends State<SellerPage> {
                         ],
                       ),
                     ),
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                      sliver: SliverGrid(
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                          childAspectRatio: 0.68,
+                    SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) => Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            16,
+                            index == 0 ? 0 : 10,
+                            16,
+                            index == activeProducts.length - 1 ? 24 : 0,
+                          ),
+                          child: _productRow(activeProducts[index]),
                         ),
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) => _productTile(activeProducts[index]),
-                          childCount: activeProducts.length,
-                        ),
+                        childCount: activeProducts.length,
                       ),
                     ),
                   ],

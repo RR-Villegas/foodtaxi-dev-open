@@ -324,7 +324,7 @@ Latest admin/seller/buyer flow todo
 - Seller storefront now has Review Shop and Report Shop controls. Shop reviews require a delivered order from that store; order-related reports require the same condition.
 
 Latest notifications/bulk/theme todo
-- Supabase project edge function list returned empty, so send-application-email is not deployed from this workspace yet. Supabase CLI is not installed on this machine.
+- Supabase project edge function list now shows send-application-email as ACTIVE.
 - Applied DB changes for order notifications and bulk delivery:
   - orders.delivery_mode: standard or bulk.
   - orders.bulk_delivery_min_orders and bulk_delivery_max_orders.
@@ -342,3 +342,45 @@ Latest notifications/bulk/theme todo
   - Themes available: Default, Dark Mode, Koishi Komeiji, Komeiji Satori, Rin Kaenbyou, Utsuho Reiuji.
   - main.dart loads the saved theme and wraps MaterialApp in a ValueListenableBuilder.
   - settings_page.dart now has a Theme dropdown.
+
+Latest buyer/storefront/trending todo
+- Buyer dashboard product cards now reserve extra height, put the content area in Expanded, use ellipsis for product names, and expose a horizontal scrollbar.
+- Buyer dashboard search bar now animates between compact and focused widths.
+- Buyer dashboard logout is guarded against double-submit and AuthService now clears Supabase globally plus local session data.
+- Buyer dashboard hamburger dropdown now shows the profile image beside the account name/email.
+- Seller storefront product tiles now ellipsize names and include Buy buttons.
+- Seller storefront All Products is now a search-style rectangle list instead of the large grid.
+- Product clicks are tracked in public.product_click.
+  - RLS allows authenticated inserts only when the same account/product has no click within the last 30 seconds.
+  - SELECT is limited to clicks from the last 7 days.
+  - Indexes support recent account/product and trending product/day reads.
+- Buyer dashboard, seller storefront, and search page call DatabaseService.trackProductClick before opening product pages.
+- Product pages are now visible to anonymous users; Add to Cart/Buy redirects to login if not authenticated.
+- Category lists expanded across buyer dashboard, main, search filters, and seller product editing.
+- Main and buyer dashboard taglines now describe marketplace shopping more accurately.
+- Search seller filter now shows a focused dropdown after the user types at least one letter.
+- Product reporting was added:
+  - public.product_report table created in Supabase with RLS.
+  - ProductPage has Report Product in the app bar and body.
+  - Admin dashboard has a Reports tab with Store/Product filters and search.
+- Seller, rider, and admin dashboard hamburger menus now include profile image/name/email headers, matching the buyer menu.
+- Anonymous main.dart product sections now use the safer buyer-style card layout with ellipsis, ratings, review counts, product click tracking, and View buttons.
+- Main product loading and Supabase connection checks now guard setState after dispose.
+- Remaining print calls found by rg were replaced with debugPrint in buyer dashboard, seller registration, and location service.
+- Supabase product_report privileges were tightened to authenticated INSERT/SELECT/UPDATE only; anon has no table grant.
+
+Latest validator/security/theme cleanup
+- InputValidator cleanup:
+  - Removed unused dangerous-char config and the unused allowSpecialChars parameter.
+  - Added cleanDisplayText() and cleanProductTitle().
+  - Profile save validates/sanitizes first name/surname and phone.
+  - AddressPage sanitizes street/house number before geocoding/saving.
+  - EditProductPage validates/cleans product names, base size, and variant size labels before saving.
+- Removed the stale, unreachable manual address form from ProfilePage; address editing is routed through /addresses.
+- Product title display now uses DatabaseService.displayProductName() in buyer/main/search/seller/product/seller dashboard views.
+- Added lib/widgets/adaptive_menu_item.dart; hamburger dropdown item icons/text now choose black or white from popup background brightness.
+- Replaced touched withOpacity calls with withAlpha in buyer/admin/main/theme_service.
+- Supabase:
+  - Set search_path for public.handle_new_user(), public.create_email_otp(uuid), and public.verify_email_otp(uuid, text).
+  - Security advisors no longer report function_search_path_mutable for those functions.
+  - A broader grant/RLS cleanup was rejected by safety review because it can break live signup/order/admin flows; explicit approval is needed before changing those production permissions.

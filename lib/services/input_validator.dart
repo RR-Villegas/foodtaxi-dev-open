@@ -2,9 +2,6 @@ import 'package:flutter/foundation.dart';
 
 /// Input validation and sanitization service to prevent XSS and injection attacks
 class InputValidator {
-  /// Dangerous characters that could be used for XSS/injection
-  static const String _dangerousChars = '<>"\';()[]{}';
-
   /// HTML/JavaScript dangerous tags
   static const List<String> _dangerousTags = [
     '<script',
@@ -22,7 +19,7 @@ class InputValidator {
     '<embed',
     '<object',
     '<form',
-    '<input'
+    '<input',
   ];
 
   /// Sanitize user input to prevent XSS attacks
@@ -50,6 +47,18 @@ class InputValidator {
     );
 
     return sanitized.trim();
+  }
+
+  /// Clean display text without changing normal punctuation or capitalization.
+  static String cleanDisplayText(String? input, {String fallback = ''}) {
+    final value = input?.replaceAll('_', ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (value == null || value.isEmpty) return fallback;
+    return value;
+  }
+
+  /// Clean product titles for UI display.
+  static String cleanProductTitle(String? input) {
+    return cleanDisplayText(input, fallback: 'Product');
   }
 
   /// Escape HTML special characters
@@ -262,7 +271,6 @@ class InputValidator {
     String input, {
     required String fieldName,
     required int maxLength,
-    bool allowSpecialChars = false,
     bool isEmail = false,
     bool isPhone = false,
   }) {
