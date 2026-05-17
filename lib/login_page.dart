@@ -8,6 +8,7 @@ import 'services/database_service.dart';
 import 'services/local_storage_service.dart';
 import 'services/input_validator.dart';
 import 'services/location_service.dart';
+import 'services/theme_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -195,6 +196,7 @@ class _LoginPageState extends State<LoginPage> {
 
       // Save login session for persistent login
       await AuthService.saveLoginSession(user);
+      await ThemeService.load();
 
       final role = (account?['account_type'] as String? ?? 'Buyer')
           .toLowerCase();
@@ -220,6 +222,115 @@ class _LoginPageState extends State<LoginPage> {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  String _passwordRecoveryRedirectUrl() {
+    final current = Uri.base;
+    final origin = current.hasPort
+        ? '${current.scheme}://${current.host}:${current.port}'
+        : '${current.scheme}://${current.host}';
+    return '$origin${current.path}';
+  }
+
+  Future<void> _showForgotPasswordDialog() async {
+    final resetEmailController = TextEditingController(
+      text: _emailController.text.trim(),
+    );
+    var isSending = false;
+    String? dialogError;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          Future<void> sendResetEmail() async {
+            final email = resetEmailController.text.trim();
+            setDialogState(() => dialogError = null);
+
+            if (email.isEmpty) {
+              setDialogState(() => dialogError = 'Email is required');
+              return;
+            }
+
+            if (InputValidator.containsSQLInjectionPatterns(email) ||
+                !InputValidator.isValidEmail(email)) {
+              setDialogState(() => dialogError = 'Please enter a valid email');
+              return;
+            }
+
+            setDialogState(() => isSending = true);
+            try {
+              await _supabase.auth.resetPasswordForEmail(
+                email,
+                redirectTo: _passwordRecoveryRedirectUrl(),
+              );
+
+              if (!mounted || !dialogContext.mounted) return;
+              Navigator.pop(dialogContext);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Password reset link sent. Check your email.'),
+                ),
+              );
+            } catch (e) {
+              if (!dialogContext.mounted) return;
+              setDialogState(() {
+                dialogError = 'Could not send reset link. Please try again.';
+                isSending = false;
+              });
+            }
+          }
+
+          return AlertDialog(
+            title: const Text('Reset Password'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text('Enter your account email and we will send a reset link.'),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: resetEmailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Email',
+                    prefixIcon: Icon(Icons.email_outlined),
+                  ),
+                  onSubmitted: (_) {
+                    if (!isSending) sendResetEmail();
+                  },
+                ),
+                if (dialogError != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    dialogError!,
+                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: isSending ? null : () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: isSending ? null : sendResetEmail,
+                child: isSending
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Send Link'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    resetEmailController.dispose();
   }
 
   void _showErrorSnackBar(String message) {
@@ -509,7 +620,7 @@ class _LoginPageState extends State<LoginPage> {
                       borderRadius: BorderRadius.circular(28),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
+                          color: Colors.black.withAlpha(26),
                           blurRadius: 28,
                           offset: const Offset(0, 16),
                         ),
@@ -603,7 +714,15 @@ class _LoginPageState extends State<LoginPage> {
             obscureText: !_showPassword,
           ),
 
-          const SizedBox(height: 24),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: _isLoading ? null : _showForgotPasswordDialog,
+              child: const Text('Forgot password?'),
+            ),
+          ),
+
+          const SizedBox(height: 12),
           SizedBox(
             height: 52,
             child: ElevatedButton(
@@ -638,7 +757,7 @@ class _LoginPageState extends State<LoginPage> {
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.18),
+            color: Colors.black.withAlpha(46),
             blurRadius: 24,
             offset: const Offset(0, 12),
           ),

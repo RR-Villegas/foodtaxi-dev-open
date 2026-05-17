@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'edit_product_page.dart';
 import 'services/auth_service.dart';
 import 'services/database_service.dart';
@@ -13,6 +14,10 @@ class SellerDashboard extends StatefulWidget {
 }
 
 class _SellerDashboardState extends State<SellerDashboard> {
+  final _supabase = Supabase.instance.client;
+  RealtimeChannel? _ordersChannel;
+  RealtimeChannel? _productsChannel;
+
   static const List<String> _categories = [
     'Baking Supplies & Ingredients',
     'Coffee, Tea & Beverages',
@@ -79,6 +84,15 @@ class _SellerDashboardState extends State<SellerDashboard> {
     _loadDashboard();
   }
 
+  @override
+  void dispose() {
+    final ordersChannel = _ordersChannel;
+    final productsChannel = _productsChannel;
+    if (ordersChannel != null) _supabase.removeChannel(ordersChannel);
+    if (productsChannel != null) _supabase.removeChannel(productsChannel);
+    super.dispose();
+  }
+
   Future<void> _loadDashboard() async {
     setState(() => _isLoading = true);
     try {
@@ -96,6 +110,7 @@ class _SellerDashboardState extends State<SellerDashboard> {
       final coupons = storeId == null
           ? <Map<String, dynamic>>[]
           : await DatabaseService.getCouponsForStore(storeId);
+      _subscribeToDashboard(accountId: accountId, storeId: storeId);
 
       if (mounted) {
         setState(() {
@@ -141,7 +156,9 @@ class _SellerDashboardState extends State<SellerDashboard> {
       child: Row(
         children: [
           CircleAvatar(
-            backgroundImage: imageUrl.isNotEmpty ? NetworkImage(imageUrl) : null,
+            backgroundImage: imageUrl.isNotEmpty
+                ? NetworkImage(DatabaseService.getProfileImageUrl(imageUrl))
+                : null,
             child: imageUrl.isEmpty ? const Icon(Icons.person) : null,
           ),
           const SizedBox(width: 10),
@@ -318,6 +335,42 @@ class _SellerDashboardState extends State<SellerDashboard> {
 
     if (saved == true) {
       await _loadDashboard();
+    }
+  }
+
+  void _subscribeToDashboard({String? accountId, String? storeId}) {
+    if (accountId != null && _ordersChannel == null) {
+      _ordersChannel = _supabase
+          .channel('seller-orders-$accountId')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'orders',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'seller_account_id',
+              value: accountId,
+            ),
+            callback: (_) => _loadDashboard(),
+          )
+          .subscribe();
+    }
+
+    if (storeId != null && _productsChannel == null) {
+      _productsChannel = _supabase
+          .channel('seller-products-$storeId')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'product',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'store_id',
+              value: storeId,
+            ),
+            callback: (_) => _loadDashboard(),
+          )
+          .subscribe();
     }
   }
 
@@ -980,7 +1033,7 @@ class _SellerDashboardState extends State<SellerDashboard> {
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
-                  value: type,
+                  initialValue: type,
                   decoration: const InputDecoration(labelText: 'Discount Type'),
                   items: const [
                     DropdownMenuItem(value: 'percent', child: Text('Percent')),
@@ -1133,7 +1186,6 @@ class _SellerDashboardState extends State<SellerDashboard> {
       appBar: AppBar(
         automaticallyImplyLeading: false,
         title: Text(storeName),
-        backgroundColor: const Color(0xFF2d8f4e),
         actions: [
           const NotificationBell(),
           IconButton(

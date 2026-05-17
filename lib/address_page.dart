@@ -80,6 +80,8 @@ class _AddressPageState extends State<AddressPage> {
         (p) => p['name'] == provinceName,
         orElse: () => {},
       );
+      final provinceCode = province['code']?.toString();
+      if (provinceCode == null || provinceCode.isEmpty) return;
       setDialogState(() {
         loadingCities = true;
         cities = [];
@@ -89,7 +91,7 @@ class _AddressPageState extends State<AddressPage> {
         zipController.clear();
       });
       final loaded = await LocationService.fetchCitiesAndMunicipalities(
-        province['code'],
+        provinceCode,
       );
       if (!mounted) return;
       setDialogState(() {
@@ -103,13 +105,15 @@ class _AddressPageState extends State<AddressPage> {
         (c) => c['name'] == cityName,
         orElse: () => {},
       );
+      final cityCode = city['code']?.toString();
+      if (cityCode == null || cityCode.isEmpty) return;
       setDialogState(() {
         loadingBarangays = true;
         barangays = [];
         selectedBarangay = null;
         zipController.clear();
       });
-      final loaded = await LocationService.fetchBarangays(city['code']);
+      final loaded = await LocationService.fetchBarangays(cityCode);
       if (!mounted) return;
       setDialogState(() {
         barangays = loaded;
@@ -122,16 +126,22 @@ class _AddressPageState extends State<AddressPage> {
         (p) => p['name'] == selectedProvince,
         orElse: () => {},
       );
-      cities = await LocationService.fetchCitiesAndMunicipalities(
-        province['code'],
-      );
+      final provinceCode = province['code']?.toString();
+      if (provinceCode != null && provinceCode.isNotEmpty) {
+        cities = await LocationService.fetchCitiesAndMunicipalities(
+          provinceCode,
+        );
+      }
     }
     if (selectedCity != null && selectedCity!.isNotEmpty) {
       final city = cities.firstWhere(
         (c) => c['name'] == selectedCity,
         orElse: () => {},
       );
-      barangays = await LocationService.fetchBarangays(city['code']);
+      final cityCode = city['code']?.toString();
+      if (cityCode != null && cityCode.isNotEmpty) {
+        barangays = await LocationService.fetchBarangays(cityCode);
+      }
     }
 
     await showDialog<void>(

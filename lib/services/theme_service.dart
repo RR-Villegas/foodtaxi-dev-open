@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class FoodTaxiTheme {
   final String id;
@@ -288,7 +289,8 @@ class FoodTaxiTheme {
 }
 
 class ThemeService {
-  static const _key = 'foodtaxi_theme_id';
+  static const _legacyKey = 'foodtaxi_theme_id';
+  static const _keyPrefix = 'foodtaxi_theme_id_';
 
   static const themes = <FoodTaxiTheme>[
     FoodTaxiTheme(
@@ -485,10 +487,19 @@ class ThemeService {
   }
 
   static Future<void> load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final id = prefs.getString(_key);
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) {
+      selectedThemeId.value = 'default';
+      return;
+    }
 
-    if (id == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    final id = prefs.getString('$_keyPrefix$userId');
+
+    if (id == null) {
+      selectedThemeId.value = 'default';
+      return;
+    }
 
     if (themes.any((theme) => theme.id == id)) {
       selectedThemeId.value = id;
@@ -500,7 +511,15 @@ class ThemeService {
 
     selectedThemeId.value = id;
 
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return;
+
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_key, id);
+    await prefs.remove(_legacyKey);
+    await prefs.setString('$_keyPrefix$userId', id);
+  }
+
+  static Future<void> resetToDefault() async {
+    selectedThemeId.value = 'default';
   }
 }

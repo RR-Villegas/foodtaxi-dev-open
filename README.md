@@ -1,95 +1,40 @@
-# FoodTaxi
+# FoodTaxi Omega
 
-FoodTaxi is a Flutter-based food delivery platform with role-based accounts for Buyers, Sellers, Riders, and Admins.
+FoodTaxi Omega is a Flutter marketplace app for local food sellers, buyers, riders, and admins. It uses Supabase for authentication, Postgres data, storage, realtime updates, and edge functions.
 
-The project uses Supabase as its backend service for:
-- Authentication
-- PostgreSQL database
-- Storage
-- Edge Functions
-- Row Level Security (RLS)
+## Current Features
 
-## Features
+- Buyer marketplace dashboard with category rows, trending products, product search, cart, checkout, delivery address handling, order history, reviews, and shop/product reports.
+- Seller registration with location verification and document uploads, store management, product/variant management, seller coupons, order state controls, and seller dashboard analytics.
+- Rider registration with location verification and document uploads, ready-for-pickup queue, pickup code scanning, in-transit flow, proof-of-delivery upload, and delivery history.
+- Admin dashboard for seller/rider applications, review notes, reports, coupons, sales filtering, and Brevo-backed application email notifications.
+- Per-account themes, including Default, Dark Mode, Koishi Komeiji, Satori Komeiji, Rin Kaenbyou, and Utsuho Reiuji.
+- Supabase Realtime listeners for order, product, and notification refreshes in critical workflows.
 
-### Authentication
-- Email/password signup and login
-- Role-based accounts
-- Session persistence
-- Input validation and sanitization
+## Backend
 
-### Buyer Features
-- Browse stores and products
-- Place orders
-- Track deliveries
+The app is connected to Supabase:
 
-### Seller Features
-- Seller registration workflow
-- Store management
-- Product management
-- Order handling
-
-### Rider Features
-- Rider registration workflow
-- Delivery management
-- Delivery status tracking
-
-### Admin Features
-- Application approval system
-- Account verification
-- Email notifications using Brevo + Supabase Edge Functions
-
-## Tech Stack
-
-### Frontend
-- Flutter
-- Dart
-
-### Backend
-- Supabase
-- PostgreSQL
-- Supabase Edge Functions
-- Brevo Email API
-
-## Project Structure
-
-```txt
-lib/
-├── models/
-├── services/
-├── utils/
-├── widgets/
-└── pages/
-
-supabase/
-├── functions/
-├── migrations/
-└── config.toml
-```
+- Auth: email/password accounts mapped to `account` rows.
+- Database: Postgres tables for accounts, stores, products, variants, orders, addresses, applications, notifications, coupons, reviews, reports, and click tracking.
+- Storage: product images, profile images, application documents, and delivery proof images.
+- Edge Functions: Brevo email delivery for application approval/rejection messages.
+- RLS: enabled on public application tables, with role and ownership policies expected to enforce access.
 
 ## Setup
 
-### Requirements
-- Flutter SDK
-- Dart SDK
-- Node.js
-- Supabase CLI
-- VS Code with Deno extension (for Edge Functions)
-
-### Install Dependencies
+Install Flutter dependencies:
 
 ```bash
 flutter pub get
 ```
 
-### Configure Supabase
+Configure Supabase in `lib/main.dart` or your environment-specific config:
 
-Create a `.env` or configure constants with:
 - Supabase URL
 - Supabase anon key
 
-### Edge Function Secrets
-
-Configure these in Supabase Dashboard:
+Configure Brevo secrets in Supabase:
 
 ```txt
 BREVO_API_KEY
@@ -97,41 +42,32 @@ BREVO_SENDER_EMAIL
 BREVO_SENDER_NAME
 ```
 
-### Deploy Edge Functions
+Deploy the email function after changing it:
 
 ```bash
 supabase functions deploy send-application-email
 ```
 
+## Project Layout
+
+```txt
+lib/
+  models/
+  services/
+  widgets/
+  *_page.dart
+supabase/
+  functions/
+  migrations/
+```
+
 ## Development Notes
 
-### Git Ignore
+- Keep service-role keys out of Flutter/client code.
+- Use Supabase RLS and ownership checks for any table exposed through the Data API.
+- Product click records are retained for one week for trending calculations.
+- Theme choices are saved per logged-in account and reset to Default on logout.
 
-Recommended `.gitignore` entries:
+## Status
 
-```gitignore
-.supabase
-node_modules
-.env
-.env.local
-```
-
-### Deno Support
-
-For Supabase Edge Functions, enable Deno in VS Code:
-
-```json
-{
-  "deno.enable": true,
-  "deno.enablePaths": ["supabase/functions"]
-}
-```
-
-## Current Status
-
-This project is currently under active development.
-Features and database schema may still change.
-
-## License
-
-This project is for educational and development purposes.
+This project is under active development. Database policies, app flows, and UI polish are still being tightened as features are added.

@@ -419,7 +419,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Checkout'),
-        backgroundColor: const Color(0xFF2d8f4e),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -590,40 +589,50 @@ class _CheckoutPageState extends State<CheckoutPage> {
                               onPressed: _showAddAddressDialog,
                               icon: const Icon(Icons.add),
                               label: const Text('Add Address'),
-                              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
                             ),
                           ],
                         ),
                       ),
                     )
                   else
-                    Column(
-                      children: [
-                        ..._addresses.map((address) => RadioListTile<Address>(
-                          value: address,
-                          groupValue: _selectedAddress,
-                          onChanged: (value) {
+                    RadioGroup<Address>(
+                      groupValue: _selectedAddress,
+                      onChanged: (value) {
+                        if (value != null) {
                             setState(() => _selectedAddress = value);
                             _refreshDeliveryFee();
-                          },
-                          title: Text(
-                            _formatAddress(address),
-                            style: TextStyle(
-                              fontWeight: address.isDefault ? FontWeight.bold : FontWeight.normal,
+                        }
+                      },
+                      child: Column(
+                        children: [
+                          ..._addresses.map((address) => RadioListTile<Address>(
+                            value: address,
+                            title: Text(
+                              _formatAddress(address),
+                              style: TextStyle(
+                                fontWeight: address.isDefault
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                              ),
                             ),
+                            subtitle: address.isDefault
+                                ? Text(
+                                    'Default',
+                                    style: TextStyle(
+                                      color: Theme.of(context).colorScheme.primary,
+                                    ),
+                                  )
+                                : null,
+                            secondary: const Icon(Icons.location_on),
+                            selected: _selectedAddress == address,
+                          )),
+                          TextButton.icon(
+                            onPressed: _showAddAddressDialog,
+                            icon: const Icon(Icons.add),
+                            label: const Text('Add New Address'),
                           ),
-                          subtitle: address.isDefault 
-                              ? const Text('Default', style: TextStyle(color: Colors.green))
-                              : null,
-                          secondary: const Icon(Icons.location_on),
-                          selected: _selectedAddress == address,
-                        )),
-                        TextButton.icon(
-                          onPressed: _showAddAddressDialog,
-                          icon: const Icon(Icons.add),
-                          label: const Text('Add New Address'),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
 
                   const SizedBox(height: 24),
@@ -632,33 +641,40 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   _buildSectionTitle('Payment Method'),
                   const SizedBox(height: 8),
                   Card(
-                    child: Column(
-                      children: [
-                        RadioListTile<String>(
-                          value: 'COD',
-                          groupValue: _selectedPaymentMethod,
-                          onChanged: (value) => setState(() => _selectedPaymentMethod = value!),
-                          title: const Row(
-                            children: [
-                              Icon(Icons.money, color: Colors.green),
-                              SizedBox(width: 8),
-                              Text('Cash on Delivery'),
-                            ],
+                    child: RadioGroup<String>(
+                      groupValue: _selectedPaymentMethod,
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _selectedPaymentMethod = value);
+                        }
+                      },
+                      child: Column(
+                        children: [
+                          RadioListTile<String>(
+                            value: 'COD',
+                            title: Row(
+                              children: [
+                                Icon(
+                                  Icons.money,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                                const SizedBox(width: 8),
+                                const Text('Cash on Delivery'),
+                              ],
+                            ),
                           ),
-                        ),
-                        RadioListTile<String>(
-                          value: 'Gcash',
-                          groupValue: _selectedPaymentMethod,
-                          onChanged: (value) => setState(() => _selectedPaymentMethod = value!),
-                          title: const Row(
-                            children: [
-                              Icon(Icons.phone_android, color: Colors.blue),
-                              SizedBox(width: 8),
-                              Text('GCash'),
-                            ],
+                          const RadioListTile<String>(
+                            value: 'Gcash',
+                            title: Row(
+                              children: [
+                                Icon(Icons.phone_android, color: Colors.blue),
+                                SizedBox(width: 8),
+                                Text('GCash'),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
 
@@ -671,7 +687,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
                     child: ElevatedButton(
                       onPressed: _placeOrder,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2d8f4e),
                         foregroundColor: Colors.white,
                       ),
                       child: Text(

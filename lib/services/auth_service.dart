@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'database_service.dart';
 import 'local_storage_service.dart';
+import 'theme_service.dart';
 
 /// Authorization service for route protection and permission checks
 class AuthService {
@@ -185,7 +186,9 @@ class AuthService {
     _isClearingSession = true;
     try {
       await LocalStorageService.clearSession();
-      await _supabase.auth.signOut(scope: SignOutScope.global);
+      await _supabase.auth
+          .signOut(scope: SignOutScope.global)
+          .timeout(const Duration(seconds: 5));
       logSecurityEvent('LOGOUT', 'User session cleared');
     } catch (e) {
       debugPrint('Error clearing login session: $e');
@@ -194,6 +197,7 @@ class AuthService {
       } catch (_) {}
     } finally {
       await LocalStorageService.clearSession();
+      await ThemeService.resetToDefault();
       _isClearingSession = false;
     }
   }

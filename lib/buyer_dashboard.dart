@@ -22,7 +22,6 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
   Map<String, dynamic>? _userProfile;
   bool _isLoading = true;
   bool _hasError = false;
-  bool _isLoadingProfile = true;
   bool _isLoggingOut = false;
 
   @override
@@ -64,8 +63,6 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
     try {
       final user = _supabase.auth.currentUser;
       if (user == null) {
-        if (!mounted) return;
-        setState(() => _isLoadingProfile = false);
         return;
       }
       final accountId = await DatabaseService.getCurrentAccountId();
@@ -84,9 +81,6 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
       }
     } catch (e) {
       debugPrint('Profile fetch error: $e');
-    } finally {
-      if (!mounted) return;
-      setState(() => _isLoadingProfile = false);
     }
   }
 
@@ -122,11 +116,15 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
   Future<void> _fetchProducts() async {
     try {
       final products = await DatabaseService.fetchProducts();
+      final trending = await DatabaseService.getTrendingProducts();
       if (!mounted) return;
       _products = products;
       
       // Group by category with display names
       Map<String, List<Map<String, dynamic>>> grouped = {};
+      if (trending.isNotEmpty) {
+        grouped['Trending'] = trending;
+      }
       for (var product in _products) {
         final category = product['category'] ?? 'Other';
         final displayName = categoryNames[category] ?? category;
@@ -286,10 +284,18 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
                             height: 34,
                             child: FilledButton(
                               onPressed: productId != null
-                                  ? () => Navigator.pushNamed(
-                                        context,
-                                        '/product/$productId',
-                                      )
+                                  ? () async {
+                                      await DatabaseService.trackProductClick(
+                                        productId: productId,
+                                        storeId: item['store_id']?.toString(),
+                                      );
+                                      if (mounted) {
+                                        Navigator.pushNamed(
+                                          context,
+                                          '/product/$productId',
+                                        );
+                                      }
+                                    }
                                   : null,
                               child: const Text('Buy'),
                             ),
@@ -477,7 +483,11 @@ Widget heroSection() {
                           CircleAvatar(
                             backgroundImage:
                                 (_userProfile!['profile_image_url']?.toString() ?? '').isNotEmpty
-                                    ? NetworkImage(_userProfile!['profile_image_url'].toString())
+                                    ? NetworkImage(
+                                        DatabaseService.getProfileImageUrl(
+                                          _userProfile!['profile_image_url'].toString(),
+                                        ),
+                                      )
                                     : null,
                             child: (_userProfile!['profile_image_url']?.toString() ?? '').isEmpty
                                 ? const Icon(Icons.person)

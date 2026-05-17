@@ -194,8 +194,8 @@ class _SearchPageState extends State<SearchPage> {
                       children: [
                         Text(
                           'PHP ${product['price']}',
-                          style: const TextStyle(
-                            color: Colors.green,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -273,7 +273,7 @@ class _SearchPageState extends State<SearchPage> {
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  value: _category,
+                  initialValue: _category,
                   isExpanded: true,
                   decoration: const InputDecoration(
                     labelText: 'Category',
@@ -295,7 +295,7 @@ class _SearchPageState extends State<SearchPage> {
               const SizedBox(width: 10),
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  value: _sort,
+                  initialValue: _sort,
                   isExpanded: true,
                   decoration: const InputDecoration(
                     labelText: 'Sort',

@@ -96,6 +96,40 @@ To do (recheck)
 
 To do
 - in main.dart, the product box is really unbalanced in terms of element placement (price looks ugly af), it also destroys the space because of long text, please do "Alaska Condens..." to preserve element placement. 
-- Move Become Seller and Rider to Create account, create account becomes a dropdown: Buy Products, Become Seller, Become Rider
-- Themes should only be per account, not leak on logout.
+- Move Become Seller and Rider to Create Account, Create Account becomes a dropdown: Buy Products, Become Seller, Become Rider
+- Themes should only be saved per account, not leak on logout, goes back to default.
 - I think there's a stray space above the hero in main.dart (i remember having a debug element for supabase there.)
+- Improve README.md (some information are inaccurate)
+- In main, long text breaks position of elements, truncate it to not break position, price is way over to the left (only one line only, 2 lines break the position of elements)
+- Add scroll (carousel) to sections (categories) on buyer's dashboard (i can't move the products to the left to see more products on the right), both main and buyer's dashboard
+- Logout stuck on dashboard (it just doesn't go back for some reason and need to restart), after restart, show login, press x, and main doesn't even load, after refresh, login again press x and back to normal again.
+- Fetch public IP on click tracking
+- Create Trending section (For all products in buyer's dashboard/main, Only their items fetched in Store front), fetched using click tracking.
+- Make sure that the records on the click tracking only last for 1 week (individually), then it will automatically be removed.
+- Implement Realtime (supabase) for critical functions.
+
+
+blue errors (remove this on fix):
+Don't use 'BuildContext's across async gaps.
+Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check.
+'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre.
+Try replacing the use of the deprecated member with the replacement.
+Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check.
+Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext.
+'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.
+Try replacing the use of the deprecated member with the replacement.
+Use of 'return' in a 'finally' clause.
+Try restructuring the code.
+'groupValue' is deprecated and shouldn't be used. Use a RadioGroup ancestor to manage group value instead. This feature was deprecated after v3.32.0-0.0.pre.
+Try replacing the use of the deprecated member with the replacement.
+'onChanged' is deprecated and shouldn't be used. Use RadioGroup to handle value change instead. This feature was deprecated after v3.32.0-0.0.pre.
+Try replacing the use of the deprecated member with the replacement.
+Unnecessary use of multiple underscores.
+Try using '_'.
+The import of 'package:flutter/foundation.dart' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart'.
+Try removing the import directive.
+
+
+yellow errors (remove this on fix)
+bool _isLoadingProfile = true; (buyers_dashboard)
+line 120 (address_page)

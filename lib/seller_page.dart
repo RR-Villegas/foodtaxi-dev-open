@@ -13,12 +13,16 @@ class SellerPage extends StatefulWidget {
 }
 
 class _SellerPageState extends State<SellerPage> {
+  static const int _allProductsPageSize = 20;
+
   Map<String, dynamic>? _store;
   List<Map<String, dynamic>> _products = [];
+  List<Map<String, dynamic>> _trendingProducts = [];
   List<Map<String, dynamic>> _reviews = [];
   Map<String, dynamic>? _myReview;
   bool _canReviewStore = false;
   bool _isLoading = true;
+  int _allProductsPage = 0;
 
   @override
   void initState() {
@@ -29,6 +33,9 @@ class _SellerPageState extends State<SellerPage> {
   Future<void> _loadSeller() async {
     final store = await DatabaseService.getStoreById(widget.storeId);
     final products = await DatabaseService.getProductsForStore(widget.storeId);
+    final trending = await DatabaseService.getTrendingProducts(
+      storeId: widget.storeId,
+    );
     final reviews = await DatabaseService.getStoreReviews(widget.storeId);
     final canReview = await DatabaseService.buyerHasDeliveredOrderFromStore(
       widget.storeId,
@@ -40,10 +47,13 @@ class _SellerPageState extends State<SellerPage> {
     setState(() {
       _store = store;
       _products = products.where((item) => item['is_active'] != false).toList();
+      _trendingProducts =
+          trending.where((item) => item['is_active'] != false).toList();
       _reviews = reviews;
       _canReviewStore = canReview;
       _myReview = myReview;
       _isLoading = false;
+      _allProductsPage = 0;
     });
   }
 
@@ -73,6 +83,36 @@ class _SellerPageState extends State<SellerPage> {
       (sum, review) => sum + (double.tryParse(review['rating']?.toString() ?? '') ?? 0),
     );
     return total / _reviews.length;
+  }
+
+  String _storeLocation(Map<String, dynamic>? store) {
+    if (store == null) return '';
+    final parts = [
+      store['house_number'],
+      store['street'],
+      store['barangay'],
+      store['city'],
+      store['province'],
+      store['zip_code'],
+    ]
+        .map((part) => part?.toString().trim() ?? '')
+        .where((part) => part.isNotEmpty)
+        .toList();
+    return parts.join(', ');
+  }
+
+  String _ownerName(Map<String, dynamic>? store) {
+    final account = store?['account'];
+    if (account is! Map) return '';
+    final first = account['firstname']?.toString().trim() ?? '';
+    final last = account['surname']?.toString().trim() ?? '';
+    return '$first $last'.trim();
+  }
+
+  String _ownerImage(Map<String, dynamic>? store) {
+    final account = store?['account'];
+    if (account is! Map) return '';
+    return account['profile_image_url']?.toString().trim() ?? '';
   }
 
   Future<void> _reviewStore() async {
@@ -363,6 +403,50 @@ class _SellerPageState extends State<SellerPage> {
     );
   }
 
+  Widget _allProductsPager({
+    required int totalProducts,
+    required int currentPage,
+    required int totalPages,
+  }) {
+    final start = currentPage * _allProductsPageSize + 1;
+    final end = (start + _allProductsPageSize - 1).clamp(1, totalProducts);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Showing $start-$end of $totalProducts',
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+            ),
+          ),
+          IconButton.filledTonal(
+            tooltip: 'Previous page',
+            onPressed: currentPage == 0
+                ? null
+                : () => setState(() => _allProductsPage -= 1),
+            icon: const Icon(Icons.chevron_left),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text(
+              '${currentPage + 1} / $totalPages',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          IconButton.filledTonal(
+            tooltip: 'Next page',
+            onPressed: currentPage >= totalPages - 1
+                ? null
+                : () => setState(() => _allProductsPage += 1),
+            icon: const Icon(Icons.chevron_right),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _horizontalSection(List<Map<String, dynamic>> products) {
     return SizedBox(
       height: 292,
@@ -461,8 +545,11 @@ class _SellerPageState extends State<SellerPage> {
   @override
   Widget build(BuildContext context) {
     final storeName = _store?['store_name']?.toString() ?? 'Seller';
-    final city = _store?['city']?.toString() ?? '';
+    final location = _storeLocation(_store);
     final description = _store?['description']?.toString() ?? '';
+    final ownerName = _ownerName(_store);
+    final ownerImage = _ownerImage(_store);
+    final isOpen = _store?['is_open'] != false;
     final activeProducts = _products.where((item) => item['is_active'] != false).toList();
     final newProducts = activeProducts.take(8).toList();
     final bestSellers = [...activeProducts]
@@ -472,6 +559,17 @@ class _SellerPageState extends State<SellerPage> {
         return _rating(b).compareTo(_rating(a));
       });
     final bestSellerProducts = bestSellers.take(8).toList();
+    final totalPages = activeProducts.isEmpty
+        ? 1
+        : ((activeProducts.length + _allProductsPageSize - 1) ~/
+            _allProductsPageSize);
+    final currentPage = activeProducts.isEmpty
+        ? 0
+        : _allProductsPage.clamp(0, totalPages - 1) as int;
+    final pagedProducts = activeProducts
+        .skip(currentPage * _allProductsPageSize)
+        .take(_allProductsPageSize)
+        .toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -491,32 +589,67 @@ class _SellerPageState extends State<SellerPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            storeName,
-                            style: const TextStyle(
-                              fontSize: 26,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          if (city.isNotEmpty) ...[
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                const Icon(Icons.place_outlined, size: 18),
-                                const SizedBox(width: 4),
-                                Text(city),
-                              ],
-                            ),
-                          ],
-                          if (description.isNotEmpty) ...[
-                            const SizedBox(height: 10),
-                            Text(description),
-                          ],
-                          const SizedBox(height: 16),
-                          Wrap(
-                            spacing: 10,
-                            runSpacing: 8,
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              CircleAvatar(
+                                radius: 28,
+                                backgroundImage: ownerImage.isNotEmpty
+                                    ? NetworkImage(
+                                        DatabaseService.getProfileImageUrl(
+                                          ownerImage,
+                                        ),
+                                      )
+                                    : null,
+                                child: ownerImage.isEmpty
+                                    ? const Icon(Icons.storefront_outlined)
+                                    : null,
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      storeName,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 26,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    if (ownerName.isNotEmpty) ...[
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        'by $ownerName',
+                                        style: TextStyle(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 8,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Chip(
+                                avatar: Icon(
+                                  isOpen
+                                      ? Icons.check_circle_outline
+                                      : Icons.pause_circle_outline,
+                                ),
+                                label: Text(isOpen ? 'Open' : 'Closed'),
+                              ),
                               Chip(
                                 avatar: const Icon(Icons.inventory_2_outlined),
                                 label: Text('${activeProducts.length} products'),
@@ -529,6 +662,26 @@ class _SellerPageState extends State<SellerPage> {
                               ),
                             ],
                           ),
+                          if (location.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(Icons.place_outlined, size: 18),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    location,
+                                    style: const TextStyle(height: 1.25),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                          if (description.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            Text(description, style: const TextStyle(height: 1.35)),
+                          ],
                           const SizedBox(height: 12),
                           Wrap(
                             spacing: 10,
@@ -561,6 +714,10 @@ class _SellerPageState extends State<SellerPage> {
                         children: [
                           _sectionTitle('New Products', Icons.fiber_new_outlined),
                           _horizontalSection(newProducts),
+                          if (_trendingProducts.isNotEmpty) ...[
+                            _sectionTitle('Trending', Icons.trending_up_outlined),
+                            _horizontalSection(_trendingProducts),
+                          ],
                           _sectionTitle('Best Seller', Icons.local_fire_department_outlined),
                           _horizontalSection(bestSellerProducts),
                           _sectionTitle('All Products', Icons.storefront_outlined),
@@ -574,13 +731,23 @@ class _SellerPageState extends State<SellerPage> {
                             16,
                             index == 0 ? 0 : 10,
                             16,
-                            index == activeProducts.length - 1 ? 24 : 0,
+                            index == pagedProducts.length - 1 ? 8 : 0,
                           ),
-                          child: _productRow(activeProducts[index]),
+                          child: _productRow(pagedProducts[index]),
                         ),
-                        childCount: activeProducts.length,
+                        childCount: pagedProducts.length,
                       ),
                     ),
+                    if (activeProducts.length > _allProductsPageSize)
+                      SliverToBoxAdapter(
+                        child: _allProductsPager(
+                          totalProducts: activeProducts.length,
+                          currentPage: currentPage,
+                          totalPages: totalPages,
+                        ),
+                      )
+                    else
+                      const SliverToBoxAdapter(child: SizedBox(height: 24)),
                   ],
                 ],
               ),

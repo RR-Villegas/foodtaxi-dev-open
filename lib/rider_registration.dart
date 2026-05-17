@@ -545,7 +545,7 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Material(
-            color: Colors.white.withOpacity(0.92),
+            color: Colors.white.withAlpha(235),
             shape: const CircleBorder(),
             elevation: 3,
             child: IconButton(
@@ -617,12 +617,13 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
   }
 
   Widget _sidePanel() {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFF2d8f4e), Color(0xFF1e5322)],
+          colors: [scheme.primary, scheme.secondary],
         ),
       ),
       padding: const EdgeInsets.all(32),
@@ -675,7 +676,7 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
     return Container(
       height: 2,
       width: 30,
-      color: active ? const Color(0xFF2d8f4e) : Colors.grey[300],
+      color: active ? Theme.of(context).colorScheme.primary : Colors.grey[300],
     );
   }
 
@@ -690,7 +691,7 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: isCurrent || isCompleted
-                ? const Color(0xFF2d8f4e)
+                ? Theme.of(context).colorScheme.primary
                 : Colors.grey[300],
           ),
           child: Center(
@@ -803,7 +804,7 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
         ),
         const SizedBox(height: 24),
         DropdownButtonFormField<String>(
-          value: _vehicleType,
+          initialValue: _vehicleType,
           items: const ['Motorcycle', 'Bicycle', 'Van']
               .map((type) => DropdownMenuItem(value: type, child: Text(type)))
               .toList(),
@@ -873,8 +874,6 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
                 ? null
                 : (_currentStep < 4 ? _nextStep : _submitApplication),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF2d8f4e),
-              foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
             ),
             child: Text(
@@ -1095,7 +1094,10 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Color(0xFF2d8f4e), width: 2),
+        borderSide: BorderSide(
+          color: Theme.of(context).colorScheme.primary,
+          width: 2,
+        ),
       ),
     );
   }

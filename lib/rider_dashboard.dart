@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'services/auth_service.dart';
 import 'services/database_service.dart';
@@ -14,6 +15,10 @@ class RiderDashboard extends StatefulWidget {
 }
 
 class _RiderDashboardState extends State<RiderDashboard> {
+  final _supabase = Supabase.instance.client;
+  RealtimeChannel? _readyOrdersChannel;
+  RealtimeChannel? _assignedOrdersChannel;
+
   List<Map<String, dynamic>> _orders = [];
   List<Map<String, dynamic>> _historyOrders = [];
   Map<String, dynamic>? _account;
@@ -27,6 +32,17 @@ class _RiderDashboardState extends State<RiderDashboard> {
   void initState() {
     super.initState();
     _loadOrders();
+  }
+
+  @override
+  void dispose() {
+    final readyOrdersChannel = _readyOrdersChannel;
+    final assignedOrdersChannel = _assignedOrdersChannel;
+    if (readyOrdersChannel != null) _supabase.removeChannel(readyOrdersChannel);
+    if (assignedOrdersChannel != null) {
+      _supabase.removeChannel(assignedOrdersChannel);
+    }
+    super.dispose();
   }
 
   Future<void> _logout() async {
@@ -63,6 +79,41 @@ class _RiderDashboardState extends State<RiderDashboard> {
       _historyOrders = historyOrders;
       _isLoading = false;
     });
+    _subscribeToOrders(account?['account_id']?.toString());
+  }
+
+  void _subscribeToOrders(String? accountId) {
+    _readyOrdersChannel ??= _supabase
+          .channel('rider-ready-orders')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'orders',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'order_status',
+              value: 'Ready for Pickup',
+            ),
+            callback: (_) => _loadOrders(),
+          )
+          .subscribe();
+
+    if (accountId != null && _assignedOrdersChannel == null) {
+      _assignedOrdersChannel = _supabase
+          .channel('rider-assigned-orders-$accountId')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'orders',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'rider_account_id',
+              value: accountId,
+            ),
+            callback: (_) => _loadOrders(),
+          )
+          .subscribe();
+    }
   }
 
   Widget _profileMenuHeader() {
@@ -77,7 +128,9 @@ class _RiderDashboardState extends State<RiderDashboard> {
       child: Row(
         children: [
           CircleAvatar(
-            backgroundImage: imageUrl.isNotEmpty ? NetworkImage(imageUrl) : null,
+            backgroundImage: imageUrl.isNotEmpty
+                ? NetworkImage(DatabaseService.getProfileImageUrl(imageUrl))
+                : null,
             child: imageUrl.isEmpty ? const Icon(Icons.person) : null,
           ),
           const SizedBox(width: 10),
@@ -623,7 +676,6 @@ class _RiderDashboardState extends State<RiderDashboard> {
       appBar: AppBar(
         automaticallyImplyLeading: false,
         title: const Text('Rider Dashboard'),
-        backgroundColor: const Color(0xFF2d8f4e),
         actions: [
           const NotificationBell(),
           IconButton(

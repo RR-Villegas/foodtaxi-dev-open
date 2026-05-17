@@ -272,7 +272,6 @@ class _EditProductPageState extends State<EditProductPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_isEditing ? 'Edit Product' : 'Add Product'),
-        backgroundColor: const Color(0xFF2d8f4e),
         actions: [
           TextButton(
             onPressed: _isSaving || _isUploading ? null : _save,
@@ -310,7 +309,7 @@ class _EditProductPageState extends State<EditProductPage> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _category,
+              initialValue: _category,
               decoration: const InputDecoration(labelText: 'Category'),
               items: widget.categories
                   .map((item) => DropdownMenuItem(value: item, child: Text(item)))
@@ -319,7 +318,7 @@ class _EditProductPageState extends State<EditProductPage> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _stockMode,
+              initialValue: _stockMode,
               decoration: const InputDecoration(labelText: 'Stock Mode'),
               items: const [
                 DropdownMenuItem(

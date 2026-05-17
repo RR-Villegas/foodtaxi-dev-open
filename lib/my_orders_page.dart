@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'services/database_service.dart';
 
@@ -10,6 +11,8 @@ class MyOrdersPage extends StatefulWidget {
 }
 
 class _MyOrdersPageState extends State<MyOrdersPage> {
+  final _supabase = Supabase.instance.client;
+  RealtimeChannel? _ordersChannel;
   List<Map<String, dynamic>> _orders = [];
   bool _isLoading = true;
   String _statusFilter = 'All';
@@ -26,6 +29,33 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
   void initState() {
     super.initState();
     _loadOrders();
+    _subscribeToOrders();
+  }
+
+  @override
+  void dispose() {
+    final channel = _ordersChannel;
+    if (channel != null) _supabase.removeChannel(channel);
+    super.dispose();
+  }
+
+  Future<void> _subscribeToOrders() async {
+    final accountId = await DatabaseService.getCurrentAccountId();
+    if (!mounted || accountId == null || _ordersChannel != null) return;
+    _ordersChannel = _supabase
+        .channel('buyer-orders-$accountId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'orders',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'buyer_account_id',
+            value: accountId,
+          ),
+          callback: (_) => _loadOrders(),
+        )
+        .subscribe();
   }
 
   Future<void> _loadOrders() async {

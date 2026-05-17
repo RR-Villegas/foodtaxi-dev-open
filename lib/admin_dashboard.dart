@@ -1008,7 +1008,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
-                  value: type,
+                  initialValue: type,
                   decoration: const InputDecoration(labelText: 'Discount Type'),
                   items: const [
                     DropdownMenuItem(value: 'percent', child: Text('Percent')),
@@ -1447,6 +1447,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Widget _heroSection() {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       height: 200,
       width: double.infinity,
@@ -1455,8 +1456,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            const Color(0xFF2d8f4e),
-            const Color(0xFF2d8f4e).withAlpha(217),
+            scheme.primary,
+            scheme.primary.withAlpha(217),
           ],
         ),
       ),
@@ -1518,7 +1519,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
       child: Row(
         children: [
           CircleAvatar(
-            backgroundImage: imageUrl.isNotEmpty ? NetworkImage(imageUrl) : null,
+            backgroundImage: imageUrl.isNotEmpty
+                ? NetworkImage(DatabaseService.getProfileImageUrl(imageUrl))
+                : null,
             child: imageUrl.isEmpty ? const Icon(Icons.person) : null,
           ),
           const SizedBox(width: 10),
@@ -1561,7 +1564,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
       appBar: AppBar(
         automaticallyImplyLeading: false,
         title: const Text('Admin Panel'),
-        backgroundColor: const Color(0xFF2d8f4e),
         elevation: 0,
         actions: [
           const NotificationBell(),

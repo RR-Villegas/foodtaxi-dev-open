@@ -668,7 +668,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Material(
-            color: Colors.white.withOpacity(0.92),
+            color: Colors.white.withAlpha(235),
             shape: const CircleBorder(),
             elevation: 3,
             child: IconButton(
@@ -752,15 +752,16 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
   }
 
   Widget _buildSidePanel() {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFF2d8f4e), Color(0xFF1e5322)],
+          colors: [scheme.primary, scheme.secondary],
         ),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10),
+          BoxShadow(color: Colors.black.withAlpha(26), blurRadius: 10),
         ],
       ),
       padding: const EdgeInsets.all(32.0),
@@ -800,13 +801,17 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
         Container(
           height: 2,
           width: 30,
-          color: _currentStep > 1 ? const Color(0xFF2d8f4e) : Colors.grey[300],
+          color: _currentStep > 1
+              ? Theme.of(context).colorScheme.primary
+              : Colors.grey[300],
         ),
         _buildStepIndicator('Store', 2),
         Container(
           height: 2,
           width: 30,
-          color: _currentStep > 2 ? const Color(0xFF2d8f4e) : Colors.grey[300],
+          color: _currentStep > 2
+              ? Theme.of(context).colorScheme.primary
+              : Colors.grey[300],
         ),
         _buildStepIndicator('Location', 3),
       ],
@@ -825,7 +830,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: isCurrent || isCompleted
-                ? const Color(0xFF2d8f4e)
+                ? Theme.of(context).colorScheme.primary
                 : Colors.grey[300],
           ),
           child: Center(
@@ -850,7 +855,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
           style: TextStyle(
             fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
             color: isCurrent || isCompleted
-                ? const Color(0xFF2d8f4e)
+                ? Theme.of(context).colorScheme.primary
                 : Colors.grey,
           ),
         ),
@@ -880,7 +885,10 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFF2d8f4e), width: 2),
+              borderSide: BorderSide(
+                color: Theme.of(context).colorScheme.primary,
+                width: 2,
+              ),
             ),
           ),
         ),
@@ -898,7 +906,10 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFF2d8f4e), width: 2),
+              borderSide: BorderSide(
+                color: Theme.of(context).colorScheme.primary,
+                width: 2,
+              ),
             ),
           ),
         ),
@@ -916,7 +927,10 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFF2d8f4e), width: 2),
+              borderSide: BorderSide(
+                color: Theme.of(context).colorScheme.primary,
+                width: 2,
+              ),
             ),
           ),
           keyboardType: TextInputType.emailAddress,
@@ -947,7 +961,10 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFF2d8f4e), width: 2),
+              borderSide: BorderSide(
+                color: Theme.of(context).colorScheme.primary,
+                width: 2,
+              ),
             ),
           ),
           obscureText: !_showPassword,
@@ -979,7 +996,10 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFF2d8f4e), width: 2),
+              borderSide: BorderSide(
+                color: Theme.of(context).colorScheme.primary,
+                width: 2,
+              ),
             ),
           ),
           obscureText: !_showConfirmPassword,
@@ -1056,7 +1076,10 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFF2d8f4e), width: 2),
+              borderSide: BorderSide(
+                color: Theme.of(context).colorScheme.primary,
+                width: 2,
+              ),
             ),
           ),
         ),
@@ -1074,7 +1097,10 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFF2d8f4e), width: 2),
+              borderSide: BorderSide(
+                color: Theme.of(context).colorScheme.primary,
+                width: 2,
+              ),
             ),
           ),
           maxLines: 3,
@@ -1094,7 +1120,10 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFF2d8f4e), width: 2),
+              borderSide: BorderSide(
+                color: Theme.of(context).colorScheme.primary,
+                width: 2,
+              ),
             ),
           ),
           keyboardType: TextInputType.phone,
@@ -1431,12 +1460,9 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
               onPressed: _previousStep,
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                side: const BorderSide(color: Color(0xFF2d8f4e)),
+                side: BorderSide(color: Theme.of(context).colorScheme.primary),
               ),
-              child: const Text(
-                'Previous',
-                style: TextStyle(color: Color(0xFF2d8f4e)),
-              ),
+              child: const Text('Previous'),
             ),
           ),
         if (_currentStep > 1) const SizedBox(width: 16),
@@ -1446,7 +1472,6 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
                 ? null
                 : (_currentStep < 3 ? _nextStep : _submitApplication),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF2d8f4e),
               padding: const EdgeInsets.symmetric(vertical: 14),
               disabledBackgroundColor: Colors.grey[300],
             ),

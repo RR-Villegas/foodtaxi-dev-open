@@ -1,3 +1,5 @@
+import 'dart:ui' show PointerDeviceKind;
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'login_page.dart';
@@ -46,14 +48,17 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<String>(
       valueListenable: ThemeService.selectedThemeId,
-      builder: (context, _, __) {
+      builder: (context, themeId, child) {
+        final currentUri = Uri.base;
+        final isPasswordRecovery =
+            currentUri.fragment.contains('type=recovery') ||
+                currentUri.queryParameters['type'] == 'recovery';
         return MaterialApp(
           title: 'FoodTaxi Omega',
           theme: ThemeService.selectedTheme.toThemeData(),
+          scrollBehavior: const AppScrollBehavior(),
           debugShowCheckedModeBanner: false,
-          initialRoute: Uri.base.fragment.contains('type=recovery')
-              ? '/reset-password'
-              : '/',
+          initialRoute: isPasswordRecovery ? '/reset-password' : '/',
           routes: {
         '/': (context) => const MyHomePage(title: 'FoodTaxi Omega'),
         '/login': (context) => const LoginPage(),
@@ -150,6 +155,18 @@ class MyApp extends StatelessWidget {
   }
 }
 
+class AppScrollBehavior extends MaterialScrollBehavior {
+  const AppScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.stylus,
+        PointerDeviceKind.trackpad,
+      };
+}
+
 class MyHomePage extends StatefulWidget {
   const MyHomePage({super.key, required this.title});
   final String title;
@@ -159,9 +176,6 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  final supabase = Supabase.instance.client;
-
-  String status = "Checking Supabase connection...";
   Map<String, List<Map<String, dynamic>>> foodCategories = {};
   bool isLoadingProducts = true;
 
@@ -187,7 +201,6 @@ class _MyHomePageState extends State<MyHomePage> {
   void initState() {
     super.initState();
     _redirectLoggedInUser();
-    testSupabase();
     _loadProductsFromDatabase();
   }
 
@@ -206,23 +219,16 @@ class _MyHomePageState extends State<MyHomePage> {
     Navigator.pushNamedAndRemoveUntil(context, route, (route) => false);
   }
 
-  Future<void> testSupabase() async {
-    try {
-      await supabase.from('product').select().limit(1);
-      if (!mounted) return;
-      setState(() => status = "");
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => status = "❌ Connection Failed: $e");
-    }
-  }
-
   Future<void> _loadProductsFromDatabase() async {
     try {
       final products = await DatabaseService.fetchProducts();
+      final trending = await DatabaseService.getTrendingProducts();
 
       // Group products by category
       Map<String, List<Map<String, dynamic>>> grouped = {};
+      if (trending.isNotEmpty) {
+        grouped['Trending'] = trending;
+      }
 
       for (var product in products) {
         final category = product['category'] ?? 'Other';
@@ -290,11 +296,50 @@ class _MyHomePageState extends State<MyHomePage> {
         backgroundColor: Theme.of(context).colorScheme.primary,
         title: Text(widget.title),
         actions: [
-          TextButton.icon(
-            onPressed: () => Navigator.pushNamed(context, '/signup'),
-            icon: const Icon(Icons.person_add, size: 18),
-            label: const Text('Create Account'),
-            style: TextButton.styleFrom(foregroundColor: Colors.white),
+          PopupMenuButton<String>(
+            tooltip: 'Create Account',
+            onSelected: (value) {
+              final route = switch (value) {
+                'seller' => '/seller-registration',
+                'rider' => '/rider-registration',
+                _ => '/signup',
+              };
+              Navigator.pushNamed(context, route);
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: 'buyer',
+                child: ListTile(
+                  leading: Icon(Icons.shopping_bag_outlined),
+                  title: Text('Buy Products'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'seller',
+                child: ListTile(
+                  leading: Icon(Icons.storefront_outlined),
+                  title: Text('Become Seller'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'rider',
+                child: ListTile(
+                  leading: Icon(Icons.delivery_dining_outlined),
+                  title: Text('Become Rider'),
+                ),
+              ),
+            ],
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.person_add, size: 18),
+                  SizedBox(width: 6),
+                  Text('Create Account'),
+                  Icon(Icons.arrow_drop_down),
+                ],
+              ),
+            ),
           ),
           const SizedBox(width: 16),
           TextButton.icon(
@@ -309,15 +354,6 @@ class _MyHomePageState extends State<MyHomePage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // STATUS
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text(
-                status,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-
             // HERO
             Container(
               height: 250,
@@ -401,56 +437,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       );
                     }).toList(),
                   ),
-
             const SizedBox(height: 20),
-
-            // CTA
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final isNarrow = constraints.maxWidth < 560;
-                  final actions = [
-                    _roleCta(
-                      title: 'Become a Seller',
-                      body: 'Grow your business with FoodTaxi Omega.',
-                      buttonText: 'Start Selling',
-                      icon: Icons.storefront,
-                      color: Colors.amber,
-                      onPressed: () =>
-                          Navigator.pushNamed(context, '/seller-registration'),
-                    ),
-                    _roleCta(
-                      title: 'Become a Rider',
-                      body: 'Deliver orders and earn with FoodTaxi Omega.',
-                      buttonText: 'Start Riding',
-                      icon: Icons.delivery_dining,
-                      color: const Color(0xFF2d8f4e),
-                      onPressed: () =>
-                          Navigator.pushNamed(context, '/rider-registration'),
-                    ),
-                  ];
-
-                  if (isNarrow) {
-                    return Column(
-                      children: [
-                        actions[0],
-                        const SizedBox(height: 12),
-                        actions[1],
-                      ],
-                    );
-                  }
-
-                  return Row(
-                    children: [
-                      Expanded(child: actions[0]),
-                      const SizedBox(width: 12),
-                      Expanded(child: actions[1]),
-                    ],
-                  );
-                },
-              ),
-            ),
           ],
         ),
       ),
@@ -470,48 +457,9 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  Widget _roleCta({
-    required String title,
-    required String body,
-    required String buttonText,
-    required IconData icon,
-    required Color color,
-    required VoidCallback onPressed,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.black12),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, size: 34, color: color),
-          const SizedBox(height: 8),
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            body,
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 14),
-          ElevatedButton(
-            onPressed: onPressed,
-            style: ElevatedButton.styleFrom(backgroundColor: color),
-            child: Text(buttonText),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget horizontalFoodList(List<Map<String, dynamic>> items) {
     return SizedBox(
-      height: 324,
+      height: 304,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -562,48 +510,62 @@ class _MyHomePageState extends State<MyHomePage> {
                               child: const Icon(Icons.image),
                             ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.all(6),
-                      child: Text(
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
                               DatabaseService.displayProductName(item['name']),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    Text(
-                      "PHP ${_price(item).toStringAsFixed(2)}",
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.primary,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _stars(rating),
-                        const SizedBox(width: 4),
-                        Text(
-                          '($reviewCount)',
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(6, 0, 6, 6),
-                      child: SizedBox(
-                        width: double.infinity,
-                        height: 34,
-                        child: FilledButton(
-                          onPressed: productId != null
-                              ? () => Navigator.pushNamed(
-                                    context,
-                                    '/product/$productId',
-                                  )
-                              : null,
-                          child: const Text('View'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              "PHP ${_price(item).toStringAsFixed(2)}",
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Row(
+                              children: [
+                                _stars(rating),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '($reviewCount)',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ],
+                            ),
+                            const Spacer(),
+                            SizedBox(
+                              width: double.infinity,
+                              height: 34,
+                              child: FilledButton(
+                                onPressed: productId != null
+                                    ? () async {
+                                        await DatabaseService.trackProductClick(
+                                          productId: productId,
+                                          storeId: item['store_id']?.toString(),
+                                        );
+                                        if (mounted) {
+                                          Navigator.pushNamed(
+                                            context,
+                                            '/product/$productId',
+                                          );
+                                        }
+                                      }
+                                    : null,
+                                child: const Text('View'),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),

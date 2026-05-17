@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/address_model.dart';
 import 'input_validator.dart';
@@ -9,6 +11,7 @@ import 'location_service.dart';
 
 class DatabaseService {
   static final _supabase = Supabase.instance.client;
+  static String? _cachedPublicIpHash;
 
   static void _logDbError(String message, Object error) {
     debugPrint('DB Error: $message: $error');
@@ -16,6 +19,33 @@ class DatabaseService {
 
   static String displayProductName(dynamic value) {
     return InputValidator.cleanProductTitle(value?.toString());
+  }
+
+  static String _stableHash(String value) {
+    var hash = 0x811c9dc5;
+    for (final codeUnit in value.codeUnits) {
+      hash ^= codeUnit;
+      hash = (hash * 0x01000193) & 0xffffffff;
+    }
+    return hash.toRadixString(16).padLeft(8, '0');
+  }
+
+  static Future<String?> _publicIpHash() async {
+    if (_cachedPublicIpHash != null) return _cachedPublicIpHash;
+    try {
+      final response = await http
+          .get(Uri.parse('https://api.ipify.org?format=json'))
+          .timeout(const Duration(seconds: 3));
+      if (response.statusCode != 200) return null;
+      final data = jsonDecode(response.body);
+      final ip = data is Map ? data['ip']?.toString().trim() : null;
+      if (ip == null || ip.isEmpty) return null;
+      _cachedPublicIpHash = _stableHash(ip);
+      return _cachedPublicIpHash;
+    } catch (e) {
+      _logDbError('Failed to fetch public IP for click tracking', e);
+      return null;
+    }
   }
 
   // Insert address for a user
@@ -795,14 +825,65 @@ class DatabaseService {
   }) async {
     try {
       final accountId = await getCurrentAccountId();
-      if (accountId == null) return;
+      final ipHash = await _publicIpHash();
       await _supabase.from('product_click').insert({
         'product_id': productId,
         'store_id': _blankToNull(storeId),
         'account_id': accountId,
+        'ip_hash': ipHash,
       });
     } catch (e) {
       _logDbError('Failed to track product click', e);
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getTrendingProducts({
+    String? storeId,
+    int limit = 12,
+  }) async {
+    try {
+      final clicks = await _supabase.rpc(
+        'get_trending_product_clicks',
+        params: {
+          'p_store_id': _blankToNull(storeId),
+          'p_limit': limit,
+        },
+      );
+      final counts = <String, int>{};
+      for (final row in List<Map<String, dynamic>>.from(clicks)) {
+        final productId = row['product_id']?.toString();
+        if (productId == null || productId.isEmpty) continue;
+        counts[productId] = _toInt(row['click_count']);
+      }
+
+      if (counts.isEmpty) return [];
+
+      final orderedIds = counts.keys.toList()
+        ..sort((a, b) => (counts[b] ?? 0).compareTo(counts[a] ?? 0));
+      final selectedIds = orderedIds.take(limit).toList();
+
+      var productRequest = _supabase
+          .from('product')
+          .select()
+          .inFilter('product_id', selectedIds)
+          .eq('is_active', true);
+      if (_blankToNull(storeId) != null) {
+        productRequest = productRequest.eq('store_id', storeId!);
+      }
+
+      final response = await productRequest;
+      final products = await _withProductRatings(
+        List<Map<String, dynamic>>.from(response),
+      );
+      products.sort((a, b) {
+        final aId = a['product_id']?.toString() ?? '';
+        final bId = b['product_id']?.toString() ?? '';
+        return (counts[bId] ?? 0).compareTo(counts[aId] ?? 0);
+      });
+      return products;
+    } catch (e) {
+      _logDbError('Failed to fetch trending products', e);
+      return [];
     }
   }
 
@@ -1517,7 +1598,9 @@ class DatabaseService {
   }
 
   static String getProfileImageUrl(String fileName) {
-    return _supabase.storage.from('profile-images').getPublicUrl(fileName);
+    final value = fileName.trim();
+    if (value.startsWith('http')) return value;
+    return _supabase.storage.from('profile-images').getPublicUrl(value);
   }
 
   static Future<String?> uploadProfileImage({

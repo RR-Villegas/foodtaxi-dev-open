@@ -40,7 +40,7 @@ class _SettingsPageState extends State<SettingsPage> {
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: DropdownButtonFormField<String>(
-                value: _themeId,
+                initialValue: _themeId,
                 decoration: const InputDecoration(
                   labelText: 'Theme',
                   prefixIcon: Icon(Icons.palette_outlined),

@@ -540,7 +540,7 @@ class _SignupPageState extends State<SignupPage> {
                       borderRadius: BorderRadius.circular(28),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
+                          color: Colors.black.withAlpha(26),
                           blurRadius: 28,
                           offset: const Offset(0, 16),
                         ),
@@ -1034,7 +1034,7 @@ class _SignupPageState extends State<SignupPage> {
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.18),
+            color: Colors.black.withAlpha(46),
             blurRadius: 24,
             offset: const Offset(0, 12),
           ),

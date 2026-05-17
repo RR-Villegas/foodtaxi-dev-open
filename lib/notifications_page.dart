@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'services/database_service.dart';
 
@@ -10,6 +11,8 @@ class NotificationsPage extends StatefulWidget {
 }
 
 class _NotificationsPageState extends State<NotificationsPage> {
+  final _supabase = Supabase.instance.client;
+  RealtimeChannel? _notificationsChannel;
   static const _types = [
     'All',
     'System',
@@ -37,6 +40,33 @@ class _NotificationsPageState extends State<NotificationsPage> {
   void initState() {
     super.initState();
     _loadNotifications();
+    _subscribeToNotifications();
+  }
+
+  @override
+  void dispose() {
+    final channel = _notificationsChannel;
+    if (channel != null) _supabase.removeChannel(channel);
+    super.dispose();
+  }
+
+  Future<void> _subscribeToNotifications() async {
+    final accountId = await DatabaseService.getCurrentAccountId();
+    if (!mounted || accountId == null || _notificationsChannel != null) return;
+    _notificationsChannel = _supabase
+        .channel('notifications-$accountId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'notification',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'account_id',
+            value: accountId,
+          ),
+          callback: (_) => _loadNotifications(),
+        )
+        .subscribe();
   }
 
   Future<void> _loadNotifications() async {
@@ -139,7 +169,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                                         : Icons.notifications_active,
                                     color: isRead
                                         ? Colors.grey
-                                        : const Color(0xFF2d8f4e),
+                                        : Theme.of(context).colorScheme.primary,
                                   ),
                                   title: Text(
                                     item['title']?.toString() ?? 'Notification',

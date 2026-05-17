@@ -96,7 +96,6 @@ class OrderReceiptPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Receipt'),
-        backgroundColor: const Color(0xFF2d8f4e),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),

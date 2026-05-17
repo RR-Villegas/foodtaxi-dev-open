@@ -179,8 +179,10 @@ class _CartPageState extends State<CartPage> {
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: Colors.green[50],
-              border: Border(top: BorderSide(color: Colors.green[200]!)),
+              color: Theme.of(context).colorScheme.primaryContainer,
+              border: Border(
+                top: BorderSide(color: Theme.of(context).colorScheme.outline),
+              ),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -192,10 +194,10 @@ class _CartPageState extends State<CartPage> {
                 Text(
                   // FIXED LINE 141: Ensuring totalPrice is treated as a double
                   '₱${(CartModel.totalPrice).toStringAsFixed(2)}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 22, 
                     fontWeight: FontWeight.bold, 
-                    color: Color(0xFF2d8f4e),
+                    color: Theme.of(context).colorScheme.primary,
                   ),
                 ),
               ],
@@ -208,8 +210,6 @@ class _CartPageState extends State<CartPage> {
               height: 56,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2d8f4e),
-                  foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 onPressed: () {

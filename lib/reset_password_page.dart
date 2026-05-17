@@ -107,7 +107,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
+                  color: Colors.black.withAlpha(20),
                   blurRadius: 24,
                   offset: const Offset(0, 12),
                 ),
@@ -117,10 +117,10 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
+                Icon(
                   Icons.lock_reset,
                   size: 48,
-                  color: Color(0xFF2d8f4e),
+                  color: Theme.of(context).colorScheme.primary,
                 ),
                 const SizedBox(height: 16),
                 const Text(
@@ -180,8 +180,6 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                 ElevatedButton(
                   onPressed: _isLoading ? null : _resetPassword,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2d8f4e),
-                    foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
                   child: _isLoading
@@ -226,7 +224,10 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFF2d8f4e), width: 2),
+          borderSide: BorderSide(
+            color: Theme.of(context).colorScheme.primary,
+            width: 2,
+          ),
         ),
       ),
     );

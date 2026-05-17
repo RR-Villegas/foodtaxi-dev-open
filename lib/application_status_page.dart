@@ -77,7 +77,7 @@ class _ApplicationStatusPageState extends State<ApplicationStatusPage> {
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
+                  color: Colors.black.withAlpha(20),
                   blurRadius: 24,
                   offset: const Offset(0, 12),
                 ),
@@ -95,7 +95,7 @@ class _ApplicationStatusPageState extends State<ApplicationStatusPage> {
                             : Icons.pending_actions,
                         color: isRejected
                             ? Colors.red
-                            : const Color(0xFF2d8f4e),
+                            : Theme.of(context).colorScheme.primary,
                         size: 48,
                       ),
                       const SizedBox(height: 16),
@@ -150,8 +150,6 @@ class _ApplicationStatusPageState extends State<ApplicationStatusPage> {
                         ElevatedButton(
                           onPressed: _resubmit,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF2d8f4e),
-                            foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 14),
                           ),
                           child: Text(

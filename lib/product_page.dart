@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -348,8 +347,8 @@ class _ProductPageState extends State<ProductPage> {
                                     ),
                             child: Text(
                               sellerName,
-                              style: const TextStyle(
-                                color: Colors.green,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.primary,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -357,10 +356,10 @@ class _ProductPageState extends State<ProductPage> {
                           const SizedBox(height: 12),
                           Text(
                             'PHP ${selectedPrice.toStringAsFixed(2)}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 22,
                               fontWeight: FontWeight.bold,
-                              color: Colors.green,
+                              color: Theme.of(context).colorScheme.primary,
                             ),
                           ),
                           const SizedBox(height: 12),
