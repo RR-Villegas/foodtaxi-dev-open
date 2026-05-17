@@ -71,4 +71,26 @@ Latest done
 - Settings now has theme selection: Default, Dark Mode, Koishi Komeiji, Komeiji Satori, Rin Kaenbyou, Utsuho Reiuji.
 
 To do
-- Deploy the Brevo Edge Function. The local function exists, but Supabase project currently reports no deployed Edge Functions.
+- Deploy the Brevo Edge Function. The local function exists, but Supabase project currently reports no deployed Edge Functions. (recheck again)
+- Buyer, In mobile, the item box have a 7px oveflow.
+- Theme optimization, fix the icons blending with background, make it darker/lighter (depends on theme)
+- Buyer, Long text breaks small box (especially in storefront):
+Another exception was thrown: A RenderFlex overflowed by 7.0 pixels on the bottom.
+Another exception was thrown: A RenderFlex overflowed by 7.0 pixels on the bottom.
+Another exception was thrown: A RenderFlex overflowed by 7.0 pixels on the bottom.
+Make it so that it will do "Strawberry Pastry...", so that it doesn't move the other stuff.
+- Buyer, in storefront page, add the buy button on each products
+- Buyer, in dashboard, there is no scrolling (left-right) on each section (eg baking).
+- Some pages are unaffected by the themes
+- Make the navbar also change accordingly to the theme
+- Make the changes also reflect to the main.dart
+- Buyer, clicking logout doesn't fully log out, had to log out twice to actually proceed (console logs 2 logout, bug)
+- Buyer, Shorten the search when not selected, enlarge when selected (with animation)
+- Buyer, in the filter, when there's atleast a letter, the list/dropdown will appear (only appears when it is selected)
+- Add a way to track clicks (eg. clicking on the product > storepage), must rate limit every account and/or ip for 30 seconds. (eg click product, + click, click again too early, not register). This will be the backbone of the trending section (buyer dashboard/main/seller storefront), clicks are tracked every day and only lasts for a week.
+- General, add the profile image on the hamburger dropdown (beside the name/email on the left, you can enlarge the dropdown a bit to accommodate)
+- Database, add/expand the categories, i felt that this is too small.
+- Rename the tagline at the main/buyer's dashboard, it is not accurate.
+- Buyer, storefront all products is too big, make it like the rectangle when you search a product.
+- Add report product
+- Admin, report section (filtered by store or product)
