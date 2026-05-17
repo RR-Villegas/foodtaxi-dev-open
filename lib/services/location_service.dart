@@ -18,6 +18,9 @@ class LocationService {
   static const String _apiBaseUrl = 'https://psgc.gitlab.io/api';
   static const String _nominatimUrl = 'https://nominatim.openstreetmap.org/search';
   static const String _osrmUrl = 'https://router.project-osrm.org/route/v1/driving';
+  static const int bulkDeliveryMinOrders = 10;
+  static const int bulkDeliveryMaxOrders = 20;
+  static const double bulkDeliveryLongDistanceKm = 12;
 
   static List<Map<String, dynamic>>? _cachedProvinces;
 
@@ -355,6 +358,18 @@ class LocationService {
 
   static double deliveryFeeForDistance(double distanceKm) {
     return max(10, distanceKm * 10).ceilToDouble();
+  }
+
+  static int bulkDeliveryShareCount(double distanceKm) {
+    return distanceKm >= bulkDeliveryLongDistanceKm
+        ? bulkDeliveryMaxOrders
+        : bulkDeliveryMinOrders;
+  }
+
+  static double bulkDeliveryFeeForDistance(double distanceKm) {
+    final sharedFee =
+        deliveryFeeForDistance(distanceKm) / bulkDeliveryShareCount(distanceKm);
+    return max(10, sharedFee).ceilToDouble();
   }
 
   static double _radians(double degrees) => degrees * pi / 180;

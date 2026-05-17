@@ -266,3 +266,79 @@ Latest location verification fix
   - city/province fallback.
 - Location normalization removes prefixes like CITY OF/MUNICIPALITY OF and expands Sta/Sta. to Santa.
 - Seller registration, rider registration, and address add/edit now pass the zip code into geocoding.
+
+Latest seller/rider dashboard todo
+- Seller dashboard now opens to an Overview tab before Products/Orders/Sales.
+  - Overview shows sales from delivered orders, delivered count, active order count, product count, and day/week/month/year order history.
+- Rider dashboard now has Overview, Deliveries, and History tabs.
+  - Overview shows delivered count, earnings, ready queue count, in-transit count, and day/week/month/year delivery history.
+  - History loads assigned rider orders through DatabaseService.getCurrentRiderOrders().
+- Rider delivered orders now show a Completed chip instead of another delivery action button.
+- Seller dashboard Orders tab now has status filter chips for All, Processing, Ready for Pickup, In Transit, Delivered, and Cancelled.
+
+Latest seller product stock/SKU todo
+- Applied Supabase migration product_shared_stock_and_sku.
+  - product.stock_mode: independent or shared.
+  - product.base_size_label and product.base_unit_quantity.
+  - product_variant.stock_unit_quantity and product_variant.sku.
+  - app_private.foodtaxi_sku(product_name, size_label).
+  - app_private.decrement_order_item_stock now deducts variant stock in independent mode, but deducts product.stock_quantity by quantity * stock_unit_quantity/base_unit_quantity in shared mode.
+- Current product and variant SKUs were backfilled from product name + size.
+- Seller product editor now has Stock Mode, Default Size, Unit/Deduct Amount, generated SKU display, and variant deduct amounts for shared stock mode.
+- Product page now shows the default size instead of generic Base, switches stock availability for shared mode by unit amount, and displays selected variant/default SKU.
+- Supabase smoke test used disposable rows to verify one 50-unit variant order reduced shared stock from 100 to 50; disposable rows were cleaned up.
+- Supabase advisors were run; search_path warnings for the new product stock/SKU functions were fixed. Remaining advisor warnings are pre-existing project-wide RLS/GraphQL/index items.
+
+Latest seller storefront todo
+- Seller shopfront now has New Products, Best Seller, and All Products sections.
+- Storefront product cards show image, price, star rating, and review count.
+- Storefront product fetches now hydrate product reviews for section sorting/display.
+
+Latest buyer receipt/status todo
+- Added lib/order_receipt_page.dart and /order-receipt route guarded for buyers.
+- My Orders cards now show a processing -> ready for pickup -> in transit -> delivered status flow.
+- Tapping an order opens a bottom-sheet status view with a receipt action.
+- Receipt page shows order id/date/status, payment method/status, coupon, delivery address, item lines, subtotal, delivery fee, service fee, discount, and total paid.
+
+Latest admin/seller/buyer flow todo
+- Supabase schema was updated directly through the Supabase plugin:
+  - discount_coupon.store_id for shop-specific coupons.
+  - public.store_review with delivered-order-gated buyer reviews.
+  - public.store_report with general reports and delivered-order-gated order-related reports.
+  - RLS/policies for seller-owned coupons, store reviews/reports, and admin application notifications.
+  - notification.notification_type now allows Application.
+  - Indexes were added for new store review/report foreign keys.
+- Admin application approval now asks for notes, saves review_notes on approved/rejected applications, sends in-app notifications, and avoids false failure when approval side effects already succeeded.
+- Added supabase/functions/send-application-email/index.ts.
+  - Uses Brevo API endpoint https://api.brevo.com/v3/smtp/email.
+  - Requires Supabase Edge Function secrets: BREVO_API_KEY, BREVO_SENDER_EMAIL, optional BREVO_SENDER_NAME.
+  - Authorizes caller as Admin before sending.
+  - DatabaseService invokes it after writing application notification; email failure is logged but does not fail approval/rejection.
+- ApplicationStatusPage now shows admin notes for both approved and rejected applications.
+- Admin seller/rider application tabs now filter by Pending Review, Approved, Rejected, and All.
+- Admin sales report now filters/searches by order state, time range, order id, buyer account id, seller account id, buyer name/email, or status.
+- Admin daily commission chart now includes Monday through Sunday.
+- Checkout service/admin commission is calculated from discounted product subtotal only; delivery/rider fee is excluded from the commission base.
+- Buyer My Orders now has status filters for All, Processing, Ready for Pickup, In Transit, and Delivered.
+- Seller dashboard now has a Coupons tab for shop-specific discount coupons.
+- Seller storefront now has Review Shop and Report Shop controls. Shop reviews require a delivered order from that store; order-related reports require the same condition.
+
+Latest notifications/bulk/theme todo
+- Supabase project edge function list returned empty, so send-application-email is not deployed from this workspace yet. Supabase CLI is not installed on this machine.
+- Applied DB changes for order notifications and bulk delivery:
+  - orders.delivery_mode: standard or bulk.
+  - orders.bulk_delivery_min_orders and bulk_delivery_max_orders.
+  - app_private.notify_order_events() trigger on orders.
+  - New order inserts notify the seller.
+  - order_status changes notify the buyer.
+  - In Transit and Delivered changes notify the seller.
+  - Ready for Pickup changes notify approved riders within 20km of the store when coordinates are available, otherwise all approved riders.
+- Checkout now has a Bulk delivery switch.
+  - Standard fee remains max(PHP 10, PHP 10/km).
+  - Bulk delivery divides the standard delivery fee across 10 orders for nearer trips and 20 orders for longer trips (12km+), with PHP 10 minimum.
+  - Orders store delivery_mode and bulk min/max order counts.
+- Added lib/services/theme_service.dart.
+  - ThemeService.themes is the central list for adding/editing themes.
+  - Themes available: Default, Dark Mode, Koishi Komeiji, Komeiji Satori, Rin Kaenbyou, Utsuho Reiuji.
+  - main.dart loads the saved theme and wraps MaterialApp in a ValueListenableBuilder.
+  - settings_page.dart now has a Theme dropdown.

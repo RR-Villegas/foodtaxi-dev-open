@@ -17,6 +17,32 @@ class _AdminDashboardState extends State<AdminDashboard> {
   List<Map<String, dynamic>> _orders = [];
   List<Map<String, dynamic>> _coupons = [];
   bool _isLoading = false;
+  final _salesSearchController = TextEditingController();
+  String _salesStatusFilter = 'All';
+  String _salesDateFilter = 'All';
+  String _sellerApplicationFilter = 'Pending Review';
+  String _riderApplicationFilter = 'Pending Review';
+
+  static const List<String> _orderStatusFilters = [
+    'All',
+    'Processing',
+    'Ready for Pickup',
+    'In Transit',
+    'Delivered',
+    'Cancelled',
+  ];
+  static const List<String> _applicationStatusFilters = [
+    'Pending Review',
+    'Approved',
+    'Rejected',
+    'All',
+  ];
+  static const List<String> _salesDateFilters = [
+    'All',
+    'Today',
+    '7 Days',
+    '30 Days',
+  ];
 
   List<Map<String, dynamic>> get _successfulOrders => _orders
       .where((order) {
@@ -32,6 +58,53 @@ class _AdminDashboardState extends State<AdminDashboard> {
   int get _totalOrders => _successfulOrders.length;
   double get _avgCommission =>
       _totalOrders == 0 ? 0 : _totalCommission / _totalOrders;
+
+  List<Map<String, dynamic>> get _filteredSalesOrders {
+    final query = _salesSearchController.text.trim().toLowerCase();
+    final now = DateTime.now();
+
+    return _orders.where((order) {
+      final status = order['order_status']?.toString() ?? 'Processing';
+      if (_salesStatusFilter != 'All' && status != _salesStatusFilter) {
+        return false;
+      }
+
+      final date = DateTime.tryParse(order['order_date']?.toString() ?? '');
+      if (_salesDateFilter != 'All') {
+        if (date == null) return false;
+        final days = DateTime(now.year, now.month, now.day)
+            .difference(DateTime(date.year, date.month, date.day))
+            .inDays;
+        if (_salesDateFilter == 'Today' && days != 0) return false;
+        if (_salesDateFilter == '7 Days' && (days < 0 || days > 6)) {
+          return false;
+        }
+        if (_salesDateFilter == '30 Days' && (days < 0 || days > 29)) {
+          return false;
+        }
+      }
+
+      if (query.isEmpty) return true;
+      final buyer = order['account'];
+      final buyerText = buyer is Map
+          ? '${buyer['firstname'] ?? ''} ${buyer['surname'] ?? ''} ${buyer['email'] ?? ''}'
+          : '';
+      final haystack = [
+        order['order_id'],
+        order['buyer_account_id'],
+        order['seller_account_id'],
+        buyerText,
+        status,
+      ].map((value) => value?.toString().toLowerCase() ?? '').join(' ');
+      return haystack.contains(query);
+    }).toList();
+  }
+
+  @override
+  void dispose() {
+    _salesSearchController.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -106,42 +179,61 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
   }
 
-  Future<void> _approveSeller(Map<String, dynamic> app) async {
-    try {
-      final approved = await DatabaseService.approveSellerApplication(
-        applicationId: app['application_id'].toString(),
-        accountId: app['account_id'].toString(),
-        storeName: app['store_name']?.toString() ?? 'Store',
-        storeDescription: app['store_description']?.toString(),
-        province: app['province']?.toString(),
-        city: app['city']?.toString() ?? '',
-        barangay: app['barangay']?.toString(),
-        street: app['street']?.toString(),
-        houseNumber: app['house_number']?.toString(),
-        zipCode: app['zip_code']?.toString(),
-        contactPhone: app['contact_phone']?.toString(),
-      );
+  void _approveSeller(Map<String, dynamic> app) {
+    final notesController = TextEditingController();
 
-      if (!approved) {
-        throw Exception('Seller application could not be approved');
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Seller application approved!'),
-            backgroundColor: Colors.green,
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Approve Application'),
+        content: TextField(
+          controller: notesController,
+          decoration: const InputDecoration(
+            labelText: 'Notes for applicant',
+            border: OutlineInputBorder(),
           ),
-        );
-        _loadSellerApplications();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
-      }
-    }
+          maxLines: 3,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final approved = await DatabaseService.approveSellerApplication(
+                applicationId: app['application_id'].toString(),
+                accountId: app['account_id'].toString(),
+                storeName: app['store_name']?.toString() ?? 'Store',
+                storeDescription: app['store_description']?.toString(),
+                province: app['province']?.toString(),
+                city: app['city']?.toString() ?? '',
+                barangay: app['barangay']?.toString(),
+                street: app['street']?.toString(),
+                houseNumber: app['house_number']?.toString(),
+                zipCode: app['zip_code']?.toString(),
+                contactPhone: app['contact_phone']?.toString(),
+                reviewNotes: notesController.text,
+              );
+              if (!mounted) return;
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    approved
+                        ? 'Seller application approved'
+                        : 'Seller application could not be approved',
+                  ),
+                  backgroundColor: approved ? Colors.green : Colors.red,
+                ),
+              );
+              if (approved) _loadSellerApplications();
+            },
+            child: const Text('Approve'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _rejectSeller(Map<String, dynamic> app) {
@@ -196,33 +288,52 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  Future<void> _approveRider(Map<String, dynamic> app) async {
-    try {
-      final approved = await DatabaseService.approveRiderApplication(
-        applicationId: app['rider_app_id'].toString(),
-        accountId: app['account_id'].toString(),
-      );
+  void _approveRider(Map<String, dynamic> app) {
+    final notesController = TextEditingController();
 
-      if (!approved) {
-        throw Exception('Rider application could not be approved');
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Rider application approved!'),
-            backgroundColor: Colors.green,
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Approve Rider Application'),
+        content: TextField(
+          controller: notesController,
+          decoration: const InputDecoration(
+            labelText: 'Notes for applicant',
+            border: OutlineInputBorder(),
           ),
-        );
-        _loadRiderApplications();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
-      }
-    }
+          maxLines: 3,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final approved = await DatabaseService.approveRiderApplication(
+                applicationId: app['rider_app_id'].toString(),
+                accountId: app['account_id'].toString(),
+                reviewNotes: notesController.text,
+              );
+              if (!mounted) return;
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    approved
+                        ? 'Rider application approved'
+                        : 'Rider application could not be approved',
+                  ),
+                  backgroundColor: approved ? Colors.green : Colors.red,
+                ),
+              );
+              if (approved) _loadRiderApplications();
+            },
+            child: const Text('Approve'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _rejectRider(Map<String, dynamic> app) {
@@ -296,6 +407,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 _detailRow('House Number', app['house_number'] ?? 'N/A'),
                 _detailRow('Zip Code', app['zip_code'] ?? 'N/A'),
                 _detailRow('Status', app['status'] ?? 'N/A'),
+                if ((app['review_notes']?.toString().trim().isNotEmpty ?? false))
+                  _detailRow('Admin Notes', app['review_notes'].toString()),
                 _detailRow('Submitted', app['submission_date'] ?? 'N/A'),
                 _documentsSection(app['documents_path']),
                 if (app['store_description'] != null &&
@@ -364,6 +477,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 _detailRow('Plate Number', app['plate_number'] ?? 'N/A'),
                 _detailRow('Rider Address', _formatSellerAddress(app)),
                 _detailRow('Status', app['status'] ?? 'N/A'),
+                if ((app['review_notes']?.toString().trim().isNotEmpty ?? false))
+                  _detailRow('Admin Notes', app['review_notes'].toString()),
                 _detailRow('Submitted', app['application_date'] ?? 'N/A'),
                 _documentsSection(app['documents_path']),
               ],
@@ -529,15 +644,34 @@ class _AdminDashboardState extends State<AdminDashboard> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_sellerApplications.isEmpty) {
-      return const Center(child: Text('No seller applications'));
-    }
+    final visible = _filteredApplications(
+      _sellerApplications,
+      _sellerApplicationFilter,
+    );
 
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: _sellerApplications.length,
+      itemCount: visible.isEmpty ? 2 : visible.length + 1,
       itemBuilder: (context, index) {
-        final app = _sellerApplications[index];
+        if (index == 0) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _filterChips(
+              values: _applicationStatusFilters,
+              selected: _sellerApplicationFilter,
+              onSelected: (value) =>
+                  setState(() => _sellerApplicationFilter = value),
+            ),
+          );
+        }
+        if (visible.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.only(top: 120),
+            child: Center(child: Text('No seller applications in this state')),
+          );
+        }
+
+        final app = visible[index - 1];
         final statusColor = app['status'] == 'Approved'
             ? Colors.green
             : app['status'] == 'Rejected'
@@ -578,15 +712,34 @@ class _AdminDashboardState extends State<AdminDashboard> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_riderApplications.isEmpty) {
-      return const Center(child: Text('No rider applications'));
-    }
+    final visible = _filteredApplications(
+      _riderApplications,
+      _riderApplicationFilter,
+    );
 
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: _riderApplications.length,
+      itemCount: visible.isEmpty ? 2 : visible.length + 1,
       itemBuilder: (context, index) {
-        final app = _riderApplications[index];
+        if (index == 0) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _filterChips(
+              values: _applicationStatusFilters,
+              selected: _riderApplicationFilter,
+              onSelected: (value) =>
+                  setState(() => _riderApplicationFilter = value),
+            ),
+          );
+        }
+        if (visible.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.only(top: 120),
+            child: Center(child: Text('No rider applications in this state')),
+          );
+        }
+
+        final app = visible[index - 1];
         final statusColor = app['status'] == 'Approved'
             ? Colors.green
             : app['status'] == 'Rejected'
@@ -619,6 +772,40 @@ class _AdminDashboardState extends State<AdminDashboard> {
           ),
         );
       },
+    );
+  }
+
+  List<Map<String, dynamic>> _filteredApplications(
+    List<Map<String, dynamic>> applications,
+    String status,
+  ) {
+    if (status == 'All') return applications;
+    return applications
+        .where((app) => app['status']?.toString() == status)
+        .toList();
+  }
+
+  Widget _filterChips({
+    required List<String> values,
+    required String selected,
+    required ValueChanged<String> onSelected,
+  }) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: values
+            .map(
+              (value) => Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(
+                  label: Text(value),
+                  selected: selected == value,
+                  onSelected: (_) => onSelected(value),
+                ),
+              ),
+            )
+            .toList(),
+      ),
     );
   }
 
@@ -668,7 +855,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: List.generate(5, (i) => _revenueBar(_dailySales()[i], i)),
+              children: List.generate(7, (i) => _revenueBar(_dailySales()[i], i)),
             ),
           ),
           const SizedBox(height: 40),
@@ -682,29 +869,64 @@ class _AdminDashboardState extends State<AdminDashboard> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_successfulOrders.isEmpty) {
+    if (_orders.isEmpty) {
       return const Center(child: Text('No orders yet'));
     }
 
+    final visible = _filteredSalesOrders;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _salesSearchController,
+            decoration: const InputDecoration(
+              prefixIcon: Icon(Icons.search),
+              labelText: 'Search order, buyer, account id, or status',
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 12),
+          _filterChips(
+            values: _orderStatusFilters,
+            selected: _salesStatusFilter,
+            onSelected: (value) => setState(() => _salesStatusFilter = value),
+          ),
+          const SizedBox(height: 8),
+          _filterChips(
+            values: _salesDateFilters,
+            selected: _salesDateFilter,
+            onSelected: (value) => setState(() => _salesDateFilter = value),
+          ),
+          const SizedBox(height: 12),
+          if (visible.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 120),
+              child: Center(child: Text('No orders match these filters')),
+            )
+          else
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
           columns: const [
             DataColumn(label: Text('Order')),
+            DataColumn(label: Text('Buyer Account')),
             DataColumn(label: Text('Customer')),
             DataColumn(label: Text('Date')),
             DataColumn(label: Text('Items')),
             DataColumn(label: Text('Status')),
             DataColumn(label: Text('Commission')),
           ],
-          rows: _successfulOrders.map((order) {
+          rows: visible.map((order) {
             final orderId = order['order_id']?.toString() ?? '';
             return DataRow(
               onSelectChanged: (_) => _showOrderDetails(order),
               cells: [
                 DataCell(Text(_shortId(orderId))),
+                DataCell(Text(_shortId(order['buyer_account_id']?.toString() ?? ''))),
                 DataCell(Text(_customerName(order))),
                 DataCell(Text(_formatDate(order['order_date']))),
                 DataCell(Text(_itemCount(order).toString())),
@@ -715,7 +937,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
               ],
             );
           }).toList(),
-        ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -962,28 +1186,30 @@ class _AdminDashboardState extends State<AdminDashboard> {
         ),
         const SizedBox(height: 4),
         Text('₱${value.toStringAsFixed(0)}'),
-        Text(['Mon', 'Tue', 'Wed', 'Thu', 'Fri'][index]),
+        Text(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][index]),
       ],
     );
   }
 
   List<double> _dailySales() {
-    final sales = List<double>.filled(5, 0);
+    final sales = List<double>.filled(7, 0);
     final today = DateTime.now();
+    final todayOnly = DateTime(today.year, today.month, today.day);
+    final startOfWeek = todayOnly.subtract(Duration(days: today.weekday - 1));
+    final endOfWeek = startOfWeek.add(const Duration(days: 7));
 
     for (final order in _orders) {
       final date = DateTime.tryParse(order['order_date']?.toString() ?? '');
       if (date == null) continue;
+      final dateOnly = DateTime(date.year, date.month, date.day);
 
-      final daysAgo = DateTime(today.year, today.month, today.day)
-          .difference(DateTime(date.year, date.month, date.day))
-          .inDays;
-
-      if (daysAgo >= 0 && daysAgo < 5) {
-        final status = order['order_status']?.toString().toLowerCase() ?? '';
-        if (status == 'cancelled' || status == 'canceled') continue;
-        sales[4 - daysAgo] += _toDouble(order['admin_commission']);
+      if (dateOnly.isBefore(startOfWeek) || !dateOnly.isBefore(endOfWeek)) {
+        continue;
       }
+
+      final status = order['order_status']?.toString().toLowerCase() ?? '';
+      if (status == 'cancelled' || status == 'canceled') continue;
+      sales[dateOnly.weekday - 1] += _toDouble(order['admin_commission']);
     }
 
     return sales;

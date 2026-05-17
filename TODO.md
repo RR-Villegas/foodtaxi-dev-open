@@ -43,12 +43,32 @@ Latest done
 - Search results now use the image, product name, seller, price, stars, and review-count row layout.
 - Admin dashboard money metrics now show commission from successful orders instead of gross order totals.
 - Applied supabase_documents_delivery_updates.sql and verified columns/buckets/policies.
+- Seller dashboard now opens to an Overview tab with sales, delivered order count, active order count, products, and day/week/month/year history.
+- Rider dashboard now has Overview, Deliveries, and History tabs with delivered count, earnings, active queue counts, and day/week/month/year delivery history.
+- Rider delivered orders now show Completed instead of another delivery action button.
+- Seller dashboard Orders tab now has status filter chips for All, Processing, Ready for Pickup, In Transit, Delivered, and Cancelled.
+- Seller products now support shared count stock mode, where each size deducts a configured amount from product-level stock.
+- Seller products now have a default size label/unit amount, so base/default items also show a size.
+- Product and variant SKUs are now generated from product name + size, and current product SKUs were backfilled.
+- Seller shopfront now has New Products, Best Seller, and All Products sections with rating/review information.
+- Buyer orders now have a receipt page with item, delivery, service, discount, payment, and address details.
+- Buyer order cards now show a status flow and tapping an order opens the processing-to-delivered status view.
+- Admin approval now asks for notes, sends in-app application notifications, and treats already-applied approvals as successful instead of showing a false failure.
+- Seller/rider application lists now filter by Pending Review, Approved, Rejected, and All; application status page shows admin notes for accepted/rejected applications.
+- Admin dashboard daily commission now includes Saturday and Sunday.
+- Checkout/admin commission uses the discounted product subtotal as the commission base, excluding delivery/rider fee.
+- Admin sales report now filters by order state, time range, and buyer/account/search text.
+- Buyer My Orders now filters history by Processing, Ready for Pickup, In Transit, and Delivered.
+- Seller dashboard now has shop-specific coupon management.
+- Seller storefront now supports shop reviews gated by delivered orders and shop reports with order-related reports gated by delivered orders.
+- Supabase now has store-scoped coupons plus store_review/store_report tables and RLS policies.
+- Added a Supabase Edge Function scaffold for Brevo application emails; admin approval/rejection now invokes it after saving the in-app notification.
+- Order notifications now run from a database trigger:
+  - Buyer gets order status updates.
+  - Seller gets new-order, In Transit, and Delivered messages.
+  - Approved nearby riders get Ready for Pickup messages.
+- Buyer checkout now has a Bulk delivery option that pools delivery across 10-20 orders and stores delivery mode on the order.
+- Settings now has theme selection: Default, Dark Mode, Koishi Komeiji, Komeiji Satori, Rin Kaenbyou, Utsuho Reiuji.
 
 To do
-- Build proper landing dashboards for seller (count of sales, orders) and rider (count of delivers).
--
-- Add new formatting of math/deduction for shared countable product (eg. egg), there's the default that all products currently using (eg the sizes are separate in stock), mode 2 is where the stock is shared across sizes (eg. it counts by 10, 20, 50, 100, etc..) where the default is 10 and has stock of 100, ordering one 10 and ordering one 50 will deduct 60 in stock.
-- Redesign Seller shopfront
-- In seller dashboard > Orders, there should be a box below the nav where you toggle between states (eg Processing, Ready to pickup, in transit, delivered, cancelled)
-- Buyer account, receipt system
-- Seller account, add size to default (weird that it doesn't have it)
+- Deploy the Brevo Edge Function. The local function exists, but Supabase project currently reports no deployed Edge Functions.

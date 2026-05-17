@@ -24,13 +24,15 @@ class _EditProductPageState extends State<EditProductPage> {
   final _nameController = TextEditingController();
   final _priceController = TextEditingController();
   final _stockController = TextEditingController();
-  final _skuController = TextEditingController();
+  final _baseSizeController = TextEditingController();
+  final _baseUnitQuantityController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _picker = ImagePicker();
   final List<_VariantDraft> _variants = [];
 
   String? _category;
   String? _imagePath;
+  String _stockMode = 'independent';
   bool _isActive = true;
   bool _isSaving = false;
   bool _isUploading = false;
@@ -44,10 +46,15 @@ class _EditProductPageState extends State<EditProductPage> {
     _nameController.text = product?['name']?.toString() ?? '';
     _priceController.text = product?['price']?.toString() ?? '';
     _stockController.text = product?['stock_quantity']?.toString() ?? '0';
-    _skuController.text = product?['sku']?.toString() ?? '';
+    _baseSizeController.text = product?['base_size_label']?.toString() ?? 'Default';
+    _baseUnitQuantityController.text =
+        product?['base_unit_quantity']?.toString() ?? '1';
     _descriptionController.text = product?['description']?.toString() ?? '';
     _category = product?['category']?.toString();
     _imagePath = product?['main_image_url']?.toString();
+    _stockMode = product?['stock_mode']?.toString() == 'shared'
+        ? 'shared'
+        : 'independent';
     _isActive = product?['is_active'] != false;
 
     final rawVariants = product?['product_variant'];
@@ -59,6 +66,7 @@ class _EditProductPageState extends State<EditProductPage> {
             size: variant['size_label']?.toString() ?? '',
             price: variant['price']?.toString() ?? '',
             stock: variant['stock_quantity']?.toString() ?? '0',
+            unitQuantity: variant['stock_unit_quantity']?.toString() ?? '1',
             isActive: variant['is_active'] != false,
           ),
         );
@@ -71,7 +79,8 @@ class _EditProductPageState extends State<EditProductPage> {
     _nameController.dispose();
     _priceController.dispose();
     _stockController.dispose();
-    _skuController.dispose();
+    _baseSizeController.dispose();
+    _baseUnitQuantityController.dispose();
     _descriptionController.dispose();
     for (final variant in _variants) {
       variant.dispose();
@@ -108,7 +117,14 @@ class _EditProductPageState extends State<EditProductPage> {
 
   void _addVariant() {
     setState(() {
-      _variants.add(_VariantDraft(size: '', price: _priceController.text, stock: '0'));
+      _variants.add(
+        _VariantDraft(
+          size: '',
+          price: _priceController.text,
+          stock: '0',
+          unitQuantity: '1',
+        ),
+      );
     });
   }
 
@@ -127,9 +143,13 @@ class _EditProductPageState extends State<EditProductPage> {
         .where((variant) => variant.sizeController.text.trim().isNotEmpty)
         .map(
           (variant) => {
+            'product_name': _nameController.text.trim(),
             'size_label': variant.sizeController.text.trim(),
             'price': double.parse(variant.priceController.text.trim()),
             'stock_quantity': int.parse(variant.stockController.text.trim()),
+            'stock_unit_quantity': int.parse(
+              variant.unitQuantityController.text.trim(),
+            ),
             'is_active': variant.isActive,
           },
         )
@@ -142,7 +162,9 @@ class _EditProductPageState extends State<EditProductPage> {
             category: _category,
             price: double.parse(_priceController.text.trim()),
             stockQuantity: int.parse(_stockController.text.trim()),
-            sku: _skuController.text,
+            stockMode: _stockMode,
+            baseSizeLabel: _baseSizeController.text,
+            baseUnitQuantity: int.parse(_baseUnitQuantityController.text.trim()),
             mainImageUrl: _imagePath,
             description: _descriptionController.text,
             isActive: _isActive,
@@ -154,7 +176,9 @@ class _EditProductPageState extends State<EditProductPage> {
             category: _category,
             price: double.parse(_priceController.text.trim()),
             stockQuantity: int.parse(_stockController.text.trim()),
-            sku: _skuController.text,
+            stockMode: _stockMode,
+            baseSizeLabel: _baseSizeController.text,
+            baseUnitQuantity: int.parse(_baseUnitQuantityController.text.trim()),
             mainImageUrl: _imagePath,
             description: _descriptionController.text,
             isActive: _isActive,
@@ -216,6 +240,18 @@ class _EditProductPageState extends State<EditProductPage> {
     return parsed == null || parsed < 0 ? 'Enter valid stock' : null;
   }
 
+  String? _unitValidator(String? value) {
+    final parsed = int.tryParse(value?.trim() ?? '');
+    return parsed == null || parsed < 1 ? 'Enter 1 or higher' : null;
+  }
+
+  String _generatedSku([String? sizeLabel]) {
+    return DatabaseService.generateSku(
+      _nameController.text,
+      sizeLabel ?? _baseSizeController.text,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -255,6 +291,7 @@ class _EditProductPageState extends State<EditProductPage> {
               controller: _nameController,
               decoration: const InputDecoration(labelText: 'Product Name *'),
               validator: _requiredText,
+              onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
@@ -264,6 +301,25 @@ class _EditProductPageState extends State<EditProductPage> {
                   .map((item) => DropdownMenuItem(value: item, child: Text(item)))
                   .toList(),
               onChanged: (value) => setState(() => _category = value),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _stockMode,
+              decoration: const InputDecoration(labelText: 'Stock Mode'),
+              items: const [
+                DropdownMenuItem(
+                  value: 'independent',
+                  child: Text('Separate stock per size'),
+                ),
+                DropdownMenuItem(
+                  value: 'shared',
+                  child: Text('Shared count stock'),
+                ),
+              ],
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() => _stockMode = value);
+              },
             ),
             const SizedBox(height: 12),
             Row(
@@ -280,7 +336,11 @@ class _EditProductPageState extends State<EditProductPage> {
                 Expanded(
                   child: TextFormField(
                     controller: _stockController,
-                    decoration: const InputDecoration(labelText: 'Base Stock *'),
+                    decoration: InputDecoration(
+                      labelText: _stockMode == 'shared'
+                          ? 'Shared Stock *'
+                          : 'Base Stock *',
+                    ),
                     keyboardType: TextInputType.number,
                     validator: _stockValidator,
                   ),
@@ -288,9 +348,40 @@ class _EditProductPageState extends State<EditProductPage> {
               ],
             ),
             const SizedBox(height: 12),
-            TextFormField(
-              controller: _skuController,
-              decoration: const InputDecoration(labelText: 'SKU'),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _baseSizeController,
+                    decoration: const InputDecoration(
+                      labelText: 'Default Size *',
+                      hintText: 'Default, 10 pcs, Regular',
+                    ),
+                    validator: _requiredText,
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextFormField(
+                    controller: _baseUnitQuantityController,
+                    decoration: InputDecoration(
+                      labelText: _stockMode == 'shared'
+                          ? 'Deduct Amount *'
+                          : 'Unit Amount *',
+                    ),
+                    keyboardType: TextInputType.number,
+                    validator: _unitValidator,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.qr_code_2_outlined),
+              title: Text('Auto SKU: ${_generatedSku()}'),
+              subtitle: const Text('Generated from product name and size'),
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -343,6 +434,7 @@ class _EditProductPageState extends State<EditProductPage> {
                                   hintText: 'Small, Medium, Large',
                                 ),
                                 validator: _requiredText,
+                                onChanged: (_) => setState(() {}),
                               ),
                             ),
                             IconButton(
@@ -365,14 +457,33 @@ class _EditProductPageState extends State<EditProductPage> {
                             ),
                             const SizedBox(width: 12),
                             Expanded(
-                              child: TextFormField(
-                                controller: variant.stockController,
-                                decoration: const InputDecoration(labelText: 'Stock'),
-                                keyboardType: TextInputType.number,
-                                validator: _stockValidator,
-                              ),
+                              child: _stockMode == 'shared'
+                                  ? TextFormField(
+                                      controller: variant.unitQuantityController,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Deduct Amount',
+                                      ),
+                                      keyboardType: TextInputType.number,
+                                      validator: _unitValidator,
+                                    )
+                                  : TextFormField(
+                                      controller: variant.stockController,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Stock',
+                                      ),
+                                      keyboardType: TextInputType.number,
+                                      validator: _stockValidator,
+                                    ),
                             ),
                           ],
+                        ),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'Auto SKU: ${_generatedSku(variant.sizeController.text)}',
+                            style: const TextStyle(color: Colors.black54),
+                          ),
                         ),
                         SwitchListTile(
                           value: variant.isActive,
@@ -408,19 +519,23 @@ class _VariantDraft {
     required String size,
     required String price,
     required String stock,
+    required String unitQuantity,
     this.isActive = true,
   })  : sizeController = TextEditingController(text: size),
         priceController = TextEditingController(text: price),
-        stockController = TextEditingController(text: stock);
+        stockController = TextEditingController(text: stock),
+        unitQuantityController = TextEditingController(text: unitQuantity);
 
   final TextEditingController sizeController;
   final TextEditingController priceController;
   final TextEditingController stockController;
+  final TextEditingController unitQuantityController;
   bool isActive;
 
   void dispose() {
     sizeController.dispose();
     priceController.dispose();
     stockController.dispose();
+    unitQuantityController.dispose();
   }
 }

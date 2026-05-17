@@ -137,13 +137,12 @@ class _ApplicationStatusPageState extends State<ApplicationStatusPage> {
                         _row('Plate', _application?['plate_number'] ?? ''),
                       ],
                       _row('Status', status),
-                      if (isRejected &&
-                          (_application?['review_notes']
-                                  ?.toString()
-                                  .isNotEmpty ??
-                              false))
+                      if ((_application?['review_notes']
+                              ?.toString()
+                              .isNotEmpty ??
+                          false))
                         _row(
-                          'Reason',
+                          isRejected ? 'Reason' : 'Admin Notes',
                           _application!['review_notes'].toString(),
                         ),
                       const SizedBox(height: 24),

@@ -21,6 +21,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
   bool _isLoading = false;
   bool _isLoadingAddresses = true;
   bool _isCalculatingDelivery = false;
+  bool _isBulkDelivery = false;
   double _deliveryFee = 50.0;
   double? _deliveryDistanceKm;
   static const String _fallbackImage = 'assets/images/food1.jpg';
@@ -65,13 +66,18 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   double get _subtotal => CartModel.totalPrice;
-  double get _serviceFee => _subtotal * _serviceFeeRate;
   double get _discountAmount {
     final value = _appliedCoupon?['discount_amount'];
     if (value is num) return value.toDouble();
     return double.tryParse(value?.toString() ?? '') ?? 0;
   }
+  double get _commissionBase =>
+      (_subtotal - _discountAmount) < 0 ? 0 : _subtotal - _discountAmount;
+  double get _serviceFee => _commissionBase * _serviceFeeRate;
   double get _total => _subtotal + _deliveryFee + _serviceFee - _discountAmount;
+  int get _bulkShareCount => _deliveryDistanceKm == null
+      ? LocationService.bulkDeliveryMinOrders
+      : LocationService.bulkDeliveryShareCount(_deliveryDistanceKm!);
 
   @override
   void dispose() {
@@ -86,9 +92,19 @@ class _CheckoutPageState extends State<CheckoutPage> {
       return;
     }
 
+    String? storeId;
+    final firstProductId = CartModel.cartItems
+        .map((item) => item['product_id']?.toString() ?? '')
+        .firstWhere((id) => id.isNotEmpty, orElse: () => '');
+    if (firstProductId.isNotEmpty) {
+      final store = await DatabaseService.getStoreForProduct(firstProductId);
+      storeId = store?['store_id']?.toString();
+    }
+
     final coupon = await DatabaseService.validateCoupon(
       code: code,
       subtotal: _subtotal,
+      storeId: storeId,
     );
 
     if (!mounted) return;
@@ -148,11 +164,25 @@ class _CheckoutPageState extends State<CheckoutPage> {
       if (!mounted) return;
       setState(() {
         _deliveryDistanceKm = distance;
-        _deliveryFee = LocationService.deliveryFeeForDistance(distance);
+        _deliveryFee = _isBulkDelivery
+            ? LocationService.bulkDeliveryFeeForDistance(distance)
+            : LocationService.deliveryFeeForDistance(distance);
       });
     } finally {
       if (mounted) setState(() => _isCalculatingDelivery = false);
     }
+  }
+
+  void _setBulkDelivery(bool value) {
+    setState(() {
+      _isBulkDelivery = value;
+      final distance = _deliveryDistanceKm;
+      if (distance != null) {
+        _deliveryFee = value
+            ? LocationService.bulkDeliveryFeeForDistance(distance)
+            : LocationService.deliveryFeeForDistance(distance);
+      }
+    });
   }
 
   Widget _buildProductImage(dynamic imageValue, {double size = 50}) {
@@ -270,6 +300,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
         deliveryDistanceKm: _deliveryDistanceKm,
         serviceFee: _serviceFee,
         discountAmount: _discountAmount,
+        deliveryMode: _isBulkDelivery ? 'bulk' : 'standard',
+        bulkDeliveryMinOrders:
+            _isBulkDelivery ? LocationService.bulkDeliveryMinOrders : 1,
+        bulkDeliveryMaxOrders: _isBulkDelivery ? _bulkShareCount : 1,
         discountCode: _appliedCoupon?['code']?.toString(),
         paymentMethod: _selectedPaymentMethod,
         sellerAccountId: sellerAccountId,
@@ -458,6 +492,16 @@ class _CheckoutPageState extends State<CheckoutPage> {
                                     : '₱${_deliveryFee.toStringAsFixed(2)}',
                               ),
                             ],
+                          ),
+                          const SizedBox(height: 4),
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            value: _isBulkDelivery,
+                            onChanged: _setBulkDelivery,
+                            title: const Text('Bulk delivery'),
+                            subtitle: Text(
+                              'Pool pickup with ${LocationService.bulkDeliveryMinOrders}-$_bulkShareCount orders for a lower rider fee.',
+                            ),
                           ),
                           const SizedBox(height: 4),
                           Row(

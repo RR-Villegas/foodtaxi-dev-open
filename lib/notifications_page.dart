@@ -10,7 +10,15 @@ class NotificationsPage extends StatefulWidget {
 }
 
 class _NotificationsPageState extends State<NotificationsPage> {
-  static const _types = ['All', 'System', 'Commerce', 'Delivery', 'Account', 'Promotion'];
+  static const _types = [
+    'All',
+    'System',
+    'Commerce',
+    'Delivery',
+    'Account',
+    'Promotion',
+    'Application',
+  ];
   static const _timeRanges = {
     '24hr': Duration(hours: 24),
     '1w': Duration(days: 7),

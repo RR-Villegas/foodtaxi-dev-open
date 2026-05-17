@@ -83,9 +83,13 @@ class _ProductPageState extends State<ProductPage> {
     for (var i = 0; i < _quantity; i++) {
       CartModel.addItem({
         ...product,
-        if (_selectedVariant != null) ...{
+        if (_selectedVariant == null) ...{
+          'selected_size': product['base_size_label'],
+          'selected_sku': product['sku'],
+        } else ...{
           'selected_variant_id': _selectedVariant!['variant_id'],
           'selected_size': _selectedVariant!['size_label'],
+          'selected_sku': _selectedVariant!['sku'],
           'price': _selectedVariant!['price'],
           'stock_quantity': _selectedVariant!['stock_quantity'],
         },
@@ -166,6 +170,16 @@ class _ProductPageState extends State<ProductPage> {
     final imagePath = _resolveImagePath(product['main_image_url']);
     final stock = _toInt(product['stock_quantity']);
     final price = _toDouble(product['price']);
+    final stockMode = product['stock_mode']?.toString() == 'shared'
+        ? 'shared'
+        : 'independent';
+    final baseSizeLabel =
+        product['base_size_label']?.toString().trim().isNotEmpty == true
+            ? product['base_size_label'].toString()
+            : 'Default';
+    final baseUnitQuantity = _toInt(product['base_unit_quantity']) < 1
+        ? 1
+        : _toInt(product['base_unit_quantity']);
     final variants = product['product_variant'];
     final activeVariants = variants is List
         ? variants
@@ -177,13 +191,22 @@ class _ProductPageState extends State<ProductPage> {
     final selectedPrice = _selectedVariant == null
         ? price
         : _toDouble(_selectedVariant!['price']);
-    final selectedStock = _selectedVariant == null
-        ? stock
-        : _toInt(_selectedVariant!['stock_quantity']);
+    final selectedUnitQuantity = _selectedVariant == null
+        ? baseUnitQuantity
+        : (_toInt(_selectedVariant!['stock_unit_quantity']) < 1
+            ? 1
+            : _toInt(_selectedVariant!['stock_unit_quantity']));
+    final selectedStock = stockMode == 'shared'
+        ? stock ~/ selectedUnitQuantity
+        : _selectedVariant == null
+            ? stock
+            : _toInt(_selectedVariant!['stock_quantity']);
     final isActive = product['is_active'] != false;
     final canPurchase = isActive && selectedStock > 0;
     final description = product['description']?.toString().trim() ?? '';
-    final sku = product['sku']?.toString().trim() ?? '';
+    final sku = _selectedVariant == null
+        ? product['sku']?.toString().trim() ?? ''
+        : _selectedVariant!['sku']?.toString().trim() ?? '';
     final store = product['store'];
     final sellerName = store is Map
         ? store['store_name']?.toString() ?? 'Seller'
@@ -275,7 +298,7 @@ class _ProductPageState extends State<ProductPage> {
                             children: [
                               ChoiceChip(
                                 label: Text(
-                                  'Base - PHP ${price.toStringAsFixed(2)}',
+                                  '$baseSizeLabel - PHP ${price.toStringAsFixed(2)}',
                                 ),
                                 selected: _selectedVariant == null,
                                 onSelected: (_) {

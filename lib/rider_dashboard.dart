@@ -14,7 +14,12 @@ class RiderDashboard extends StatefulWidget {
 
 class _RiderDashboardState extends State<RiderDashboard> {
   List<Map<String, dynamic>> _orders = [];
+  List<Map<String, dynamic>> _historyOrders = [];
   bool _isLoading = true;
+  int _currentIndex = 0;
+  String _overviewRange = 'Day';
+
+  static const List<String> _overviewRanges = ['Day', 'Week', 'Month', 'Year'];
 
   @override
   void initState() {
@@ -47,9 +52,11 @@ class _RiderDashboardState extends State<RiderDashboard> {
 
   Future<void> _loadOrders() async {
     final orders = await DatabaseService.getAvailableDeliveryOrders();
+    final historyOrders = await DatabaseService.getCurrentRiderOrders();
     if (!mounted) return;
     setState(() {
       _orders = orders;
+      _historyOrders = historyOrders;
       _isLoading = false;
     });
   }
@@ -75,6 +82,78 @@ class _RiderDashboardState extends State<RiderDashboard> {
         .where((part) => part.isNotEmpty)
         .toList();
     return parts.isEmpty ? 'No address' : parts.join(', ');
+  }
+
+  double _number(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  String _status(Map<String, dynamic> order) {
+    return order['order_status']?.toString() ?? 'Ready for Pickup';
+  }
+
+  bool _isDelivered(Map<String, dynamic> order) {
+    return _status(order).toLowerCase() == 'delivered';
+  }
+
+  DateTime? _orderDate(Map<String, dynamic> order, {bool preferDelivered = false}) {
+    final value = preferDelivered
+        ? order['delivered_at'] ?? order['order_date']
+        : order['order_date'];
+    return DateTime.tryParse(value?.toString() ?? '');
+  }
+
+  String _shortDate(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  String _periodKey(DateTime date, String range) {
+    if (range == 'Year') return '${date.year}';
+    if (range == 'Month') {
+      return '${date.year}-${date.month.toString().padLeft(2, '0')}';
+    }
+    if (range == 'Week') {
+      final start = DateTime(date.year, date.month, date.day)
+          .subtract(Duration(days: date.weekday - 1));
+      return 'Week of ${_shortDate(start)}';
+    }
+    return _shortDate(date);
+  }
+
+  List<Map<String, dynamic>> _periodStats({
+    required Iterable<Map<String, dynamic>> orders,
+    required String range,
+    bool deliveredOnly = true,
+  }) {
+    final stats = <String, Map<String, dynamic>>{};
+    for (final order in orders) {
+      if (deliveredOnly && !_isDelivered(order)) continue;
+      final date = _orderDate(order, preferDelivered: deliveredOnly);
+      if (date == null) continue;
+      final key = _periodKey(date, range);
+      final row = stats.putIfAbsent(
+        key,
+        () => {
+          'period': key,
+          'deliveries': 0,
+          'earnings': 0.0,
+          'distance': 0.0,
+          'date': date,
+        },
+      );
+      row['deliveries'] = (row['deliveries'] as int) + 1;
+      row['earnings'] = (row['earnings'] as double) +
+          _number(order['rider_fee'] ?? order['shipping_fee']);
+      row['distance'] = (row['distance'] as double) +
+          _number(order['delivery_distance_km']);
+      final currentDate = row['date'] as DateTime;
+      if (date.isAfter(currentDate)) row['date'] = date;
+    }
+
+    final rows = stats.values.toList()
+      ..sort((a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime));
+    return rows.take(8).toList();
   }
 
   Future<void> _claimOrder(Map<String, dynamic> order) async {
@@ -219,7 +298,7 @@ class _RiderDashboardState extends State<RiderDashboard> {
         ? '${buyer['firstname'] ?? 'Buyer'} ${buyer['surname'] ?? ''}'.trim()
         : 'Buyer';
     final buyerPhone = buyer is Map ? buyer['phone_number']?.toString() ?? '' : '';
-    final status = order['order_status']?.toString() ?? 'Ready for Pickup';
+    final status = _status(order);
     final items = order['order_items'];
     final orderItems = items is List ? items.whereType<Map>().toList() : [];
     final riderFee = order['rider_fee'] ?? order['shipping_fee'];
@@ -295,17 +374,202 @@ class _RiderDashboardState extends State<RiderDashboard> {
                     icon: const Icon(Icons.delivery_dining),
                     label: const Text('Pick Up'),
                   )
-                else
+                else if (status == 'In Transit')
                   FilledButton.icon(
                     onPressed: () => _deliverOrder(order),
                     icon: const Icon(Icons.check_circle_outline),
-                    label: const Text('Delivered'),
+                    label: const Text('Mark Delivered'),
+                  )
+                else
+                  const Chip(
+                    avatar: Icon(Icons.verified_outlined, size: 18),
+                    label: Text('Completed'),
                   ),
               ],
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _metricCard(String label, String value, IconData icon, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: color),
+            const SizedBox(height: 10),
+            Text(label, style: const TextStyle(color: Colors.black54)),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _periodSelector() {
+    return Wrap(
+      spacing: 8,
+      children: _overviewRanges
+          .map(
+            (range) => ChoiceChip(
+              label: Text(range),
+              selected: _overviewRange == range,
+              onSelected: (_) => setState(() => _overviewRange = range),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  Widget _buildOverviewTab() {
+    final deliveredOrders = _historyOrders.where(_isDelivered).toList();
+    final inTransitOrders =
+        _orders.where((order) => _status(order) == 'In Transit').toList();
+    final readyOrders =
+        _orders.where((order) => _status(order) == 'Ready for Pickup').toList();
+    final earnings = deliveredOrders.fold<double>(
+      0,
+      (sum, order) => sum + _number(order['rider_fee'] ?? order['shipping_fee']),
+    );
+    final periodRows = _periodStats(
+      orders: _historyOrders,
+      range: _overviewRange,
+    );
+
+    return RefreshIndicator(
+      onRefresh: _loadOrders,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Text(
+            'Rider Overview',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Delivery queue, completed work, and earnings history',
+            style: TextStyle(color: Colors.black54),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              _metricCard(
+                'Delivered',
+                '${deliveredOrders.length}',
+                Icons.verified_outlined,
+                Colors.green,
+              ),
+              const SizedBox(width: 10),
+              _metricCard(
+                'Earnings',
+                _money(earnings),
+                Icons.payments_outlined,
+                Colors.blue,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _metricCard(
+                'Ready',
+                '${readyOrders.length}',
+                Icons.inventory_2_outlined,
+                Colors.orange,
+              ),
+              const SizedBox(width: 10),
+              _metricCard(
+                'In Transit',
+                '${inTransitOrders.length}',
+                Icons.delivery_dining,
+                Colors.purple,
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            'Delivery History',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          ),
+          const SizedBox(height: 10),
+          _periodSelector(),
+          const SizedBox(height: 10),
+          if (periodRows.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 32),
+              child: Center(child: Text('No completed deliveries yet')),
+            )
+          else
+            ...periodRows.map(
+              (row) => Card(
+                margin: const EdgeInsets.only(bottom: 10),
+                child: ListTile(
+                  leading: const CircleAvatar(
+                    child: Icon(Icons.route_outlined),
+                  ),
+                  title: Text(row['period'].toString()),
+                  subtitle: Text(
+                    '${row['deliveries']} deliver${row['deliveries'] == 1 ? 'y' : 'ies'} | ${(row['distance'] as double).toStringAsFixed(1)} km',
+                  ),
+                  trailing: Text(
+                    _money(row['earnings']),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDeliveriesTab() {
+    return RefreshIndicator(
+      onRefresh: _loadOrders,
+      child: _orders.isEmpty
+          ? ListView(
+              children: const [
+                SizedBox(height: 180),
+                Center(child: Text('No deliveries ready')),
+              ],
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: _orders.length,
+              itemBuilder: (context, index) => _orderCard(_orders[index]),
+            ),
+    );
+  }
+
+  Widget _buildHistoryTab() {
+    final history = _historyOrders;
+    return RefreshIndicator(
+      onRefresh: _loadOrders,
+      child: history.isEmpty
+          ? ListView(
+              children: const [
+                SizedBox(height: 180),
+                Center(child: Text('No delivery history yet')),
+              ],
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: history.length,
+              itemBuilder: (context, index) => _orderCard(history[index]),
+            ),
     );
   }
 
@@ -362,21 +626,34 @@ class _RiderDashboardState extends State<RiderDashboard> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadOrders,
-              child: _orders.isEmpty
-                  ? ListView(
-                      children: const [
-                        SizedBox(height: 180),
-                        Center(child: Text('No deliveries ready')),
-                      ],
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _orders.length,
-                      itemBuilder: (context, index) => _orderCard(_orders[index]),
-                    ),
-            ),
+          : _currentIndex == 0
+              ? _buildOverviewTab()
+              : _currentIndex == 1
+                  ? _buildDeliveriesTab()
+                  : _buildHistoryTab(),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (index) {
+          setState(() => _currentIndex = index);
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard),
+            label: 'Overview',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.local_shipping_outlined),
+            selectedIcon: Icon(Icons.delivery_dining),
+            label: 'Deliveries',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.history_outlined),
+            selectedIcon: Icon(Icons.history),
+            label: 'History',
+          ),
+        ],
+      ),
     );
   }
 }

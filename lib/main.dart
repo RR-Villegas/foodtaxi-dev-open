@@ -7,6 +7,7 @@ import 'address_page.dart';
 import 'notifications_page.dart';
 import 'settings_page.dart';
 import 'my_orders_page.dart';
+import 'order_receipt_page.dart';
 import 'cart_page.dart';
 import 'search_page.dart';
 import 'buyer_dashboard.dart';
@@ -23,6 +24,7 @@ import 'reset_password_page.dart';
 import 'services/database_service.dart';
 import 'services/auth_service.dart';
 import 'services/protected_route.dart';
+import 'services/theme_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,6 +34,7 @@ void main() async {
     anonKey:
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpzY3Rzd2R2b2tubWRzaW1xcnZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0MDkyMjgsImV4cCI6MjA5MTk4NTIyOH0.9AMczePav5ftvCbhhYWxBaquUFK1Nrmgx1FbUZKpci8',
   );
+  await ThemeService.load();
 
   runApp(const MyApp());
 }
@@ -41,16 +44,17 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'FoodTaxi Omega',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2d8f4e)),
-        useMaterial3: true,
-      ),
-      debugShowCheckedModeBanner: false,
-      initialRoute:
-          Uri.base.fragment.contains('type=recovery') ? '/reset-password' : '/',
-      routes: {
+    return ValueListenableBuilder<String>(
+      valueListenable: ThemeService.selectedThemeId,
+      builder: (context, _, __) {
+        return MaterialApp(
+          title: 'FoodTaxi Omega',
+          theme: ThemeService.selectedTheme.toThemeData(),
+          debugShowCheckedModeBanner: false,
+          initialRoute: Uri.base.fragment.contains('type=recovery')
+              ? '/reset-password'
+              : '/',
+          routes: {
         '/': (context) => const MyHomePage(title: 'FoodTaxi Omega'),
         '/login': (context) => const LoginPage(),
         '/signup': (context) => const SignupPage(),
@@ -79,6 +83,17 @@ class MyApp extends StatelessWidget {
           protection: RouteProtection.buyerOnly,
           child: const MyOrdersPage(),
         ),
+        '/order-receipt': (context) {
+          final order = ModalRoute.of(context)?.settings.arguments;
+          return ProtectedRoute(
+            protection: RouteProtection.buyerOnly,
+            child: OrderReceiptPage(
+              order: order is Map<String, dynamic>
+                  ? order
+                  : <String, dynamic>{},
+            ),
+          );
+        },
         '/search': (context) => ProtectedRoute(
           protection: RouteProtection.authenticated,
           child: const SearchPage(),
@@ -110,8 +125,8 @@ class MyApp extends StatelessWidget {
               ModalRoute.of(context)?.settings.arguments?.toString() ?? 'seller';
           return ApplicationStatusPage(role: role);
         },
-      },
-      onGenerateRoute: (settings) {
+          },
+          onGenerateRoute: (settings) {
         if (settings.name?.startsWith('/product/') ?? false) {
           final productId = settings.name!.split('/').last;
           return MaterialPageRoute(
@@ -130,7 +145,9 @@ class MyApp extends StatelessWidget {
             ),
           );
         }
-        return null;
+            return null;
+          },
+        );
       },
     );
   }

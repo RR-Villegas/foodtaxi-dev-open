@@ -71,6 +71,31 @@ class DatabaseService {
     return status != 'cancelled' && status != 'canceled';
   }
 
+  static String generateSku(String productName, String? sizeLabel) {
+    final parts = [
+      productName,
+      sizeLabel,
+    ]
+        .map((part) => part?.toString().trim() ?? '')
+        .where((part) => part.isNotEmpty)
+        .join('-');
+    final slug = parts
+        .toUpperCase()
+        .replaceAll(RegExp(r'[^A-Z0-9]+'), '-')
+        .replaceAll(RegExp(r'-+'), '-')
+        .replaceAll(RegExp(r'^-|-$'), '');
+    return slug.isEmpty ? 'PRODUCT' : slug;
+  }
+
+  static String _slugFor(String value) {
+    final slug = value
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+        .replaceAll(RegExp(r'-+'), '-')
+        .replaceAll(RegExp(r'^-|-$'), '');
+    return slug.isEmpty ? 'store' : slug;
+  }
+
   static String _randomCode([int length = 6]) {
     final random = Random.secure();
     return List.generate(length, (_) => random.nextInt(10).toString()).join();
@@ -358,6 +383,9 @@ class DatabaseService {
     double serviceFee = 0,
     double discountAmount = 0,
     double? deliveryDistanceKm,
+    String deliveryMode = 'standard',
+    int bulkDeliveryMinOrders = 1,
+    int bulkDeliveryMaxOrders = 1,
     required String paymentMethod,
     String? discountCode,
     String? sellerAccountId,
@@ -387,6 +415,9 @@ class DatabaseService {
         'admin_commission': serviceFee,
         'rider_fee': shippingFee,
         'seller_payout': sellerPayout < 0 ? 0 : sellerPayout,
+        'delivery_mode': deliveryMode,
+        'bulk_delivery_min_orders': bulkDeliveryMinOrders,
+        'bulk_delivery_max_orders': bulkDeliveryMaxOrders,
         'payment_method': paymentMethod,
         'order_status': orderStatus,
       };
@@ -476,9 +507,9 @@ class DatabaseService {
           .from('product')
           .select('*, product_variant(*)')
           .eq('store_id', storeId)
-          .order('name');
+          .order('product_id', ascending: false);
 
-      return List<Map<String, dynamic>>.from(response);
+      return _withProductRatings(List<Map<String, dynamic>>.from(response));
     } catch (e) {
       _logDbError('Failed to fetch seller products', e);
       return [];
@@ -496,9 +527,11 @@ class DatabaseService {
     required String name,
     required double price,
     required int stockQuantity,
+    String stockMode = 'independent',
+    String baseSizeLabel = 'Default',
+    int baseUnitQuantity = 1,
     String? category,
     String? description,
-    String? sku,
     String? mainImageUrl,
     bool isActive = true,
     List<Map<String, dynamic>> variants = const [],
@@ -513,7 +546,10 @@ class DatabaseService {
             'description': _blankToNull(description),
             'price': price,
             'stock_quantity': stockQuantity,
-            'sku': _blankToNull(sku),
+            'stock_mode': stockMode,
+            'base_size_label': _blankToNull(baseSizeLabel) ?? 'Default',
+            'base_unit_quantity': baseUnitQuantity < 1 ? 1 : baseUnitQuantity,
+            'sku': generateSku(name, baseSizeLabel),
             'main_image_url': _blankToNull(mainImageUrl),
             'is_active': isActive,
           })
@@ -533,9 +569,11 @@ class DatabaseService {
     required String name,
     required double price,
     required int stockQuantity,
+    String stockMode = 'independent',
+    String baseSizeLabel = 'Default',
+    int baseUnitQuantity = 1,
     String? category,
     String? description,
-    String? sku,
     String? mainImageUrl,
     required bool isActive,
     List<Map<String, dynamic>> variants = const [],
@@ -549,7 +587,10 @@ class DatabaseService {
             'description': _blankToNull(description),
             'price': price,
             'stock_quantity': stockQuantity,
-            'sku': _blankToNull(sku),
+            'stock_mode': stockMode,
+            'base_size_label': _blankToNull(baseSizeLabel) ?? 'Default',
+            'base_unit_quantity': baseUnitQuantity < 1 ? 1 : baseUnitQuantity,
+            'sku': generateSku(name, baseSizeLabel),
             'main_image_url': _blankToNull(mainImageUrl),
             'is_active': isActive,
           })
@@ -665,6 +706,13 @@ class DatabaseService {
             'size_label': variant['size_label']?.toString().trim(),
             'price': _toDouble(variant['price']),
             'stock_quantity': _toInt(variant['stock_quantity']),
+            'stock_unit_quantity': _toInt(variant['stock_unit_quantity']) < 1
+                ? 1
+                : _toInt(variant['stock_unit_quantity']),
+            'sku': generateSku(
+              variant['product_name']?.toString() ?? '',
+              variant['size_label']?.toString(),
+            ),
             'is_active': variant['is_active'] != false,
           },
         )
@@ -852,6 +900,26 @@ class DatabaseService {
     }
   }
 
+  static Future<List<Map<String, dynamic>>> getCurrentRiderOrders() async {
+    try {
+      final riderAccountId = await getCurrentAccountId();
+      if (riderAccountId == null) return [];
+
+      final response = await _supabase
+          .from('orders')
+          .select(
+            '*, address(*), account!orders_buyer_account_id_fkey(firstname, surname, phone_number), order_items(*, product(name), product_variant(size_label))',
+          )
+          .eq('rider_account_id', riderAccountId)
+          .order('order_date', ascending: false);
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      _logDbError('Failed to fetch rider orders', e);
+      return [];
+    }
+  }
+
   static Future<bool> assignOrderToCurrentRider(String orderId) async {
     try {
       final riderAccountId = await getCurrentAccountId();
@@ -975,15 +1043,26 @@ class DatabaseService {
   static Future<Map<String, dynamic>?> validateCoupon({
     required String code,
     required double subtotal,
+    String? storeId,
   }) async {
     try {
-      final coupon = await _supabase
+      final coupons = await _supabase
           .from('discount_coupon')
           .select()
           .eq('code', code.trim().toUpperCase())
-          .eq('is_active', true)
-          .maybeSingle();
+          .eq('is_active', true);
 
+      Map<String, dynamic>? coupon;
+      for (final item in List<Map<String, dynamic>>.from(coupons)) {
+        final couponStoreId = item['store_id']?.toString();
+        if (storeId != null && couponStoreId == storeId) {
+          coupon = item;
+          break;
+        }
+        if (couponStoreId == null || couponStoreId.isEmpty) {
+          coupon ??= item;
+        }
+      }
       if (coupon == null) return null;
 
       final now = DateTime.now();
@@ -1044,6 +1123,23 @@ class DatabaseService {
     }
   }
 
+  static Future<List<Map<String, dynamic>>> getCouponsForStore(
+    String storeId,
+  ) async {
+    try {
+      final response = await _supabase
+          .from('discount_coupon')
+          .select()
+          .eq('store_id', storeId)
+          .order('created_at', ascending: false);
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      _logDbError('Failed to fetch store coupons', e);
+      return [];
+    }
+  }
+
   static Future<bool> saveCoupon({
     required String code,
     required String discountType,
@@ -1052,10 +1148,12 @@ class DatabaseService {
     String? description,
     String? expiresAt,
     bool isActive = true,
+    String? storeId,
   }) async {
     try {
       await _supabase.from('discount_coupon').upsert({
         'code': code.trim().toUpperCase(),
+        'store_id': _blankToNull(storeId),
         'description': _blankToNull(description),
         'discount_type': discountType,
         'discount_value': discountValue,
@@ -1066,6 +1164,115 @@ class DatabaseService {
       return true;
     } catch (e) {
       _logDbError('Failed to save coupon', e);
+      return false;
+    }
+  }
+
+  static Future<bool> buyerHasDeliveredOrderFromStore(String storeId) async {
+    try {
+      final accountId = await getCurrentAccountId();
+      if (accountId == null) return false;
+      final store = await _supabase
+          .from('store')
+          .select('owner_account_id')
+          .eq('store_id', storeId)
+          .maybeSingle();
+      final sellerAccountId = store?['owner_account_id']?.toString();
+      if (sellerAccountId == null) return false;
+
+      final delivered = await _supabase
+          .from('orders')
+          .select('order_id')
+          .eq('buyer_account_id', accountId)
+          .eq('seller_account_id', sellerAccountId)
+          .eq('order_status', 'Delivered')
+          .limit(1);
+      return delivered is List && delivered.isNotEmpty;
+    } catch (e) {
+      _logDbError('Failed to check delivered store order', e);
+      return false;
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getStoreReviews(
+    String storeId,
+  ) async {
+    try {
+      final response = await _supabase
+          .from('store_review')
+          .select(
+            '*, account!store_review_buyer_account_id_fkey(firstname, surname)',
+          )
+          .eq('store_id', storeId)
+          .order('created_at', ascending: false);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      _logDbError('Failed to fetch store reviews', e);
+      return [];
+    }
+  }
+
+  static Future<Map<String, dynamic>?> getCurrentBuyerStoreReview(
+    String storeId,
+  ) async {
+    try {
+      final accountId = await getCurrentAccountId();
+      if (accountId == null) return null;
+      final response = await _supabase
+          .from('store_review')
+          .select()
+          .eq('store_id', storeId)
+          .eq('buyer_account_id', accountId)
+          .maybeSingle();
+      return response == null ? null : Map<String, dynamic>.from(response);
+    } catch (e) {
+      _logDbError('Failed to fetch own store review', e);
+      return null;
+    }
+  }
+
+  static Future<bool> saveStoreReview({
+    required String storeId,
+    required int rating,
+    String? comment,
+  }) async {
+    try {
+      final accountId = await getCurrentAccountId();
+      if (accountId == null) return false;
+
+      await _supabase.from('store_review').upsert({
+        'store_id': storeId,
+        'buyer_account_id': accountId,
+        'rating': rating,
+        'comment': _blankToNull(comment),
+        'updated_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'store_id,buyer_account_id');
+      return true;
+    } catch (e) {
+      _logDbError('Failed to save store review', e);
+      return false;
+    }
+  }
+
+  static Future<bool> reportStore({
+    required String storeId,
+    required String reason,
+    String? details,
+    bool isOrderRelated = false,
+  }) async {
+    try {
+      final accountId = await getCurrentAccountId();
+      if (accountId == null) return false;
+      await _supabase.from('store_report').insert({
+        'store_id': storeId,
+        'reporter_account_id': accountId,
+        'reason': reason.trim(),
+        'details': _blankToNull(details),
+        'is_order_related': isOrderRelated,
+      });
+      return true;
+    } catch (e) {
+      _logDbError('Failed to report store', e);
       return false;
     }
   }
@@ -1770,6 +1977,7 @@ class DatabaseService {
   static Future<bool> approveRiderApplication({
     required String applicationId,
     required String accountId,
+    String? reviewNotes,
   }) async {
     try {
       final application = await _supabase
@@ -1793,37 +2001,54 @@ class DatabaseService {
           : application?['zip_code']?.toString();
 
       await _supabase
+          .from('account')
+          .update({'account_type': 'Rider', 'is_verified': true})
+          .eq('account_id', accountId);
+      if (application != null) {
+        try {
+          await saveRegistrationAddress(
+            accountId: accountId,
+            province: application['province']?.toString(),
+            city: application['city']?.toString(),
+            barangay: application['barangay']?.toString(),
+            street: application['street']?.toString(),
+            houseNumber: application['house_number']?.toString(),
+            zipCode: resolvedZipCode,
+            latitude: point?.latitude ?? _toDouble(application['latitude']),
+            longitude: point?.longitude ?? _toDouble(application['longitude']),
+          );
+        } catch (addressError) {
+          _logDbError('Failed to save approved rider address', addressError);
+        }
+      }
+      await _supabase
           .from('rider_application')
           .update({
             'status': 'Approved',
+            'review_notes': _blankToNull(reviewNotes),
             'date_approved': DateTime.now().toIso8601String(),
             'zip_code': _blankToNull(resolvedZipCode),
             'latitude': point?.latitude ?? _toDouble(application?['latitude']),
             'longitude': point?.longitude ?? _toDouble(application?['longitude']),
           })
           .eq('rider_app_id', applicationId);
-
-      await _supabase
-          .from('account')
-          .update({'account_type': 'Rider', 'is_verified': true})
-          .eq('account_id', accountId);
-      if (application != null) {
-        await saveRegistrationAddress(
-          accountId: accountId,
-          province: application['province']?.toString(),
-          city: application['city']?.toString(),
-          barangay: application['barangay']?.toString(),
-          street: application['street']?.toString(),
-          houseNumber: application['house_number']?.toString(),
-          zipCode: resolvedZipCode,
-          latitude: point?.latitude ?? _toDouble(application['latitude']),
-          longitude: point?.longitude ?? _toDouble(application['longitude']),
-        );
-      }
+      await _sendApplicationNotification(
+        accountId: accountId,
+        approved: true,
+        role: 'Rider',
+        notes: reviewNotes,
+      );
       return true;
     } catch (e) {
       _logDbError('Failed to approve rider application', e);
-      return false;
+      final account = await _supabase
+          .from('account')
+          .select('account_type')
+          .eq('account_id', accountId)
+          .maybeSingle();
+      final app = await getRiderApplicationByAccountId(accountId);
+      return account?['account_type'] == 'Rider' &&
+          app?['status'] == 'Approved';
     }
   }
 
@@ -1836,6 +2061,20 @@ class DatabaseService {
           .from('rider_application')
           .update({'status': 'Rejected', 'review_notes': reviewNotes})
           .eq('rider_app_id', applicationId);
+      final application = await _supabase
+          .from('rider_application')
+          .select('account_id')
+          .eq('rider_app_id', applicationId)
+          .maybeSingle();
+      final accountId = application?['account_id']?.toString();
+      if (accountId != null) {
+        await _sendApplicationNotification(
+          accountId: accountId,
+          approved: false,
+          role: 'Rider',
+          notes: reviewNotes,
+        );
+      }
     } catch (e) {
       _logDbError('Failed to reject rider application', e);
     }
@@ -1908,6 +2147,7 @@ class DatabaseService {
     String? houseNumber,
     String? zipCode,
     String? contactPhone,
+    String? reviewNotes,
   }) async {
     try {
       final point = await LocationService.geocodeAddress(
@@ -1921,16 +2161,6 @@ class DatabaseService {
           ? point!.postalCode!.trim()
           : zipCode;
 
-      // Update application status
-      await _supabase
-          .from('seller_application')
-          .update({
-            'status': 'Approved',
-            'date_approved': DateTime.now().toIso8601String(),
-            'zip_code': _blankToNull(resolvedZipCode),
-          })
-          .eq('application_id', applicationId);
-
       // Update account type to Seller
       await _supabase
           .from('account')
@@ -1939,14 +2169,16 @@ class DatabaseService {
 
       final existingStore = await _supabase
           .from('store')
-          .select('store_id')
+          .select('store_id, slug')
           .eq('owner_account_id', accountId)
           .maybeSingle();
+      final baseSlug = _slugFor(storeName);
+      final slug = existingStore?['slug']?.toString() ?? '$baseSlug-${accountId.substring(0, 8)}';
 
       final storeData = {
         'owner_account_id': accountId,
         'store_name': storeName,
-        'slug': storeName.toLowerCase().replaceAll(' ', '-'),
+        'slug': slug,
         'description': _blankToNull(storeDescription),
         'province': _blankToNull(province),
         'city': city,
@@ -1969,21 +2201,47 @@ class DatabaseService {
             .eq('store_id', existingStore['store_id']);
       }
 
-      await saveRegistrationAddress(
+      try {
+        await saveRegistrationAddress(
+          accountId: accountId,
+          province: province,
+          city: city,
+          barangay: barangay,
+          street: street,
+          houseNumber: houseNumber,
+          zipCode: resolvedZipCode,
+          latitude: point?.latitude,
+          longitude: point?.longitude,
+        );
+      } catch (addressError) {
+        _logDbError('Failed to save approved seller address', addressError);
+      }
+      await _supabase
+          .from('seller_application')
+          .update({
+            'status': 'Approved',
+            'review_notes': _blankToNull(reviewNotes),
+            'date_approved': DateTime.now().toIso8601String(),
+            'zip_code': _blankToNull(resolvedZipCode),
+          })
+          .eq('application_id', applicationId);
+      await _sendApplicationNotification(
         accountId: accountId,
-        province: province,
-        city: city,
-        barangay: barangay,
-        street: street,
-        houseNumber: houseNumber,
-        zipCode: resolvedZipCode,
-        latitude: point?.latitude,
-        longitude: point?.longitude,
+        approved: true,
+        role: 'Seller',
+        notes: reviewNotes,
       );
       return true;
     } catch (e) {
       _logDbError('Failed to approve seller application', e);
-      return false;
+      final account = await _supabase
+          .from('account')
+          .select('account_type')
+          .eq('account_id', accountId)
+          .maybeSingle();
+      final app = await getSellerApplicationByAccountId(accountId);
+      return account?['account_type'] == 'Seller' &&
+          app?['status'] == 'Approved';
     }
   }
 
@@ -1997,8 +2255,79 @@ class DatabaseService {
           .from('seller_application')
           .update({'status': 'Rejected', 'review_notes': reviewNotes})
           .eq('application_id', applicationId);
+      final application = await _supabase
+          .from('seller_application')
+          .select('account_id')
+          .eq('application_id', applicationId)
+          .maybeSingle();
+      final accountId = application?['account_id']?.toString();
+      if (accountId != null) {
+        await _sendApplicationNotification(
+          accountId: accountId,
+          approved: false,
+          role: 'Seller',
+          notes: reviewNotes,
+        );
+      }
     } catch (e) {
       _logDbError('Failed to reject seller application', e);
+    }
+  }
+
+  static Future<void> _sendApplicationNotification({
+    required String accountId,
+    required bool approved,
+    required String role,
+    String? notes,
+  }) async {
+    final title = '$role application ${approved ? 'approved' : 'rejected'}';
+    final fallback = approved
+        ? 'Your $role application has been approved.'
+        : 'Your $role application was rejected.';
+    final body = _blankToNull(notes) ?? fallback;
+
+    try {
+      await _supabase.from('notification').insert({
+        'account_id': accountId,
+        'title': title,
+        'body': body,
+        'notification_type': 'Application',
+      });
+    } catch (e) {
+      _logDbError('Failed to send application notification', e);
+    }
+
+    try {
+      final account = await _supabase
+          .from('account')
+          .select('firstname, surname, email')
+          .eq('account_id', accountId)
+          .maybeSingle();
+      final email = account?['email']?.toString();
+      if (_blankToNull(email) == null) return;
+
+      final firstName = account?['firstname']?.toString() ?? '';
+      final surname = account?['surname']?.toString() ?? '';
+      final name = '$firstName $surname'.trim();
+      final escapedBody = body
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('\n', '<br>');
+
+      await _supabase.functions.invoke(
+        'send-application-email',
+        body: {
+          'toEmail': email,
+          'toName': name.isEmpty ? email : name,
+          'subject': title,
+          'textContent': body,
+          'htmlContent':
+              '<html><body><p>Hello ${name.isEmpty ? 'there' : name},</p><p>$escapedBody</p></body></html>',
+        },
+      );
+    } catch (e) {
+      _logDbError('Failed to send application email', e);
     }
   }
 }
