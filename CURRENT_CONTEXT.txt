@@ -242,3 +242,27 @@ Latest document/delivery/location batch
   - Checkout estimates seller-to-buyer road distance and sets delivery fee to max(PHP 10, PHP 10/km), with fallback to old fee if APIs fail.
   - Rider application table now has province/city/barangay/street/house_number/zip_code/latitude/longitude.
   - Koishi/Koi-shy Business location set to Pila, Laguna; Rin Kaenbyou location set to Santa Cruz, Laguna.
+  - Orders/address/order_items RLS now lets approved riders view unassigned Ready for Pickup delivery details and update claimed deliveries.
+  - Rider dashboard cards show actual order total separately from delivery/rider fee.
+  - My Orders displays the linked delivery address. Order creation verifies selected address ownership before insert.
+
+Latest buyer/search/admin batch
+- Buyer dashboard product cards now hydrate real product review averages/counts from product_review.
+  - Products with no reviews show 0 empty stars and review count (0).
+- Search results now use the requested row layout:
+  - image on the left.
+  - product name, seller link, price, stars, and review count on the right.
+  - Popular sorting ranks by review count first, then average rating.
+- Admin dashboard commission metrics/report now use admin_commission from non-cancelled orders instead of gross order totals.
+- Seller sales summary remains seller-facing and uses seller_payout when available.
+- TODO includes a future item for proper seller and rider landing dashboards.
+
+Latest location verification fix
+- LocationService.geocodeAddress now tries multiple API query candidates before failing:
+  - exact full address.
+  - normalized full address.
+  - barangay/city/province/zip fallback.
+  - city/province/zip fallback.
+  - city/province fallback.
+- Location normalization removes prefixes like CITY OF/MUNICIPALITY OF and expands Sta/Sta. to Santa.
+- Seller registration, rider registration, and address add/edit now pass the zip code into geocoding.

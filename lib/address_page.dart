@@ -255,6 +255,7 @@ class _AddressPageState extends State<AddressPage> {
                   barangay: selectedBarangay,
                   city: selectedCity,
                   province: selectedProvince,
+                  zipCode: zipController.text,
                 );
                 if (point == null) {
                   ScaffoldMessenger.of(context).showSnackBar(

@@ -118,6 +118,22 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
     return null;
   }
 
+  String _formatAddress(dynamic value) {
+    if (value is! Map) return 'No delivery address linked';
+    final parts = [
+      value['house_number'],
+      value['street'],
+      value['barangay'],
+      value['city'],
+      value['province'],
+      value['zip_code'],
+    ]
+        .map((part) => part?.toString().trim() ?? '')
+        .where((part) => part.isNotEmpty)
+        .toList();
+    return parts.isEmpty ? 'No delivery address linked' : parts.join(', ');
+  }
+
   Widget _orderCard(Map<String, dynamic> order) {
     final items = order['order_items'];
     final orderItems = items is List ? items.whereType<Map>().toList() : [];
@@ -143,6 +159,15 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
               ],
             ),
             const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.location_on_outlined, size: 18),
+                const SizedBox(width: 6),
+                Expanded(child: Text(_formatAddress(order['address']))),
+              ],
+            ),
+            const Divider(),
             ...orderItems.map((item) {
               final product = item['product'];
               final variant = item['product_variant'];

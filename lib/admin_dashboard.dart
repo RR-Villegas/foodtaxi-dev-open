@@ -18,10 +18,20 @@ class _AdminDashboardState extends State<AdminDashboard> {
   List<Map<String, dynamic>> _coupons = [];
   bool _isLoading = false;
 
-  double get _totalSales =>
-      _orders.fold(0.0, (sum, order) => sum + _toDouble(order['total_amount']));
-  int get _totalOrders => _orders.length;
-  double get _avgOrderValue => _totalOrders == 0 ? 0 : _totalSales / _totalOrders;
+  List<Map<String, dynamic>> get _successfulOrders => _orders
+      .where((order) {
+        final status = order['order_status']?.toString().toLowerCase() ?? '';
+        return status != 'cancelled' && status != 'canceled';
+      })
+      .toList();
+
+  double get _totalCommission => _successfulOrders.fold(
+        0.0,
+        (sum, order) => sum + _toDouble(order['admin_commission']),
+      );
+  int get _totalOrders => _successfulOrders.length;
+  double get _avgCommission =>
+      _totalOrders == 0 ? 0 : _totalCommission / _totalOrders;
 
   @override
   void initState() {
@@ -624,8 +634,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
               children: [
                 Expanded(
                   child: _metricCard(
-                    'Total Sales',
-                    '₱${_totalSales.toStringAsFixed(0)}',
+                    'Admin Commission',
+                    '₱${_totalCommission.toStringAsFixed(0)}',
                     Icons.trending_up,
                     Colors.green,
                   ),
@@ -646,14 +656,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: _metricCard(
-              'Avg Order Value',
-              '₱${_avgOrderValue.toStringAsFixed(0)}',
+              'Avg Commission',
+              '₱${_avgCommission.toStringAsFixed(0)}',
               Icons.attach_money,
               Colors.orange,
             ),
           ),
           const SizedBox(height: 20),
-          _sectionTitle('Daily Revenue'),
+          _sectionTitle('Daily Commission'),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
@@ -672,7 +682,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_orders.isEmpty) {
+    if (_successfulOrders.isEmpty) {
       return const Center(child: Text('No orders yet'));
     }
 
@@ -687,9 +697,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
             DataColumn(label: Text('Date')),
             DataColumn(label: Text('Items')),
             DataColumn(label: Text('Status')),
-            DataColumn(label: Text('Total')),
+            DataColumn(label: Text('Commission')),
           ],
-          rows: _orders.map((order) {
+          rows: _successfulOrders.map((order) {
             final orderId = order['order_id']?.toString() ?? '';
             return DataRow(
               onSelectChanged: (_) => _showOrderDetails(order),
@@ -700,7 +710,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 DataCell(Text(_itemCount(order).toString())),
                 DataCell(Text(order['order_status']?.toString() ?? 'N/A')),
                 DataCell(
-                  Text('₱${_toDouble(order['total_amount']).toStringAsFixed(2)}'),
+                  Text('₱${_toDouble(order['admin_commission']).toStringAsFixed(2)}'),
                 ),
               ],
             );
@@ -970,7 +980,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
           .inDays;
 
       if (daysAgo >= 0 && daysAgo < 5) {
-        sales[4 - daysAgo] += _toDouble(order['total_amount']);
+        final status = order['order_status']?.toString().toLowerCase() ?? '';
+        if (status == 'cancelled' || status == 'canceled') continue;
+        sales[4 - daysAgo] += _toDouble(order['admin_commission']);
       }
     }
 
@@ -1030,9 +1042,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
             Text('Status: ${order['order_status'] ?? 'N/A'}'),
             Text('Payment: ${order['payment_method'] ?? 'N/A'}'),
             Text(
-              'Total: ₱${_toDouble(order['total_amount']).toStringAsFixed(2)}',
+              'Commission: ₱${_toDouble(order['admin_commission']).toStringAsFixed(2)}',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
+            Text('Order total: ₱${_toDouble(order['total_amount']).toStringAsFixed(2)}'),
           ],
         ),
         actions: [

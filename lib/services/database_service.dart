@@ -66,6 +66,11 @@ class DatabaseService {
 
   static int _toInt(dynamic value) => _toNum(value).toInt();
 
+  static bool _isSuccessfulOrder(Map<String, dynamic> order) {
+    final status = order['order_status']?.toString().toLowerCase() ?? '';
+    return status != 'cancelled' && status != 'canceled';
+  }
+
   static String _randomCode([int length = 6]) {
     final random = Random.secure();
     return List.generate(length, (_) => random.nextInt(10).toString()).join();
@@ -359,6 +364,16 @@ class DatabaseService {
     String orderStatus = 'Processing',
   }) async {
     try {
+      final address = await _supabase
+          .from('address')
+          .select('address_id')
+          .eq('address_id', addressId)
+          .eq('account_id', accountId)
+          .maybeSingle();
+      if (address == null) {
+        throw Exception('Selected address does not belong to this buyer');
+      }
+
       final sellerPayout = totalAmount - shippingFee - serviceFee;
       final orderData = {
         'buyer_account_id': accountId,
@@ -814,16 +829,22 @@ class DatabaseService {
 
   static Future<List<Map<String, dynamic>>> getAvailableDeliveryOrders() async {
     try {
+      final riderAccountId = await getCurrentAccountId();
+      if (riderAccountId == null) return [];
+
       final response = await _supabase
           .from('orders')
           .select(
             '*, address(*), account!orders_buyer_account_id_fkey(firstname, surname, phone_number), order_items(*, product(name), product_variant(size_label))',
           )
+          .inFilter('order_status', ['Ready for Pickup', 'In Transit'])
           .order('order_date', ascending: false);
 
       return List<Map<String, dynamic>>.from(response).where((order) {
         final status = order['order_status']?.toString();
-        return status == 'Ready for Pickup' || status == 'In Transit';
+        final assignedRider = order['rider_account_id']?.toString();
+        return status == 'Ready for Pickup' ||
+            (status == 'In Transit' && assignedRider == riderAccountId);
       }).toList();
     } catch (e) {
       _logDbError('Failed to fetch delivery orders', e);
@@ -1070,9 +1091,14 @@ class DatabaseService {
   ) {
     var revenue = 0.0;
     var itemsSold = 0;
+    var successfulOrders = 0;
 
     for (final order in orders) {
-      revenue += _toDouble(order['total_amount']);
+      if (!_isSuccessfulOrder(order)) continue;
+      successfulOrders++;
+      revenue += order.containsKey('seller_payout')
+          ? _toDouble(order['seller_payout'])
+          : _toDouble(order['total_amount']);
       final items = order['order_items'];
       if (items is List) {
         for (final item in items) {
@@ -1082,10 +1108,56 @@ class DatabaseService {
     }
 
     return {
-      'orders': orders.length,
+      'orders': successfulOrders,
       'revenue': revenue,
       'itemsSold': itemsSold,
     };
+  }
+
+  static Future<List<Map<String, dynamic>>> _withProductRatings(
+    List<Map<String, dynamic>> products,
+  ) async {
+    if (products.isEmpty) return products;
+    try {
+      final productIds = products
+          .map((product) => product['product_id']?.toString() ?? '')
+          .where((id) => id.isNotEmpty)
+          .toList();
+      if (productIds.isEmpty) return products;
+
+      final reviews = await _supabase
+          .from('product_review')
+          .select('product_id, rating')
+          .inFilter('product_id', productIds);
+
+      final totals = <String, double>{};
+      final counts = <String, int>{};
+      for (final review in List<Map<String, dynamic>>.from(reviews)) {
+        final productId = review['product_id']?.toString();
+        if (productId == null || productId.isEmpty) continue;
+        totals[productId] = (totals[productId] ?? 0) + _toDouble(review['rating']);
+        counts[productId] = (counts[productId] ?? 0) + 1;
+      }
+
+      return products.map((product) {
+        final productId = product['product_id']?.toString() ?? '';
+        final count = counts[productId] ?? 0;
+        return {
+          ...product,
+          'average_rating': count == 0 ? 0.0 : (totals[productId] ?? 0) / count,
+          'review_count': count,
+        };
+      }).toList();
+    } catch (e) {
+      _logDbError('Failed to attach product ratings', e);
+      return products
+          .map((product) => {
+                ...product,
+                'average_rating': 0.0,
+                'review_count': 0,
+              })
+          .toList();
+    }
   }
 
   // Fetch all products
@@ -1095,7 +1167,7 @@ class DatabaseService {
           .from('product')
           .select()
           .eq('is_active', true);
-      return List<Map<String, dynamic>>.from(response);
+      return _withProductRatings(List<Map<String, dynamic>>.from(response));
     } catch (e) {
       _logDbError('Failed to fetch products', e);
       return [];
@@ -1135,7 +1207,18 @@ class DatabaseService {
               ? await request.order('price', ascending: false)
               : await request.order('product_id', ascending: false);
 
-      final products = List<Map<String, dynamic>>.from(response);
+      var products = await _withProductRatings(List<Map<String, dynamic>>.from(response));
+      if (sort == 'Popular') {
+        products.sort((a, b) {
+          final byCount = _toInt(b['review_count']).compareTo(
+            _toInt(a['review_count']),
+          );
+          if (byCount != 0) return byCount;
+          return _toDouble(b['average_rating']).compareTo(
+            _toDouble(a['average_rating']),
+          );
+        });
+      }
       final sellerQuery = seller.trim().toLowerCase();
       if (sellerQuery.isEmpty) return products;
 

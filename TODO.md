@@ -33,7 +33,22 @@ Latest done
 - Address manager now uses API-driven province/city/barangay dropdowns instead of manual location text entry.
 - Seller/rider registration addresses are saved to the address table after submission/login sync and on approval if missing.
 - Seller order status controls are buttons; seller changes lock after rider pickup/In Transit.
+- Rider delivery queue can see unassigned Ready for Pickup orders, addresses, and order items through rider-specific RLS.
+- Rider delivery cards now show actual order total separately from delivery/rider fee.
+- My Orders now displays the linked delivery address and order creation verifies the selected address belongs to the buyer.
 - Koishi/Koi-shy Business is set to Pila, Laguna; Rin Kaenbyou is set to Santa Cruz, Laguna.
 - ZIP/postal code is now read from the geocoding API when available.
 - Checkout calculates delivery distance with geocoding/OSRM and charges max(10 PHP, 10 PHP per km).
+- Buyer dashboard product cards now use real product review averages/counts and default unrated products to 0 stars.
+- Search results now use the image, product name, seller, price, stars, and review-count row layout.
+- Admin dashboard money metrics now show commission from successful orders instead of gross order totals.
 - Applied supabase_documents_delivery_updates.sql and verified columns/buckets/policies.
+
+To do
+- Build proper landing dashboards for seller (count of sales, orders) and rider (count of delivers).
+-
+- Add new formatting of math/deduction for shared countable product (eg. egg), there's the default that all products currently using (eg the sizes are separate in stock), mode 2 is where the stock is shared across sizes (eg. it counts by 10, 20, 50, 100, etc..) where the default is 10 and has stock of 100, ordering one 10 and ordering one 50 will deduct 60 in stock.
+- Redesign Seller shopfront
+- In seller dashboard > Orders, there should be a box below the nav where you toggle between states (eg Processing, Ready to pickup, in transit, delivered, cancelled)
+- Buyer account, receipt system
+- Seller account, add size to default (weird that it doesn't have it)

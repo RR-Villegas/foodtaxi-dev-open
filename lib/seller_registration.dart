@@ -510,6 +510,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
         barangay: _selectedBarangayName,
         city: _selectedCityName,
         province: _selectedProvinceName,
+        zipCode: _zipCodeController.text,
       );
       if (point == null) {
         throw Exception('Store address could not be verified by the location API');

@@ -222,6 +222,10 @@ class _RiderDashboardState extends State<RiderDashboard> {
     final status = order['order_status']?.toString() ?? 'Ready for Pickup';
     final items = order['order_items'];
     final orderItems = items is List ? items.whereType<Map>().toList() : [];
+    final riderFee = order['rider_fee'] ?? order['shipping_fee'];
+    final distance = double.tryParse(
+      order['delivery_distance_km']?.toString() ?? '',
+    );
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -263,11 +267,26 @@ class _RiderDashboardState extends State<RiderDashboard> {
             }),
             const Divider(),
             Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Expanded(
-                  child: Text(
-                    _money(order['rider_fee']),
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Order total: ${_money(order['total_amount'])}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Text(
+                        distance == null
+                            ? 'Delivery fee: ${_money(riderFee)}'
+                            : 'Delivery fee: ${_money(riderFee)} (${distance.toStringAsFixed(1)} km)',
+                        style: const TextStyle(color: Colors.black54),
+                      ),
+                    ],
                   ),
                 ),
                 if (status == 'Ready for Pickup')

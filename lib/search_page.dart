@@ -76,6 +76,122 @@ class _SearchPageState extends State<SearchPage> {
     );
   }
 
+  double _rating(Map<String, dynamic> product) {
+    final value = product['average_rating'];
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  int _reviewCount(Map<String, dynamic> product) {
+    final value = product['review_count'];
+    if (value is int) return value;
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  Widget _stars(double rating) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(5, (index) {
+        final filled = rating >= index + 1;
+        final half = !filled && rating > index && rating < index + 1;
+        return Icon(
+          filled
+              ? Icons.star
+              : half
+                  ? Icons.star_half
+                  : Icons.star_border,
+          size: 15,
+          color: Colors.amber,
+        );
+      }),
+    );
+  }
+
+  Widget _productRow(Map<String, dynamic> product) {
+    final productId = product['product_id']?.toString();
+    final store = product['store'];
+    final seller = store is Map
+        ? store['store_name']?.toString() ?? 'Seller'
+        : 'Seller';
+    final storeId = store is Map ? store['store_id']?.toString() : null;
+    final rating = _rating(product);
+    final reviewCount = _reviewCount(product);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: productId == null
+            ? null
+            : () => Navigator.pushNamed(context, '/product/$productId'),
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: SizedBox(
+                  width: 88,
+                  height: 88,
+                  child: _image(product['main_image_url']),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      product['name']?.toString() ?? 'Product',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    InkWell(
+                      onTap: storeId == null
+                          ? null
+                          : () => Navigator.pushNamed(context, '/seller/$storeId'),
+                      child: Text(
+                        seller,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.black54),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          'PHP ${product['price']}',
+                          style: const TextStyle(
+                            color: Colors.green,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        _stars(rating),
+                        Text(
+                          '($reviewCount)',
+                          style: const TextStyle(color: Colors.black54),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _filters() {
     return Container(
       color: const Color(0xFFEAF7EF),
@@ -196,93 +312,11 @@ class _SearchPageState extends State<SearchPage> {
                 ? const Center(child: CircularProgressIndicator())
                 : _products.isEmpty
                     ? const Center(child: Text('No products found'))
-                    : LayoutBuilder(
-                        builder: (context, constraints) {
-                          final columns = constraints.maxWidth > 700 ? 4 : 2;
-                          return GridView.builder(
+                    : ListView.builder(
                         padding: const EdgeInsets.all(12),
-                        gridDelegate:
-                            SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: columns,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                          childAspectRatio: 0.72,
-                        ),
                         itemCount: _products.length,
-                        itemBuilder: (context, index) {
-                          final product = _products[index];
-                          final productId = product['product_id']?.toString();
-                          final store = product['store'];
-                          final seller = store is Map
-                              ? store['store_name']?.toString() ?? 'Seller'
-                              : 'Seller';
-                          final storeId = store is Map
-                              ? store['store_id']?.toString()
-                              : null;
-                          return Card(
-                            clipBehavior: Clip.antiAlias,
-                            child: InkWell(
-                              onTap: productId == null
-                                  ? null
-                                  : () => Navigator.pushNamed(
-                                        context,
-                                        '/product/$productId',
-                                      ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  AspectRatio(
-                                    aspectRatio: 1,
-                                    child: _image(product['main_image_url']),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.all(8),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          product['name']?.toString() ??
-                                              'Product',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                        InkWell(
-                                          onTap: storeId == null
-                                              ? null
-                                              : () => Navigator.pushNamed(
-                                                    context,
-                                                    '/seller/$storeId',
-                                                  ),
-                                          child: Text(
-                                            seller,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              color: Colors.black54,
-                                            ),
-                                          ),
-                                        ),
-                                        Text(
-                                          'PHP ${product['price']}',
-                                          style: const TextStyle(
-                                            color: Colors.green,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      );
-                        },
+                        itemBuilder: (context, index) =>
+                            _productRow(_products[index]),
                       ),
           ),
         ],

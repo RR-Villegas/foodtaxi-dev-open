@@ -396,6 +396,7 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
         barangay: _selectedBarangayName,
         city: _selectedCityName,
         province: _selectedProvinceName,
+        zipCode: _zipCodeController.text,
       );
       if (point == null) {
         throw Exception('Rider address could not be verified by the location API');

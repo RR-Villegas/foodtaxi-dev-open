@@ -149,6 +149,37 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
     );
   }
 
+  double _rating(Map<String, dynamic> product) {
+    final value = product['average_rating'];
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  int _reviewCount(Map<String, dynamic> product) {
+    final value = product['review_count'];
+    if (value is int) return value;
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  Widget _stars(double rating) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(5, (index) {
+        final filled = rating >= index + 1;
+        final half = !filled && rating > index && rating < index + 1;
+        return Icon(
+          filled
+              ? Icons.star
+              : half
+                  ? Icons.star_half
+                  : Icons.star_border,
+          size: 14,
+          color: Colors.amber,
+        );
+      }),
+    );
+  }
+
   Widget horizontalList(List<Map<String, dynamic>> items) {
     return SizedBox(
       height: 292,
@@ -159,6 +190,8 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
         itemBuilder: (context, index) {
           final item = items[index];
           final productId = item['product_id'] as String?;
+          final rating = _rating(item);
+          final reviewCount = _reviewCount(item);
 
           return GestureDetector(
             onTap: productId != null
@@ -210,15 +243,14 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
                             ),
                           ),
                           const SizedBox(height: 2),
-                          const Row(
+                          Row(
                             children: [
-                              Icon(Icons.star, size: 14, color: Colors.amber),
-                              Icon(Icons.star, size: 14, color: Colors.amber),
-                              Icon(Icons.star, size: 14, color: Colors.amber),
-                              Icon(Icons.star, size: 14, color: Colors.amber),
-                              Icon(Icons.star_border, size: 14, color: Colors.amber),
-                              SizedBox(width: 4),
-                              Text('(0)', style: TextStyle(fontSize: 12)),
+                              _stars(rating),
+                              const SizedBox(width: 4),
+                              Text(
+                                '($reviewCount)',
+                                style: const TextStyle(fontSize: 12),
+                              ),
                             ],
                           ),
                           const SizedBox(height: 4),

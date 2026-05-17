@@ -176,6 +176,74 @@ class LocationService {
     return parts.join(', ');
   }
 
+  static List<String> _addressQueryCandidates({
+    String? houseNumber,
+    String? street,
+    String? barangay,
+    String? city,
+    String? province,
+    String? zipCode,
+  }) {
+    final normalizedCity = _normalizePlaceName(city);
+    final normalizedProvince = _normalizePlaceName(province);
+    final normalizedBarangay = _normalizePlaceName(barangay);
+
+    final candidates = [
+      buildAddressQuery(
+        houseNumber: houseNumber,
+        street: street,
+        barangay: barangay,
+        city: city,
+        province: province,
+        zipCode: zipCode,
+      ),
+      buildAddressQuery(
+        houseNumber: houseNumber,
+        street: street,
+        barangay: normalizedBarangay,
+        city: normalizedCity,
+        province: normalizedProvince,
+        zipCode: zipCode,
+      ),
+      buildAddressQuery(
+        barangay: normalizedBarangay,
+        city: normalizedCity,
+        province: normalizedProvince,
+        zipCode: zipCode,
+      ),
+      buildAddressQuery(
+        city: normalizedCity,
+        province: normalizedProvince,
+        zipCode: zipCode,
+      ),
+      buildAddressQuery(
+        city: normalizedCity,
+        province: normalizedProvince,
+      ),
+    ];
+
+    final seen = <String>{};
+    return candidates
+        .map((query) => query.trim())
+        .where((query) => query.isNotEmpty && seen.add(query.toLowerCase()))
+        .toList();
+  }
+
+  static String? _normalizePlaceName(String? value) {
+    var normalized = value?.trim();
+    if (normalized == null || normalized.isEmpty) return normalized;
+
+    normalized = normalized
+        .replaceAll(RegExp(r'\bCITY OF\b', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\bMUNICIPALITY OF\b', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\bPROVINCE OF\b', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\bSTA\.?\b', caseSensitive: false), 'Santa')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+
+    return normalized.isEmpty ? value?.trim() : normalized;
+  }
+
   static Future<GeoPoint?> geocodeAddress({
     String? houseNumber,
     String? street,
@@ -184,7 +252,7 @@ class LocationService {
     String? province,
     String? zipCode,
   }) async {
-    final query = buildAddressQuery(
+    final queries = _addressQueryCandidates(
       houseNumber: houseNumber,
       street: street,
       barangay: barangay,
@@ -192,9 +260,9 @@ class LocationService {
       province: province,
       zipCode: zipCode,
     );
-    if (query.trim().isEmpty) return null;
+    if (queries.isEmpty) return null;
 
-    try {
+    for (final query in queries) {
       final uri = Uri.parse(_nominatimUrl).replace(
         queryParameters: {
           'q': query,
@@ -204,29 +272,33 @@ class LocationService {
           'countrycodes': 'ph',
         },
       );
-      final response = await http.get(
-        uri,
-        headers: const {
-          'User-Agent': 'FoodTaxiMobile/1.0 support@foodtaxi.local',
-        },
-      ).timeout(const Duration(seconds: 10));
 
-      if (response.statusCode != 200) return null;
-      final data = jsonDecode(response.body);
-      if (data is! List || data.isEmpty || data.first is! Map) return null;
-      final item = data.first as Map;
-      final lat = double.tryParse(item['lat']?.toString() ?? '');
-      final lon = double.tryParse(item['lon']?.toString() ?? '');
-      if (lat == null || lon == null) return null;
-      return GeoPoint(
-        latitude: lat,
-        longitude: lon,
-        postalCode: _extractPostalCode(item),
-      );
-    } catch (e) {
-      print('Error geocoding address: $e');
-      return null;
+      try {
+        final response = await http.get(
+          uri,
+          headers: const {
+            'User-Agent': 'FoodTaxiMobile/1.0 support@foodtaxi.local',
+          },
+        ).timeout(const Duration(seconds: 10));
+
+        if (response.statusCode != 200) continue;
+        final data = jsonDecode(response.body);
+        if (data is! List || data.isEmpty || data.first is! Map) continue;
+        final item = data.first as Map;
+        final lat = double.tryParse(item['lat']?.toString() ?? '');
+        final lon = double.tryParse(item['lon']?.toString() ?? '');
+        if (lat == null || lon == null) continue;
+        return GeoPoint(
+          latitude: lat,
+          longitude: lon,
+          postalCode: _extractPostalCode(item),
+        );
+      } catch (e) {
+        print('Error geocoding address "$query": $e');
+      }
     }
+
+    return null;
   }
 
   static Future<String?> postalCodeForAddress({
