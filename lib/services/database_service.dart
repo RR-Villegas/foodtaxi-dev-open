@@ -873,6 +873,7 @@ class DatabaseService {
     int? limit,
     String? type,
     Duration? age,
+    bool unreadOnly = false,
   }) async {
     try {
       final accountId = await getCurrentAccountId();
@@ -885,6 +886,10 @@ class DatabaseService {
 
       if (type != null && type != 'All') {
         query = query.eq('notification_type', type);
+      }
+
+      if (unreadOnly) {
+        query = query.eq('is_read', false);
       }
 
       if (age != null) {
@@ -912,6 +917,17 @@ class DatabaseService {
           .eq('notification_id', notificationId);
     } catch (e) {
       _logDbError('Failed to mark notification read', e);
+    }
+  }
+
+  static Future<void> markNotificationUnread(String notificationId) async {
+    try {
+      await _supabase
+          .from('notification')
+          .update({'is_read': false})
+          .eq('notification_id', notificationId);
+    } catch (e) {
+      _logDbError('Failed to mark notification unread', e);
     }
   }
 
@@ -1227,20 +1243,15 @@ class DatabaseService {
       final riderAccountId = await getCurrentAccountId();
       if (riderAccountId == null) return [];
 
-      final response = await _supabase
-          .from('orders')
-          .select(
-            '*, address(*), account!orders_buyer_account_id_fkey(firstname, surname, phone_number), order_items(*, product(name), product_variant(size_label))',
-          )
-          .inFilter('order_status', ['Ready for Pickup', 'In Transit'])
-          .order('order_date', ascending: false);
+      final response = await _supabase.rpc(
+        'get_rider_orders',
+        params: {
+          'p_rider_account_id': riderAccountId,
+          'p_assigned_only': false,
+        },
+      );
 
-      return List<Map<String, dynamic>>.from(response).where((order) {
-        final status = order['order_status']?.toString();
-        final assignedRider = order['rider_account_id']?.toString();
-        return status == 'Ready for Pickup' ||
-            (status == 'In Transit' && assignedRider == riderAccountId);
-      }).toList();
+      return _withOrderItems(List<Map<String, dynamic>>.from(response));
     } catch (e) {
       _logDbError('Failed to fetch delivery orders', e);
       return [];
@@ -1252,19 +1263,54 @@ class DatabaseService {
       final riderAccountId = await getCurrentAccountId();
       if (riderAccountId == null) return [];
 
-      final response = await _supabase
-          .from('orders')
-          .select(
-            '*, address(*), account!orders_buyer_account_id_fkey(firstname, surname, phone_number), order_items(*, product(name), product_variant(size_label))',
-          )
-          .eq('rider_account_id', riderAccountId)
-          .order('order_date', ascending: false);
+      final response = await _supabase.rpc(
+        'get_rider_orders',
+        params: {
+          'p_rider_account_id': riderAccountId,
+          'p_assigned_only': true,
+        },
+      );
 
-      return List<Map<String, dynamic>>.from(response);
+      return _withOrderItems(List<Map<String, dynamic>>.from(response));
     } catch (e) {
       _logDbError('Failed to fetch rider orders', e);
       return [];
     }
+  }
+
+  static Future<List<Map<String, dynamic>>> _withOrderItems(
+    List<Map<String, dynamic>> orders,
+  ) async {
+    final orderIds = orders
+        .map((order) => order['order_id']?.toString() ?? '')
+        .where((orderId) => orderId.isNotEmpty)
+        .toList();
+    if (orderIds.isEmpty) return orders;
+
+    final response = await _supabase
+        .from('order_items')
+        .select(
+          '*, product:product!order_items_product_id_fkey(product_id, name, main_image_url), product_variant:product_variant!order_items_product_variant_id_fkey(variant_id, size_label)',
+        )
+        .inFilter('order_id', orderIds)
+        .order('order_item_id');
+
+    final itemsByOrderId = <String, List<Map<String, dynamic>>>{};
+    for (final item in List<Map<String, dynamic>>.from(response)) {
+      final orderId = item['order_id']?.toString();
+      if (orderId == null || orderId.isEmpty) continue;
+      itemsByOrderId.putIfAbsent(orderId, () => []).add(item);
+    }
+
+    return orders.map((order) {
+      final orderId = order['order_id']?.toString();
+      return {
+        ...order,
+        'order_items': orderId == null
+            ? <Map<String, dynamic>>[]
+            : itemsByOrderId[orderId] ?? <Map<String, dynamic>>[],
+      };
+    }).toList();
   }
 
   static Future<bool> assignOrderToCurrentRider(String orderId) async {

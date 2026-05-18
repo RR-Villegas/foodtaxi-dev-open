@@ -19,7 +19,10 @@ class _NotificationBellState extends State<NotificationBell> {
   }
 
   Future<void> _load() async {
-    final items = await DatabaseService.getCurrentNotifications(limit: 3);
+    final items = await DatabaseService.getCurrentNotifications(
+      limit: 3,
+      unreadOnly: true,
+    );
     if (!mounted) return;
     setState(() => _items = items);
   }
@@ -81,7 +84,20 @@ class _NotificationBellState extends State<NotificationBell> {
                         child: Text('No notifications'),
                       )
                     else
-                      ..._items.map((item) => _NotificationPreview(item: item)),
+                      ..._items.map(
+                        (item) => _NotificationPreview(
+                          item: item,
+                          onRead: () {
+                            setState(() {
+                              _items = _items
+                                  .where((current) =>
+                                      current['notification_id'] !=
+                                      item['notification_id'])
+                                  .toList();
+                            });
+                          },
+                        ),
+                      ),
                     const Divider(),
                     Align(
                       alignment: Alignment.centerRight,
@@ -121,8 +137,9 @@ class _NotificationBellState extends State<NotificationBell> {
 
 class _NotificationPreview extends StatelessWidget {
   final Map<String, dynamic> item;
+  final VoidCallback onRead;
 
-  const _NotificationPreview({required this.item});
+  const _NotificationPreview({required this.item, required this.onRead});
 
   @override
   Widget build(BuildContext context) {
@@ -159,7 +176,7 @@ class _NotificationPreview extends StatelessWidget {
                   await DatabaseService.markNotificationRead(
                     item['notification_id'].toString(),
                   );
-                  if (context.mounted) Navigator.pop(context);
+                  onRead();
                 },
                 icon: const Icon(Icons.close, size: 18),
               ),
@@ -173,19 +190,25 @@ class _NotificationPreview extends StatelessWidget {
           Align(
             alignment: Alignment.centerRight,
             child: TextButton(
-              onPressed: () => showDialog<void>(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: Text(title),
-                  content: SingleChildScrollView(child: Text(body)),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Close'),
-                    ),
-                  ],
-                ),
-              ),
+              onPressed: () async {
+                await showDialog<void>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: Text(title),
+                    content: SingleChildScrollView(child: Text(body)),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Close'),
+                      ),
+                    ],
+                  ),
+                );
+                await DatabaseService.markNotificationRead(
+                  item['notification_id'].toString(),
+                );
+                onRead();
+              },
               child: const Text('Read more'),
             ),
           ),

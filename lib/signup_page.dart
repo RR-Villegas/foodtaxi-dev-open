@@ -770,7 +770,7 @@ class _SignupPageState extends State<SignupPage> {
         TextField(
           controller: _firstNameController,
           decoration: InputDecoration(
-            labelText: 'First Name',
+            labelText: 'First Name *',
             hintText: 'Enter your first name',
             filled: true,
             fillColor: const Color(0xFFF1F7F1),
@@ -784,7 +784,7 @@ class _SignupPageState extends State<SignupPage> {
         TextField(
           controller: _surnameController,
           decoration: InputDecoration(
-            labelText: 'Surname',
+            labelText: 'Surname *',
             hintText: 'Enter your surname',
             filled: true,
             fillColor: const Color(0xFFF1F7F1),
@@ -798,7 +798,7 @@ class _SignupPageState extends State<SignupPage> {
         TextField(
           controller: _phoneNumberController,
           decoration: InputDecoration(
-            labelText: 'Phone Number',
+            labelText: 'Phone Number *',
             hintText: '9123456789',
             prefixText: '+63 ',
             filled: true,

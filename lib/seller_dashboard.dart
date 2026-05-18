@@ -1064,6 +1064,7 @@ class _SellerDashboardState extends State<SellerDashboard> {
 
   Widget _buildSalesTab() {
     final summary = DatabaseService.summarizeSales(_orders);
+    final deliveredOrders = _orders.where(_isDelivered).toList();
 
     return RefreshIndicator(
       onRefresh: _loadDashboard,
@@ -1111,13 +1112,13 @@ class _SellerDashboardState extends State<SellerDashboard> {
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
           ),
           const SizedBox(height: 8),
-          if (_orders.isEmpty)
+          if (deliveredOrders.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 32),
-              child: Center(child: Text('No sales yet')),
+              child: Center(child: Text('No delivered sales yet')),
             )
           else
-            ..._orders.map((order) {
+            ...deliveredOrders.map((order) {
               final buyerName = _buyerName(order);
               final itemCount = _itemCount(order);
 
@@ -1129,7 +1130,7 @@ class _SellerDashboardState extends State<SellerDashboard> {
                   ),
                   title: Text(_money(order['total_amount'])),
                   subtitle: Text(
-                    '$buyerName | $itemCount item${itemCount == 1 ? '' : 's'} sold | ${order['order_status'] ?? 'Processing'}',
+                    '$buyerName | $itemCount item${itemCount == 1 ? '' : 's'} sold',
                   ),
                   trailing: Text(
                     order['payment_status']?.toString() ?? 'Pending',
@@ -1223,12 +1224,9 @@ class _SellerDashboardState extends State<SellerDashboard> {
           }
 
           final order = visibleOrders[index - 1];
-          final buyer = order['account'] ?? order['buyer'];
-          final buyerName = buyer is Map
-            ? '${buyer['firstname'] ?? ''} ${buyer['surname'] ?? ''}'.trim()
-            : '';
-          final buyerPhone =
-              buyer is Map ? buyer['phone_number']?.toString() ?? '' : '';
+          final buyerName = _buyerName(order);
+          final buyerContact = _buyerContactLine(order);
+          final buyerPhone = _buyerPhone(order);
           final items = order['order_items'];
           final orderItems = items is List ? items : const [];
           final status = order['order_status']?.toString() ?? 'Processing';
@@ -1245,7 +1243,7 @@ class _SellerDashboardState extends State<SellerDashboard> {
                     children: [
                       Expanded(
                         child: Text(
-                          buyerName.isEmpty ? 'Unknown Buyer' : buyerName,
+                          buyerName,
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
@@ -1255,6 +1253,13 @@ class _SellerDashboardState extends State<SellerDashboard> {
                       Text(_money(order['total_amount'])),
                     ],
                   ),
+                  if (buyerContact.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      buyerContact,
+                      style: const TextStyle(color: Colors.black54),
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   Text(
                     'Ordered products ($itemCount item${itemCount == 1 ? '' : 's'})',

@@ -780,11 +780,11 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
             style: TextStyle(color: Colors.white70, fontSize: 16),
           ),
           const SizedBox(height: 48),
-          _buildStepIndicator('Personal Info', 1),
+          _buildStepIndicator('Personal Info', 1, onDark: true),
           const SizedBox(height: 24),
-          _buildStepIndicator('Store Information', 2),
+          _buildStepIndicator('Store Information', 2, onDark: true),
           const SizedBox(height: 24),
-          _buildStepIndicator('Location Details', 3),
+          _buildStepIndicator('Location Details', 3, onDark: true),
         ],
       ),
     );
@@ -815,7 +815,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
     );
   }
 
-  Widget _buildStepIndicator(String label, int step) {
+  Widget _buildStepIndicator(String label, int step, {bool onDark = false}) {
     final isCompleted = step < _currentStep;
     final isCurrent = step == _currentStep;
 
@@ -852,7 +852,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
           style: TextStyle(
             fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
             color: isCurrent || isCompleted
-                ? Theme.of(context).colorScheme.primary
+                ? (onDark ? Colors.white : Theme.of(context).colorScheme.primary)
                 : Colors.grey,
           ),
         ),

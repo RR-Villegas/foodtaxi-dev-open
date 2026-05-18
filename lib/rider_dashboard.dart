@@ -194,6 +194,30 @@ class _RiderDashboardState extends State<RiderDashboard> {
     return _status(order).toLowerCase() == 'delivered';
   }
 
+  Map<dynamic, dynamic>? _buyerFor(Map<String, dynamic> order) {
+    final account = order['account'];
+    return account is Map ? account : null;
+  }
+
+  String _buyerName(Map<String, dynamic> order) {
+    final buyer = _buyerFor(order);
+    final first = buyer?['firstname']?.toString().trim() ?? '';
+    final last = buyer?['surname']?.toString().trim() ?? '';
+    final name = '$first $last'.trim();
+    if (name.isNotEmpty) return name;
+    final email = buyer?['email']?.toString().trim() ?? '';
+    if (email.isNotEmpty) return email;
+    final phone = buyer?['phone_number']?.toString().trim() ?? '';
+    if (phone.isNotEmpty) return phone;
+    final buyerId = order['buyer_account_id']?.toString() ?? '';
+    if (buyerId.length >= 8) return 'Buyer ${buyerId.substring(0, 8)}';
+    return 'Unknown Buyer';
+  }
+
+  String _buyerPhone(Map<String, dynamic> order) {
+    return _buyerFor(order)?['phone_number']?.toString().trim() ?? '';
+  }
+
   DateTime? _orderDate(Map<String, dynamic> order, {bool preferDelivered = false}) {
     final value = preferDelivered
         ? order['delivered_at'] ?? order['order_date']
@@ -390,11 +414,8 @@ class _RiderDashboardState extends State<RiderDashboard> {
   }
 
   Widget _orderCard(Map<String, dynamic> order) {
-    final buyer = order['account'];
-    final buyerName = buyer is Map
-        ? '${buyer['firstname'] ?? 'Buyer'} ${buyer['surname'] ?? ''}'.trim()
-        : 'Buyer';
-    final buyerPhone = buyer is Map ? buyer['phone_number']?.toString() ?? '' : '';
+    final buyerName = _buyerName(order);
+    final buyerPhone = _buyerPhone(order);
     final status = _status(order);
     final items = order['order_items'];
     final orderItems = items is List ? items.whereType<Map>().toList() : [];
@@ -414,7 +435,7 @@ class _RiderDashboardState extends State<RiderDashboard> {
               children: [
                 Expanded(
                   child: Text(
-                    buyerName.isEmpty ? 'Buyer' : buyerName,
+                    buyerName,
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),

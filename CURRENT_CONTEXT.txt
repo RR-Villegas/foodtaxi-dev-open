@@ -563,3 +563,16 @@ Latest seller buyer-identity fix
   - prefers buyer full name.
   - falls back to email, then phone, then a shortened buyer account id.
   - Orders cards show buyer email/phone under the buyer name when available.
+
+Latest TODO cleanup batch
+- Login close now navigates to / when login has no route to pop, fixing logout/login-exit main-page blankness.
+- /seller/<store_id> now renders SellerPage publicly instead of through ProtectedRoute; shop review/report still require login.
+- Added guarded Supabase RPC public.get_rider_orders(uuid, boolean) for rider-owned delivery queues/history with buyer account and address payloads.
+- DatabaseService rider order loaders now use get_rider_orders() and hydrate order_items afterward.
+- Rider dashboard now formats buyer name with fallbacks instead of showing generic Buyer.
+- Notification bell fetches only the latest 3 unread notifications; read/dismissed items are removed from the preview.
+- Notifications page fetches unread notifications only and marks items read from tap/Mark read.
+- Buyer signup step 2 shows surname and phone as required; validation already enforces both.
+- Seller/rider registration side-panel step labels are light on dark backgrounds.
+- Admin dashboard Commission Sales now uses a line chart with Days, Weeks, and Months filters.
+- Seller storefront review/report login gates now guard context use after async checks, addressing the seller_page async-context analyzer infos.

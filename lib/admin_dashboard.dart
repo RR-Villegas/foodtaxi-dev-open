@@ -11,6 +11,65 @@ class AdminDashboard extends StatefulWidget {
   State<AdminDashboard> createState() => _AdminDashboardState();
 }
 
+class _CommissionLinePainter extends CustomPainter {
+  final List<double> values;
+  final Color color;
+
+  const _CommissionLinePainter({
+    required this.values,
+    required this.color,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (values.isEmpty) return;
+    final maxValue = values.fold<double>(
+      0,
+      (max, value) => value > max ? value : max,
+    );
+    final denominator = maxValue <= 0 ? 1 : maxValue;
+    final step = values.length == 1 ? 0.0 : size.width / (values.length - 1);
+    final points = <Offset>[];
+
+    for (var index = 0; index < values.length; index++) {
+      final x = values.length == 1 ? size.width / 2 : step * index;
+      final y = size.height - ((values[index] / denominator) * size.height);
+      points.add(Offset(x, y.clamp(0.0, size.height)));
+    }
+
+    final gridPaint = Paint()
+      ..color = Colors.black12
+      ..strokeWidth = 1;
+    for (var i = 0; i <= 3; i++) {
+      final y = size.height * (i / 3);
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    }
+
+    final linePaint = Paint()
+      ..color = color
+      ..strokeWidth = 3
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    final path = Path()..moveTo(points.first.dx, points.first.dy);
+    for (final point in points.skip(1)) {
+      path.lineTo(point.dx, point.dy);
+    }
+    canvas.drawPath(path, linePaint);
+
+    final dotPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+    for (final point in points) {
+      canvas.drawCircle(point, 4, dotPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _CommissionLinePainter oldDelegate) {
+    return oldDelegate.values != values || oldDelegate.color != color;
+  }
+}
+
 class _AdminDashboardState extends State<AdminDashboard> {
   int _currentIndex = 0;
   List<Map<String, dynamic>> _sellerApplications = [];
@@ -25,6 +84,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   final _reportSearchController = TextEditingController();
   String _salesStatusFilter = 'All';
   String _salesDateFilter = 'All';
+  String _commissionRange = 'Days';
   String _sellerApplicationFilter = 'Pending Review';
   String _riderApplicationFilter = 'Pending Review';
   String _reportTypeFilter = 'All';
@@ -49,6 +109,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     '7 Days',
     '30 Days',
   ];
+  static const List<String> _commissionRanges = ['Days', 'Weeks', 'Months'];
   static const List<String> _reportTypeFilters = [
     'All',
     'Store',
@@ -880,12 +941,28 @@ class _AdminDashboardState extends State<AdminDashboard> {
             ),
           ),
           const SizedBox(height: 20),
-          _sectionTitle('Daily Commission'),
+          _sectionTitle('Commission Sales'),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: List.generate(7, (i) => _revenueBar(_dailySales()[i], i)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  spacing: 8,
+                  children: _commissionRanges
+                      .map(
+                        (range) => ChoiceChip(
+                          label: Text(range),
+                          selected: _commissionRange == range,
+                          onSelected: (_) =>
+                              setState(() => _commissionRange = range),
+                        ),
+                      )
+                      .toList(),
+                ),
+                const SizedBox(height: 12),
+                _commissionLineChart(_commissionSeries()),
+              ],
             ),
           ),
           const SizedBox(height: 40),
@@ -1335,6 +1412,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
+  // ignore: unused_element
   Widget _revenueBar(double value, int index) {
     return Column(
       children: [
@@ -1353,6 +1431,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
+  // ignore: unused_element
   List<double> _dailySales() {
     final sales = List<double>.filled(7, 0);
     final today = DateTime.now();
@@ -1375,6 +1454,106 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
 
     return sales;
+  }
+
+  List<Map<String, dynamic>> _commissionSeries() {
+    final today = DateTime.now();
+    final todayOnly = DateTime(today.year, today.month, today.day);
+    final buckets = <Map<String, dynamic>>[];
+
+    if (_commissionRange == 'Weeks') {
+      for (var index = 3; index >= 0; index--) {
+        final day = todayOnly.subtract(Duration(days: index * 7));
+        final start = day.subtract(Duration(days: day.weekday - 1));
+        buckets.add({
+          'start': start,
+          'end': start.add(const Duration(days: 7)),
+          'label': index == 0 ? 'This wk' : '-${index}w',
+          'value': 0.0,
+        });
+      }
+    } else if (_commissionRange == 'Months') {
+      for (var index = 5; index >= 0; index--) {
+        final start = DateTime(today.year, today.month - index, 1);
+        buckets.add({
+          'start': start,
+          'end': DateTime(start.year, start.month + 1, 1),
+          'label': '${start.month}/${start.year.toString().substring(2)}',
+          'value': 0.0,
+        });
+      }
+    } else {
+      for (var index = 6; index >= 0; index--) {
+        final start = todayOnly.subtract(Duration(days: index));
+        buckets.add({
+          'start': start,
+          'end': start.add(const Duration(days: 1)),
+          'label': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+              [start.weekday - 1],
+          'value': 0.0,
+        });
+      }
+    }
+
+    for (final order in _orders) {
+      final date = DateTime.tryParse(order['order_date']?.toString() ?? '');
+      if (date == null) continue;
+      final dateOnly = DateTime(date.year, date.month, date.day);
+      final status = order['order_status']?.toString().toLowerCase() ?? '';
+      if (status == 'cancelled' || status == 'canceled') continue;
+
+      for (final bucket in buckets) {
+        final start = bucket['start'] as DateTime;
+        final end = bucket['end'] as DateTime;
+        if (!dateOnly.isBefore(start) && dateOnly.isBefore(end)) {
+          bucket['value'] =
+              _toDouble(bucket['value']) + _toDouble(order['admin_commission']);
+          break;
+        }
+      }
+    }
+
+    return buckets;
+  }
+
+  Widget _commissionLineChart(List<Map<String, dynamic>> rows) {
+    return Container(
+      height: 220,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.black12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        children: [
+          Expanded(
+            child: CustomPaint(
+              painter: _CommissionLinePainter(
+                values: rows.map((row) => _toDouble(row['value'])).toList(),
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              child: const SizedBox.expand(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: rows
+                .map(
+                  (row) => Expanded(
+                    child: Text(
+                      row['label'].toString(),
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ],
+      ),
+    );
   }
 
   double _toDouble(dynamic value) {

@@ -146,20 +146,18 @@ Latest done
 - Seller Orders and Sales now share buyer identity formatting: full name, then email, then phone, then shortened buyer account id.
 
 To do
-- After logout and exiting login page (or clicking to buy/go to seller and exit login page), main doesn't load, need to refresh to logout
-- Show seller storefront to anon, but certain stuff can only be done by logging in.
-- Admin, Daily Commission > Commission Sales, the bar should be like a line graph, and can be filtered to days/week, weeks/month, year/month.
-- In seller registration, the text is too dark
-- Same issue on rider's (it shows "Buyer" on orders)
-- All already read notifications should not appear, only latest 3 notifications will appear, then they should click more to show, properly mark unread/read notifications.
+- Re-run flutter analyze in VS Code after the latest batch.
 
-- Flutter Checks:
-warning - The declaration '_buyerPhone' isn't referenced -
-       lib\seller_dashboard.dart:339:10 - unused_element
-warning - The declaration '_buyerContactLine' isn't referenced -
-       lib\seller_dashboard.dart:343:10 - unused_element
-
-- On signup (buyer), force number and surname to be a requirement (dart).
+Latest done
+- Login close now returns to main when the login page is the only route, fixing logout/login-exit blank main behavior.
+- Seller storefront route is anonymous/public; review/report actions still require login.
+- Admin dashboard Daily Commission was renamed Commission Sales and now shows a line chart with Days/Weeks/Months filters.
+- Seller/rider registration side-panel step text is light on dark backgrounds.
+- Rider dashboard now uses guarded get_rider_orders(uuid, bool) RPC so buyer name/phone no longer falls back to generic Buyer.
+- Notification bell now shows only the latest 3 unread notifications; read/dismissed notifications disappear and the More button opens the unread notifications page.
+- Buyer signup labels and validation require surname and phone number.
+- Seller dashboard buyer helpers are used in Sales/Orders, clearing the unused _buyerPhone/_buyerContactLine warnings.
+- Seller storefront review/report login gates now guard context use after async checks, addressing the seller_page async-context analyzer infos.
 
 On-hold
 - Check whether authenticated GraphQL exposure warnings should be further reduced by moving sensitive reads behind RPCs. Current judgment: product/store/review/variant/discount/price-history reads are still needed by public marketplace screens, so revoking direct SELECT would require a larger RPC/view rewrite.

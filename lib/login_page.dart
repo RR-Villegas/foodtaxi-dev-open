@@ -24,6 +24,14 @@ class _LoginPageState extends State<LoginPage> {
   bool _isLoading = false;
   bool _showPassword = false;
 
+  void _closeLogin() {
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context);
+      return;
+    }
+    Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -676,7 +684,7 @@ class _LoginPageState extends State<LoginPage> {
             top: 16,
             right: 16,
             child: IconButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: _closeLogin,
               icon: const Icon(Icons.close, size: 28, color: Colors.black54),
               tooltip: 'Close',
             ),

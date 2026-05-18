@@ -113,7 +113,22 @@ class _SellerPageState extends State<SellerPage> {
     return total / _reviews.length;
   }
 
+  Future<bool> _requireLogin(String action) async {
+    final accountId = await DatabaseService.getCurrentAccountId();
+    if (accountId != null) return true;
+    if (!mounted) return false;
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    messenger.showSnackBar(
+      SnackBar(content: Text('Please log in to $action')),
+    );
+    navigator.pushNamed('/login');
+    return false;
+  }
+
   Future<void> _reviewStore() async {
+    if (!await _requireLogin('review this shop')) return;
+    if (!mounted) return;
     if (!_canReviewStore) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('You can review this shop after a delivered order')),
@@ -185,6 +200,8 @@ class _SellerPageState extends State<SellerPage> {
   }
 
   Future<void> _reportStore() async {
+    if (!await _requireLogin('report this shop')) return;
+    if (!mounted) return;
     var isOrderRelated = false;
     final reasonController = TextEditingController();
     final detailsController = TextEditingController();

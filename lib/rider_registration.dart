@@ -642,13 +642,13 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
             style: TextStyle(color: Colors.white70, fontSize: 16),
           ),
           const SizedBox(height: 48),
-          _stepIndicator('Personal Info', 1),
+          _stepIndicator('Personal Info', 1, onDark: true),
           const SizedBox(height: 24),
-          _stepIndicator('Vehicle Details', 2),
+          _stepIndicator('Vehicle Details', 2, onDark: true),
           const SizedBox(height: 24),
-          _stepIndicator('Location', 3),
+          _stepIndicator('Location', 3, onDark: true),
           const SizedBox(height: 24),
-          _stepIndicator('Documents', 4),
+          _stepIndicator('Documents', 4, onDark: true),
         ],
       ),
     );
@@ -677,7 +677,7 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
     );
   }
 
-  Widget _stepIndicator(String label, int step) {
+  Widget _stepIndicator(String label, int step, {bool onDark = false}) {
     final isCompleted = step < _currentStep;
     final isCurrent = step == _currentStep;
     return Column(
@@ -698,7 +698,14 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
           ),
         ),
         const SizedBox(height: 8),
-        Text(label),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: onDark ? Colors.white : null,
+            fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
       ],
     );
   }

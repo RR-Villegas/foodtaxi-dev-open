@@ -74,6 +74,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
     final notifications = await DatabaseService.getCurrentNotifications(
       type: _selectedType,
       age: _timeRanges[_selectedRange],
+      unreadOnly: true,
     );
     if (!mounted) return;
     setState(() {
@@ -138,7 +139,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Notifications'),
+        title: const Text('Unread Notifications'),
       ),
       body: Column(
         children: [
@@ -160,16 +161,11 @@ class _NotificationsPageState extends State<NotificationsPage> {
                             itemCount: _notifications.length,
                             itemBuilder: (context, index) {
                               final item = _notifications[index];
-                              final isRead = item['is_read'] == true;
                               return Card(
                                 child: ListTile(
                                   leading: Icon(
-                                    isRead
-                                        ? Icons.notifications_none
-                                        : Icons.notifications_active,
-                                    color: isRead
-                                        ? Colors.grey
-                                        : Theme.of(context).colorScheme.primary,
+                                    Icons.notifications_active,
+                                    color: Theme.of(context).colorScheme.primary,
                                   ),
                                   title: Text(
                                     item['title']?.toString() ?? 'Notification',
@@ -189,10 +185,16 @@ class _NotificationsPageState extends State<NotificationsPage> {
                                     ],
                                   ),
                                   trailing: TextButton(
-                                    onPressed: () => _showFullMessage(item),
-                                    child: const Text('Read more'),
+                                    onPressed: () async {
+                                      await DatabaseService.markNotificationRead(
+                                        item['notification_id'].toString(),
+                                      );
+                                      _loadNotifications();
+                                    },
+                                    child: const Text('Mark read'),
                                   ),
                                   onTap: () async {
+                                    _showFullMessage(item);
                                     await DatabaseService.markNotificationRead(
                                       item['notification_id'].toString(),
                                     );

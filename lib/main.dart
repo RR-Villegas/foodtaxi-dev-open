@@ -190,10 +190,7 @@ class _MyAppState extends State<MyApp> {
         if (settings.name?.startsWith('/seller/') ?? false) {
           final storeId = settings.name!.split('/').last;
           return MaterialPageRoute(
-            builder: (context) => ProtectedRoute(
-              protection: RouteProtection.authenticated,
-              child: SellerPage(storeId: storeId),
-            ),
+            builder: (context) => SellerPage(storeId: storeId),
           );
         }
             return null;
