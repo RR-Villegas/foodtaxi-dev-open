@@ -27,6 +27,65 @@ class DatabaseService {
     return InputValidator.cleanProductTitle(value?.toString());
   }
 
+  static String money(dynamic value) {
+    final amount = _toDouble(value);
+    return 'PHP ${amount.toStringAsFixed(2)}';
+  }
+
+  static Map<String, dynamic>? activeProductDiscount(
+    Map<String, dynamic> product,
+  ) {
+    final discounts = product['product_discount'];
+    if (discounts is! List || discounts.isEmpty) return null;
+    final now = DateTime.now();
+    final active = discounts.whereType<Map>().where((discount) {
+      if (discount['is_active'] == false) return false;
+      final startsAt = DateTime.tryParse(discount['starts_at']?.toString() ?? '');
+      final endsAt = DateTime.tryParse(discount['ends_at']?.toString() ?? '');
+      if (startsAt == null || endsAt == null) return false;
+      return !now.isBefore(startsAt) && now.isBefore(endsAt);
+    }).toList()
+      ..sort((a, b) {
+        final aStart = DateTime.tryParse(a['starts_at']?.toString() ?? '');
+        final bStart = DateTime.tryParse(b['starts_at']?.toString() ?? '');
+        return (bStart ?? DateTime(0)).compareTo(aStart ?? DateTime(0));
+      });
+    return active.isEmpty ? null : Map<String, dynamic>.from(active.first);
+  }
+
+  static double discountedPrice(double price, Map<String, dynamic>? discount) {
+    if (discount == null) return price;
+    final value = _toDouble(discount['discount_value']);
+    final discounted = discount['discount_type']?.toString() == 'amount'
+        ? price - value
+        : price * (1 - (value / 100));
+    return discounted < 0 ? 0 : discounted;
+  }
+
+  static List<double> _productOptionPrices(Map<String, dynamic> product) {
+    final prices = <double>[_toDouble(product['price'])];
+    final variants = product['product_variant'];
+    if (variants is List) {
+      for (final variant in variants.whereType<Map>()) {
+        if (variant['is_active'] == false) continue;
+        prices.add(_toDouble(variant['price']));
+      }
+    }
+    return prices.where((price) => price >= 0).toList();
+  }
+
+  static String displayProductPrice(Map<String, dynamic> product) {
+    final prices = _productOptionPrices(product);
+    if (prices.isEmpty) return money(0);
+    final discount = activeProductDiscount(product);
+    final discountedPrices =
+        prices.map((price) => discountedPrice(price, discount)).toList();
+    final minPrice = discountedPrices.reduce(min);
+    final maxPrice = discountedPrices.reduce(max);
+    if ((maxPrice - minPrice).abs() < 0.01) return money(minPrice);
+    return '${money(minPrice)} - ${money(maxPrice)}';
+  }
+
   static String _stableHash(String value) {
     var hash = 0x811c9dc5;
     for (final codeUnit in value.codeUnits) {
@@ -894,7 +953,7 @@ class DatabaseService {
 
       var productRequest = _supabase
           .from('product')
-          .select()
+          .select('*, product_variant(*)')
           .inFilter('product_id', selectedIds)
           .eq('is_active', true);
       if (_blankToNull(storeId) != null) {
@@ -1301,6 +1360,69 @@ class DatabaseService {
     }
   }
 
+  static Future<List<Map<String, dynamic>>> getProductDiscountsForStore(
+    String storeId,
+  ) async {
+    try {
+      final response = await _supabase
+          .from('product_discount')
+          .select('*, product(name, price, product_variant(*))')
+          .eq('store_id', storeId)
+          .order('starts_at', ascending: false);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      _logDbError('Failed to fetch product discounts', e);
+      return [];
+    }
+  }
+
+  static Future<bool> saveProductDiscount({
+    String? discountId,
+    required String storeId,
+    required String productId,
+    required String discountType,
+    required double discountValue,
+    required String startsAt,
+    required String endsAt,
+    bool isActive = true,
+  }) async {
+    try {
+      final accountId = await getCurrentAccountId();
+      final data = {
+        if (_blankToNull(discountId) != null) 'discount_id': discountId,
+        'store_id': storeId,
+        'product_id': productId,
+        'discount_type': discountType,
+        'discount_value': discountValue,
+        'starts_at': startsAt,
+        'ends_at': endsAt,
+        'is_active': isActive,
+        'created_by': accountId,
+      };
+      await _supabase.from('product_discount').upsert(data);
+      return true;
+    } catch (e) {
+      _logDbError('Failed to save product discount', e);
+      return false;
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getProductPriceHistory(
+    String productId,
+  ) async {
+    try {
+      final response = await _supabase
+          .from('product_price_history')
+          .select()
+          .eq('product_id', productId)
+          .order('recorded_at', ascending: true);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      _logDbError('Failed to fetch product price history', e);
+      return [];
+    }
+  }
+
   static Future<bool> buyerHasDeliveredOrderFromStore(String storeId) async {
     try {
       final accountId = await getCurrentAccountId();
@@ -1522,6 +1644,11 @@ class DatabaseService {
           .from('product_review')
           .select('product_id, rating')
           .inFilter('product_id', productIds);
+      final discounts = await _supabase
+          .from('product_discount')
+          .select()
+          .inFilter('product_id', productIds)
+          .order('starts_at', ascending: false);
 
       final totals = <String, double>{};
       final counts = <String, int>{};
@@ -1531,6 +1658,12 @@ class DatabaseService {
         totals[productId] = (totals[productId] ?? 0) + _toDouble(review['rating']);
         counts[productId] = (counts[productId] ?? 0) + 1;
       }
+      final discountsByProduct = <String, List<Map<String, dynamic>>>{};
+      for (final discount in List<Map<String, dynamic>>.from(discounts)) {
+        final productId = discount['product_id']?.toString();
+        if (productId == null || productId.isEmpty) continue;
+        discountsByProduct.putIfAbsent(productId, () => []).add(discount);
+      }
 
       return products.map((product) {
         final productId = product['product_id']?.toString() ?? '';
@@ -1539,6 +1672,9 @@ class DatabaseService {
           ...product,
           'average_rating': count == 0 ? 0.0 : (totals[productId] ?? 0) / count,
           'review_count': count,
+          'product_discount': discountsByProduct[productId] ??
+              product['product_discount'] ??
+              <Map<String, dynamic>>[],
         };
       }).toList();
     } catch (e) {
@@ -1558,7 +1694,7 @@ class DatabaseService {
     try {
       final response = await _supabase
           .from('product')
-          .select()
+          .select('*, product_variant(*)')
           .eq('is_active', true);
       return _withProductRatings(List<Map<String, dynamic>>.from(response));
     } catch (e) {
@@ -1582,7 +1718,7 @@ class DatabaseService {
     try {
       var request = _supabase
           .from('product')
-          .select('*, store(store_id, store_name)')
+          .select('*, store(store_id, store_name), product_variant(*)')
           .eq('is_active', true);
 
       final trimmedQuery = query.trim();

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
@@ -28,8 +29,11 @@ import 'services/auth_service.dart';
 import 'services/protected_route.dart';
 import 'services/theme_service.dart';
 
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final launchedFromPasswordRecovery = AuthService.isPasswordRecoveryUri(Uri.base);
 
   await Supabase.initialize(
     url: 'https://zsctswdvoknmdsimqrvr.supabase.co',
@@ -37,23 +41,68 @@ void main() async {
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpzY3Rzd2R2b2tubWRzaW1xcnZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0MDkyMjgsImV4cCI6MjA5MTk4NTIyOH0.9AMczePav5ftvCbhhYWxBaquUFK1Nrmgx1FbUZKpci8',
   );
   await ThemeService.load();
+  if (launchedFromPasswordRecovery) {
+    AuthService.startPasswordRecoverySession();
+  }
 
-  runApp(const MyApp());
+  runApp(MyApp(launchedFromPasswordRecovery: launchedFromPasswordRecovery));
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class MyApp extends StatefulWidget {
+  final bool launchedFromPasswordRecovery;
+
+  const MyApp({
+    super.key,
+    this.launchedFromPasswordRecovery = false,
+  });
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  StreamSubscription<AuthState>? _authSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.launchedFromPasswordRecovery ||
+        AuthService.isPasswordRecoveryUri(Uri.base)) {
+      AuthService.startPasswordRecoverySession();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        appNavigatorKey.currentState?.pushNamedAndRemoveUntil(
+          '/reset-password',
+          (route) => false,
+        );
+      });
+    }
+    _authSubscription =
+        Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      if (data.event != AuthChangeEvent.passwordRecovery) return;
+      AuthService.startPasswordRecoverySession();
+      appNavigatorKey.currentState?.pushNamedAndRemoveUntil(
+        '/reset-password',
+        (route) => false,
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<String>(
       valueListenable: ThemeService.selectedThemeId,
       builder: (context, themeId, child) {
-        final currentUri = Uri.base;
         final isPasswordRecovery =
-            currentUri.fragment.contains('type=recovery') ||
-                currentUri.queryParameters['type'] == 'recovery';
+            AuthService.isPasswordRecoverySession ||
+                AuthService.isPasswordRecoveryUri(Uri.base);
         return MaterialApp(
+          navigatorKey: appNavigatorKey,
           title: 'FoodTaxi Omega',
           theme: ThemeService.selectedTheme.toThemeData(),
           scrollBehavior: const AppScrollBehavior(),
@@ -205,6 +254,14 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _redirectLoggedInUser() async {
+    if (AuthService.isPasswordRecoverySession) {
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        '/reset-password',
+        (route) => false,
+      );
+      return;
+    }
     if (!AuthService.isAuthenticated()) return;
     final accountType = await DatabaseService.getCurrentAccountType();
     if (!mounted || accountType == null) return;
@@ -262,12 +319,6 @@ class _MyHomePageState extends State<MyHomePage> {
     final value = product['review_count'];
     if (value is int) return value;
     return int.tryParse(value?.toString() ?? '') ?? 0;
-  }
-
-  double _price(Map<String, dynamic> product) {
-    final value = product['price'];
-    if (value is num) return value.toDouble();
-    return double.tryParse(value?.toString() ?? '') ?? 0;
   }
 
   Widget _stars(double rating) {
@@ -523,7 +574,7 @@ class _MyHomePageState extends State<MyHomePage> {
                             ),
                             const SizedBox(height: 3),
                             Text(
-                              "PHP ${_price(item).toStringAsFixed(2)}",
+                              DatabaseService.displayProductPrice(item),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(

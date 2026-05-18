@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'cart_model.dart';
 import 'services/database_service.dart';
 
 class SellerPage extends StatefulWidget {
@@ -54,13 +53,6 @@ class _SellerPageState extends State<SellerPage> {
       _isLoading = false;
       _allProductsPage = 0;
     });
-  }
-
-  String _money(dynamic value) {
-    final amount = value is num
-        ? value.toDouble()
-        : double.tryParse(value?.toString() ?? '') ?? 0;
-    return 'PHP ${amount.toStringAsFixed(2)}';
   }
 
   double _rating(Map<String, dynamic> product) {
@@ -338,7 +330,7 @@ class _SellerPageState extends State<SellerPage> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        _money(product['price']),
+                        DatabaseService.displayProductPrice(product),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -376,11 +368,9 @@ class _SellerPageState extends State<SellerPage> {
                           onPressed: productId == null
                               ? null
                               : () {
-                                  CartModel.addItem(product);
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Added to cart'),
-                                    ),
+                                  Navigator.pushNamed(
+                                    context,
+                                    '/product/$productId',
                                   );
                                 },
                           child: const Text('Buy'),
@@ -468,7 +458,7 @@ class _SellerPageState extends State<SellerPage> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        _money(product['price']),
+                        DatabaseService.displayProductPrice(product),
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.primary,
                           fontWeight: FontWeight.bold,
@@ -489,9 +479,9 @@ class _SellerPageState extends State<SellerPage> {
                           onPressed: productId == null
                               ? null
                               : () {
-                                  CartModel.addItem(product);
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Added to cart')),
+                                  Navigator.pushNamed(
+                                    context,
+                                    '/product/$productId',
                                   );
                                 },
                           child: const Text('Buy'),

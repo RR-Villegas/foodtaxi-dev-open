@@ -27,10 +27,30 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
+    if (AuthService.isPasswordRecoveryUri(Uri.base)) {
+      AuthService.startPasswordRecoverySession();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          '/reset-password',
+          (route) => false,
+        );
+      });
+      return;
+    }
     _redirectLoggedInUser();
   }
 
   Future<void> _redirectLoggedInUser() async {
+    if (AuthService.isPasswordRecoverySession) {
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        '/reset-password',
+        (route) => false,
+      );
+      return;
+    }
     if (!AuthService.isAuthenticated()) return;
     final account = await DatabaseService.getCurrentAccount();
     final role = account?['account_type']?.toString().toLowerCase();
@@ -229,7 +249,7 @@ class _LoginPageState extends State<LoginPage> {
     final origin = current.hasPort
         ? '${current.scheme}://${current.host}:${current.port}'
         : '${current.scheme}://${current.host}';
-    return '$origin${current.path}';
+    return '$origin/reset-password';
   }
 
   Future<void> _showForgotPasswordDialog() async {

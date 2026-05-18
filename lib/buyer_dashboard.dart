@@ -262,7 +262,7 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
                           ),
                             const SizedBox(height: 2),
                             Text(
-                            '₱${item['price']}',
+                            DatabaseService.displayProductPrice(item),
                             style: TextStyle(
                               color: Theme.of(context).colorScheme.primary,
                               fontWeight: FontWeight.bold,

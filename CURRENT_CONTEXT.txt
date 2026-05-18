@@ -431,9 +431,60 @@ Latest seller storefront conflict recovery
 - Restored All Products pagination at 20 products per page.
 - Restored safer product click navigation guards in seller storefront cards/rows.
 
+Latest password recovery routing fix
+- Reset password links can temporarily authenticate the user through Supabase before the password is changed.
+- Forgot password emails now always use /reset-password as redirectTo instead of reusing the current path such as /login.
+- main.dart captures whether the app was launched from a recovery URL before Supabase.initialize(), because Supabase can consume/clean the URL before widgets inspect Uri.base.
+- main.dart now listens to Supabase AuthChangeEvent.passwordRecovery and pushes /reset-password when it fires.
+- login_page.dart detects old /login recovery links and immediately routes them to /reset-password.
+- AuthService has an in-memory password recovery session flag so normal logged-in redirects in main/login do not steal the recovery flow and send the user to a dashboard.
+- ResetPasswordPage clears the recovery flag after the password update succeeds.
+
+Latest product pricing/discount/history feature
+- Applied Supabase migrations product_scheduled_discounts_and_price_history, tighten_discount_variant_price_guard, and allow_inactive_discount_updates.
+- Added public.product_price_history.
+  - Tracks product base prices and variant prices.
+  - Backfilled current product/variant prices.
+  - Triggers record future product.price and product_variant.price changes.
+- Added public.product_discount.
+  - Product-level scheduled discounts owned by seller stores.
+  - Supports percent or fixed amount discounts, start/end windows, active toggle.
+  - Public can read currently active discounts; sellers can manage their own store discounts.
+  - Trigger blocks deceptive active discounts if the base price or any active variant price is more than 5% above its lowest recorded price in the last 30 days.
+  - Inactive discount updates are allowed so sellers can disable bad schedules.
+- DatabaseService now attaches product_discount data when hydrating product cards and exposes displayProductPrice().
+  - Single-price products display one price.
+  - Products with variants display lowest-highest.
+  - Active product discounts are applied to displayed prices and cart item prices from product detail.
+- SellerDashboard Offers tab now includes Product Discounts.
+  - Sellers can bulk select products, set a schedule, and adjust each selected product's discount value.
+- ProductPage now loads product_price_history and shows a simple price history chart.
+
+Latest Supabase verification follow-up
+- Completed the readback that was previously cut off by Codex rate limiting.
+- Verified public.product_discount and public.product_price_history exist.
+- Verified record_product_price_history, record_variant_price_history, and validate_product_discount triggers are installed for the expected INSERT/UPDATE events.
+- Verified product_price_history has 32 backfilled rows.
+- Verified product_discount RLS:
+  - public users can only read active discounts inside their schedule window.
+  - authenticated sellers can view/manage only discounts for their own store.
+- Verified product_price_history has public SELECT for the product-page graph.
+- Applied migration revoke_unused_security_definer_rpc_execute.
+  - Revoked direct API EXECUTE from public/anon/authenticated on public.handle_new_user(), public.create_email_otp(uuid), and public.verify_email_otp(uuid, text).
+  - Kept public.get_trending_product_clicks(uuid, integer) executable because DatabaseService.getTrendingProducts() uses it for main/buyer/seller trending sections.
+- Supabase advisor after cleanup no longer reports the unused OTP/new-user security-definer functions.
+- Remaining advisor warnings are judged intentional or require larger work:
+  - marketplace read tables remain exposed because the current app reads them directly for public browsing.
+  - get_trending_product_clicks remains exposed because the UI depends on it.
+  - leaked password protection must be enabled in Supabase Auth settings.
+
 Current verification handoff
 - Ask the user to run this in VS Code when analyzer verification is needed:
   flutter analyze
 - User reran flutter analyze in VS Code after the latest analyzer patches and reported: no issues found.
 - Remaining TODO after current sync:
-  - Judge whether authenticated GraphQL exposure warnings should be further reduced by moving sensitive reads behind RPCs.
+  - Optional future hardening: replace public marketplace table reads with RPCs/views if you want the GraphQL exposure advisor warnings gone without breaking public browsing.
+
+Latest analyzer patch
+- Fixed seller_dashboard discount dialog analyzer errors by replacing ambiguous nested ternary/null-aware expressions with explicit locals.
+- Removed unused _money helper from seller_page.dart after seller storefront prices moved to DatabaseService.displayProductPrice().

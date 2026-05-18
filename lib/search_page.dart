@@ -193,7 +193,7 @@ class _SearchPageState extends State<SearchPage> {
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         Text(
-                          'PHP ${product['price']}',
+                          DatabaseService.displayProductPrice(product),
                           style: TextStyle(
                             color: Theme.of(context).colorScheme.primary,
                             fontWeight: FontWeight.bold,

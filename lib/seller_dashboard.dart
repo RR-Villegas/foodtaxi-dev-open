@@ -40,6 +40,7 @@ class _SellerDashboardState extends State<SellerDashboard> {
   List<Map<String, dynamic>> _products = [];
   List<Map<String, dynamic>> _orders = [];
   List<Map<String, dynamic>> _coupons = [];
+  List<Map<String, dynamic>> _productDiscounts = [];
   int _currentIndex = 0;
   bool _isLoading = true;
   String _overviewRange = 'Day';
@@ -110,6 +111,9 @@ class _SellerDashboardState extends State<SellerDashboard> {
       final coupons = storeId == null
           ? <Map<String, dynamic>>[]
           : await DatabaseService.getCouponsForStore(storeId);
+      final productDiscounts = storeId == null
+          ? <Map<String, dynamic>>[]
+          : await DatabaseService.getProductDiscountsForStore(storeId);
       _subscribeToDashboard(accountId: accountId, storeId: storeId);
 
       if (mounted) {
@@ -119,6 +123,7 @@ class _SellerDashboardState extends State<SellerDashboard> {
           _products = products;
           _orders = orders;
           _coupons = coupons;
+          _productDiscounts = productDiscounts;
           _isLoading = false;
         });
       }
@@ -496,7 +501,7 @@ class _SellerDashboardState extends State<SellerDashboard> {
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(_money(product['price'])),
+                  Text(DatabaseService.displayProductPrice(product)),
                   Text('Stock: ${_stock(product['stock_quantity'])}'),
                   if (variantCount > 0)
                     Text('$variantCount alternate size${variantCount == 1 ? '' : 's'}'),
@@ -1175,6 +1180,289 @@ class _SellerDashboardState extends State<SellerDashboard> {
     expiryController.dispose();
   }
 
+  Future<void> _openProductDiscountForm([
+    Map<String, dynamic>? discount,
+  ]) async {
+    final startsController = TextEditingController(
+      text: discount?['starts_at']?.toString() ?? '',
+    );
+    final endsController = TextEditingController(
+      text: discount?['ends_at']?.toString() ?? '',
+    );
+    final defaultValueController = TextEditingController(
+      text: discount?['discount_value']?.toString() ?? '',
+    );
+    var type = discount?['discount_type']?.toString() ?? 'percent';
+    var active = discount?['is_active'] != false;
+    final activeProducts =
+        _products.where((product) => product['is_active'] != false).toList();
+    final selected = <String, bool>{};
+    final valueControllers = <String, TextEditingController>{};
+    final existingProductId = discount?['product_id']?.toString();
+
+    for (final product in activeProducts) {
+      final productId = product['product_id']?.toString() ?? '';
+      if (productId.isEmpty) continue;
+      final existingValue = discount?['discount_value']?.toString() ?? '';
+      selected[productId] = existingProductId == productId;
+      valueControllers[productId] = TextEditingController(
+        text: existingValue,
+      );
+    }
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(
+            discount == null ? 'Schedule Product Discounts' : 'Edit Discount',
+          ),
+          content: SizedBox(
+            width: 560,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<String>(
+                    initialValue: type,
+                    decoration: const InputDecoration(labelText: 'Discount Type'),
+                    items: const [
+                      DropdownMenuItem(value: 'percent', child: Text('Percent')),
+                      DropdownMenuItem(value: 'amount', child: Text('Amount')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) setDialogState(() => type = value);
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: startsController,
+                    decoration: const InputDecoration(
+                      labelText: 'Starts At',
+                      hintText: '2026-05-19T00:00:00Z',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: endsController,
+                    decoration: const InputDecoration(
+                      labelText: 'Ends At',
+                      hintText: '2026-05-24T23:59:59Z',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  SwitchListTile(
+                    value: active,
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Active'),
+                    onChanged: (value) => setDialogState(() => active = value),
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: defaultValueController,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText:
+                                type == 'amount' ? 'Default PHP off' : 'Default % off',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: () {
+                          final value = defaultValueController.text.trim();
+                          if (value.isEmpty) return;
+                          setDialogState(() {
+                            for (final entry in selected.entries) {
+                              if (entry.value || discount == null) {
+                                valueControllers[entry.key]?.text = value;
+                                selected[entry.key] = true;
+                              }
+                            }
+                          });
+                        },
+                        child: const Text('Apply'),
+                      ),
+                    ],
+                  ),
+                  const Divider(),
+                  if (activeProducts.isEmpty)
+                    const Text('Add active products before scheduling discounts.')
+                  else
+                    ...activeProducts.map((product) {
+                      final productId = product['product_id']?.toString() ?? '';
+                      final controller = valueControllers[productId]!;
+                      return CheckboxListTile(
+                        value: selected[productId] ?? false,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          DatabaseService.displayProductName(product['name']),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(DatabaseService.displayProductPrice(product)),
+                        secondary: SizedBox(
+                          width: 96,
+                          child: TextField(
+                            controller: controller,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              labelText: type == 'amount' ? 'PHP' : '%',
+                            ),
+                          ),
+                        ),
+                        onChanged: discount == null || existingProductId == productId
+                            ? (value) => setDialogState(
+                                  () => selected[productId] = value ?? false,
+                                )
+                            : null,
+                      );
+                    }),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Anti-deceptive pricing: a discount is blocked if the current base or variant price is above the lowest recorded price in the last 30 days.',
+                    style: TextStyle(color: Colors.black54),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (saved == true) {
+      final storeId = _store?['store_id']?.toString();
+      final startsAt = startsController.text.trim();
+      final endsAt = endsController.text.trim();
+      var ok = storeId != null && startsAt.isNotEmpty && endsAt.isNotEmpty;
+      var savedCount = 0;
+      if (ok) {
+        for (final entry in selected.entries) {
+          if (!entry.value) continue;
+          final value = double.tryParse(valueControllers[entry.key]!.text.trim());
+          if (value == null || value <= 0) {
+            ok = false;
+            continue;
+          }
+          String? discountId;
+          if (existingProductId == entry.key && discount != null) {
+            discountId = discount['discount_id']?.toString();
+          }
+          final savedDiscount = await DatabaseService.saveProductDiscount(
+            discountId: discountId,
+            storeId: storeId,
+            productId: entry.key,
+            discountType: type,
+            discountValue: value,
+            startsAt: startsAt,
+            endsAt: endsAt,
+            isActive: active,
+          );
+          ok = ok && savedDiscount;
+          if (savedDiscount) savedCount++;
+        }
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              ok && savedCount > 0
+                  ? 'Product discount saved'
+                  : 'Product discount could not be saved',
+            ),
+          ),
+        );
+      }
+      if (ok && savedCount > 0) _loadDashboard();
+    }
+
+    startsController.dispose();
+    endsController.dispose();
+    defaultValueController.dispose();
+    for (final controller in valueControllers.values) {
+      controller.dispose();
+    }
+  }
+
+  Widget _buildProductDiscountsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 24),
+        const Text(
+          'Product Discounts',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: OutlinedButton.icon(
+            onPressed: () => _openProductDiscountForm(),
+            icon: const Icon(Icons.percent),
+            label: const Text('Schedule Product Discounts'),
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (_productDiscounts.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Center(child: Text('No scheduled product discounts yet')),
+          )
+        else
+          ..._productDiscounts.map((discount) {
+            final product = discount['product'];
+            final productName = product is Map
+                ? DatabaseService.displayProductName(product['name'])
+                : 'Product';
+            final type = discount['discount_type']?.toString() == 'amount'
+                ? '${DatabaseService.money(discount['discount_value'])} off'
+                : '${discount['discount_value']}% off';
+            return Card(
+              child: ListTile(
+                leading: const Icon(Icons.percent),
+                title: Text(productName),
+                subtitle: Text(
+                  '$type | ${discount['starts_at']} to ${discount['ends_at']}',
+                ),
+                trailing: Switch(
+                  value: discount['is_active'] != false,
+                  onChanged: (value) async {
+                    await DatabaseService.saveProductDiscount(
+                      discountId: discount['discount_id']?.toString(),
+                      storeId: discount['store_id'].toString(),
+                      productId: discount['product_id'].toString(),
+                      discountType:
+                          discount['discount_type']?.toString() ?? 'percent',
+                      discountValue: _number(discount['discount_value']),
+                      startsAt: discount['starts_at'].toString(),
+                      endsAt: discount['ends_at'].toString(),
+                      isActive: value,
+                    );
+                    _loadDashboard();
+                  },
+                ),
+                onTap: () => _openProductDiscountForm(discount),
+              ),
+            );
+          }),
+      ],
+    );
+  }
+
   Widget _buildCouponsTab() {
     return RefreshIndicator(
       onRefresh: _loadDashboard,
@@ -1189,6 +1477,12 @@ class _SellerDashboardState extends State<SellerDashboard> {
               icon: const Icon(Icons.add),
               label: const Text('Add Shop Coupon'),
             ),
+          ),
+          _buildProductDiscountsSection(),
+          const SizedBox(height: 24),
+          const Text(
+            'Shop Coupons',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
           ),
           const SizedBox(height: 12),
           if (_coupons.isEmpty)
@@ -1322,7 +1616,7 @@ class _SellerDashboardState extends State<SellerDashboard> {
           NavigationDestination(
             icon: Icon(Icons.local_offer_outlined),
             selectedIcon: Icon(Icons.local_offer),
-            label: 'Coupons',
+            label: 'Offers',
           ),
         ],
       ),

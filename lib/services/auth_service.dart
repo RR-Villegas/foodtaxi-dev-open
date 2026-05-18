@@ -8,6 +8,28 @@ import 'theme_service.dart';
 class AuthService {
   static final _supabase = Supabase.instance.client;
   static bool _isClearingSession = false;
+  static bool _isPasswordRecoverySession = false;
+
+  static bool get isPasswordRecoverySession => _isPasswordRecoverySession;
+
+  static bool isPasswordRecoveryUri(Uri uri) {
+    final fragment = uri.fragment;
+    final fragmentParams = Uri.splitQueryString(
+      fragment.startsWith('?') ? fragment.substring(1) : fragment,
+    );
+    return uri.path.contains('reset-password') ||
+        uri.queryParameters['type'] == 'recovery' ||
+        fragmentParams['type'] == 'recovery' ||
+        fragment.contains('type=recovery');
+  }
+
+  static void startPasswordRecoverySession() {
+    _isPasswordRecoverySession = true;
+  }
+
+  static void finishPasswordRecoverySession() {
+    _isPasswordRecoverySession = false;
+  }
 
   /// Check if user is authenticated
   static bool isAuthenticated() {

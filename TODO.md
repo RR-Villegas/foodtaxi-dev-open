@@ -115,6 +115,13 @@ Latest done
   - owner/profile header and complete store location display.
   - All Products pagination at 20 products per page.
   - safer product click navigation/context guards.
+- Password recovery links now redirect directly to /reset-password, use Supabase's passwordRecovery auth event, and normal logged-in redirects pause during recovery.
+- Product pricing now displays variant ranges when sizes/variants have different prices.
+- Added scheduled seller product discounts:
+  - sellers can bulk schedule product discounts with per-product values.
+  - discounts have start/end windows and can be toggled active/inactive.
+  - database blocks deceptive discounts when base or variant prices were raised above their 30-day recorded low.
+- Added product price history tracking and a product-page price history graph.
 
-To do / verify next
-- Check whether authenticated GraphQL exposure warnings should be further reduced by moving sensitive reads behind RPCs.
+On-hold
+- Check whether authenticated GraphQL exposure warnings should be further reduced by moving sensitive reads behind RPCs. Current judgment: product/store/review/variant/discount/price-history reads are still needed by public marketplace screens, so revoking direct SELECT would require a larger RPC/view rewrite.

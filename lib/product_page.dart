@@ -18,6 +18,7 @@ class _ProductPageState extends State<ProductPage> {
 
   Map<String, dynamic>? _product;
   List<Map<String, dynamic>> _reviews = [];
+  List<Map<String, dynamic>> _priceHistory = [];
   bool _isLoading = true;
   bool _hasError = false;
   int _quantity = 1;
@@ -51,16 +52,21 @@ class _ProductPageState extends State<ProductPage> {
     try {
       final response = await _supabase
           .from('product')
-          .select('*, store(store_id, store_name), product_variant(*)')
+          .select(
+            '*, store(store_id, store_name), product_variant(*), product_discount(*)',
+          )
           .eq('product_id', widget.productId)
           .maybeSingle();
       final reviews = await DatabaseService.getProductReviews(widget.productId);
+      final priceHistory =
+          await DatabaseService.getProductPriceHistory(widget.productId);
 
       if (!mounted) return;
 
       setState(() {
         _product = response == null ? null : Map<String, dynamic>.from(response);
         _reviews = reviews;
+        _priceHistory = priceHistory;
         _hasError = response == null;
         _isLoading = false;
       });
@@ -84,8 +90,14 @@ class _ProductPageState extends State<ProductPage> {
     }
 
     for (var i = 0; i < _quantity; i++) {
+      final discount = DatabaseService.activeProductDiscount(product);
+      final baseCartPrice = DatabaseService.discountedPrice(
+        _toDouble(product['price']),
+        discount,
+      );
       CartModel.addItem({
         ...product,
+        'price': baseCartPrice,
         if (_selectedVariant == null) ...{
           'selected_size': product['base_size_label'],
           'selected_sku': product['sku'],
@@ -93,7 +105,10 @@ class _ProductPageState extends State<ProductPage> {
           'selected_variant_id': _selectedVariant!['variant_id'],
           'selected_size': _selectedVariant!['size_label'],
           'selected_sku': _selectedVariant!['sku'],
-          'price': _selectedVariant!['price'],
+          'price': DatabaseService.discountedPrice(
+            _toDouble(_selectedVariant!['price']),
+            discount,
+          ),
           'stock_quantity': _selectedVariant!['stock_quantity'],
         },
       });
@@ -176,6 +191,70 @@ class _ProductPageState extends State<ProductPage> {
 
     reasonController.dispose();
     detailsController.dispose();
+  }
+
+  Widget _buildPriceHistorySection() {
+    final baseHistory = _priceHistory
+        .where((row) => row['variant_id'] == null)
+        .toList()
+      ..sort(
+        (a, b) => (DateTime.tryParse(a['recorded_at']?.toString() ?? '') ??
+                DateTime(0))
+            .compareTo(
+          DateTime.tryParse(b['recorded_at']?.toString() ?? '') ?? DateTime(0),
+        ),
+      );
+    final rows = baseHistory.length > 24
+        ? baseHistory.sublist(baseHistory.length - 24)
+        : baseHistory;
+    if (rows.isEmpty) {
+      return const Text('No price history yet.');
+    }
+    final prices = rows.map((row) => _toDouble(row['price'])).toList();
+    final low = prices.reduce((a, b) => a < b ? a : b);
+    final high = prices.reduce((a, b) => a > b ? a : b);
+    final spread = high - low;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          height: 120,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: rows.map((row) {
+              final price = _toDouble(row['price']);
+              final height = spread <= 0 ? 56.0 : 28 + ((price - low) / spread) * 82;
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: Tooltip(
+                    message: '${DatabaseService.money(price)}\n${row['recorded_at']}',
+                    child: Align(
+                      alignment: Alignment.bottomCenter,
+                      child: Container(
+                        height: height,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primary,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(child: Text('Low: ${DatabaseService.money(low)}')),
+            Text('High: ${DatabaseService.money(high)}'),
+          ],
+        ),
+      ],
+    );
   }
 
   Widget _buildImage(String? imagePath) {
@@ -261,6 +340,9 @@ class _ProductPageState extends State<ProductPage> {
     final selectedPrice = _selectedVariant == null
         ? price
         : _toDouble(_selectedVariant!['price']);
+    final activeDiscount = DatabaseService.activeProductDiscount(product);
+    final displayedSelectedPrice =
+        DatabaseService.discountedPrice(selectedPrice, activeDiscount);
     final selectedUnitQuantity = _selectedVariant == null
         ? baseUnitQuantity
         : (_toInt(_selectedVariant!['stock_unit_quantity']) < 1
@@ -355,13 +437,23 @@ class _ProductPageState extends State<ProductPage> {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            'PHP ${selectedPrice.toStringAsFixed(2)}',
+                            'PHP ${displayedSelectedPrice.toStringAsFixed(2)}',
                             style: TextStyle(
                               fontSize: 22,
                               fontWeight: FontWeight.bold,
                               color: Theme.of(context).colorScheme.primary,
                             ),
                           ),
+                          if (activeDiscount != null) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              activeDiscount['discount_type']?.toString() ==
+                                      'amount'
+                                  ? '${DatabaseService.money(activeDiscount['discount_value'])} scheduled shop discount'
+                                  : '${activeDiscount['discount_value']}% scheduled shop discount',
+                              style: const TextStyle(color: Colors.green),
+                            ),
+                          ],
                           const SizedBox(height: 12),
                           const Text(
                             'Size',
@@ -374,7 +466,7 @@ class _ProductPageState extends State<ProductPage> {
                             children: [
                               ChoiceChip(
                                 label: Text(
-                                  '$baseSizeLabel - PHP ${price.toStringAsFixed(2)}',
+                                  '$baseSizeLabel - ${DatabaseService.money(DatabaseService.discountedPrice(price, activeDiscount))}',
                                 ),
                                 selected: _selectedVariant == null,
                                 onSelected: (_) {
@@ -387,7 +479,7 @@ class _ProductPageState extends State<ProductPage> {
                               ...activeVariants.map((variant) {
                                 return ChoiceChip(
                                   label: Text(
-                                    '${variant['size_label']} - PHP ${_toDouble(variant['price']).toStringAsFixed(2)}',
+                                    '${variant['size_label']} - ${DatabaseService.money(DatabaseService.discountedPrice(_toDouble(variant['price']), activeDiscount))}',
                                   ),
                                   selected: _selectedVariant?['variant_id'] ==
                                       variant['variant_id'],
@@ -517,6 +609,13 @@ class _ProductPageState extends State<ProductPage> {
               const SizedBox(height: 12),
               Text('SKU: $sku'),
             ],
+            const SizedBox(height: 28),
+            const Text(
+              'Price History',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            _buildPriceHistorySection(),
             const SizedBox(height: 28),
             const Text(
               'Reviews',

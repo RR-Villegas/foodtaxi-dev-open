@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'services/input_validator.dart';
+import 'services/auth_service.dart';
 
 class ResetPasswordPage extends StatefulWidget {
   const ResetPasswordPage({super.key});
@@ -69,6 +70,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
       await _supabase.auth.updateUser(
         UserAttributes(password: password),
       );
+      AuthService.finishPasswordRecoverySession();
       await _supabase.auth.signOut();
 
       if (mounted) {
