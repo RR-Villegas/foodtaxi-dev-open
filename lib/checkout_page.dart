@@ -282,6 +282,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
     setState(() => _isLoading = true);
 
     try {
+      for (final item in CartModel.cartItems) {
+        final stockError = await DatabaseService.checkoutStockError(item);
+        if (stockError != null) throw Exception(stockError);
+      }
+
       String? sellerAccountId;
       for (final item in CartModel.cartItems) {
         final productId = item['product_id']?.toString();
@@ -291,8 +296,24 @@ class _CheckoutPageState extends State<CheckoutPage> {
         if (sellerAccountId != null) break;
       }
 
-      // Create order in database
-      final orderId = await DatabaseService.insertOrder(
+      final orderItems = CartModel.cartItems.map((item) {
+        final productId = item['product_id']?.toString();
+        if (productId == null || productId.isEmpty) {
+          throw Exception('Cart item is missing product ID');
+        }
+        final variantId = item['selected_variant_id']?.toString();
+        final quantity = item['quantity'] ?? 1;
+        final price = CartModel.itemPrice(item);
+        return {
+          'product_id': productId,
+          'product_variant_id':
+              variantId == null || variantId.isEmpty ? null : variantId,
+          'quantity': quantity,
+          'unit_price_at_sale': price,
+        };
+      }).toList();
+
+      final orderId = await DatabaseService.placeOrderWithItems(
         accountId: _accountId!,
         addressId: _selectedAddress!.addressId!,
         totalAmount: _total,
@@ -307,33 +328,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
         discountCode: _appliedCoupon?['code']?.toString(),
         paymentMethod: _selectedPaymentMethod,
         sellerAccountId: sellerAccountId,
+        items: orderItems,
       );
 
       if (orderId.isEmpty) {
         throw Exception('Failed to create order');
-      }
-
-      // Add order items
-      for (var item in CartModel.cartItems) {
-        final productId = item['product_id']?.toString();
-        if (productId == null || productId.isEmpty) {
-          throw Exception('Cart item is missing product ID');
-        }
-
-        final quantity = item['quantity'] ?? 1;
-        final price = CartModel.itemPrice(item);
-
-        final itemSaved = await DatabaseService.insertOrderItem(
-          orderId: orderId,
-          productId: productId,
-          productVariantId: item['selected_variant_id']?.toString(),
-          unitPriceAtSale: price,
-          quantity: quantity,
-        );
-
-        if (!itemSaved) {
-          throw Exception('Not enough stock for ${item['name'] ?? 'an item'}');
-        }
       }
 
       final couponCode = _appliedCoupon?['code']?.toString();

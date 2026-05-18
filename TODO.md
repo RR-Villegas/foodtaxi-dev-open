@@ -122,6 +122,44 @@ Latest done
   - discounts have start/end windows and can be toggled active/inactive.
   - database blocks deceptive discounts when base or variant prices were raised above their 30-day recorded low.
 - Added product price history tracking and a product-page price history graph.
+- Seller Products tab now supports category filtering, price/discount/alphabetical/time sorting, and 10-per-page pagination.
+- Seller Orders now shows ordered product details with quantities, unit prices, and subtotals.
+- Seller sales summary now counts delivered orders as successful sales.
+- Seller Offers tab is organized into Product Discounts and Shop Coupons sections.
+- Buyer product details now avoid selecting an out-of-stock default size when variants are available, and checkout verifies current stock before order creation.
+- Product cards/lists now show default price plus "*" for products with variants instead of a long price range.
+- Checkout no longer blocks valid variant/shared-stock orders with the removed duplicate Dart-side stock preflight.
+- Product click tracking 403 was fixed with a private RLS helper instead of broad product_click SELECT grants.
+- Cart quantities are capped by selected stock, and checkout reports quantity-vs-stock mismatches before creating the order.
+- Checkout now uses atomic Supabase RPC place_order_with_items(), so order + order_items succeed together or roll back together.
+- Removed recent zero-item Processing orders created by the old checkout path.
+- Stock decrement trigger now runs as SECURITY DEFINER so buyer RLS cannot block product stock updates during checkout.
+- Product click tracking now uses public.track_product_click(...) RPC instead of direct product_click inserts.
+- Admin seller/rider approval now saves account.date_verified, and already-approved seller/rider accounts were backfilled from date_approved.
+- Seller order cards now have a bottom-right note icon that opens the ordered item list with product, variant/size, quantity, unit price, and subtotal.
+- Seller order item loading now uses explicit product/product_variant relationship aliases, and Items Sold counts delivered order item quantities.
+- Seller order items are now hydrated with a separate order_items query by order_id, preventing Sales/Orders cards from showing 0 items when the embedded order response omits item details.
+- Seller Recent Sales now shows delivered orders only, so pending orders are not counted or labelled as sold.
+- Seller order item hydration now uses guarded Supabase RPC get_seller_order_items(uuid), so the dashboard receives item rows even when REST embedding omits them.
+- Seller Recent Sales rows now show an ordered-items preview and a note icon that opens the item detail list.
+- Seller order loading now uses guarded Supabase RPC get_seller_orders(uuid) so seller-owned orders include buyer name/email/phone despite account table RLS.
+- Seller Orders and Sales now share buyer identity formatting: full name, then email, then phone, then shortened buyer account id.
+
+To do
+- After logout and exiting login page (or clicking to buy/go to seller and exit login page), main doesn't load, need to refresh to logout
+- Show seller storefront to anon, but certain stuff can only be done by logging in.
+- Admin, Daily Commission > Commission Sales, the bar should be like a line graph, and can be filtered to days/week, weeks/month, year/month.
+- In seller registration, the text is too dark
+- Same issue on rider's (it shows "Buyer" on orders)
+- All already read notifications should not appear, only latest 3 notifications will appear, then they should click more to show, properly mark unread/read notifications.
+
+- Flutter Checks:
+warning - The declaration '_buyerPhone' isn't referenced -
+       lib\seller_dashboard.dart:339:10 - unused_element
+warning - The declaration '_buyerContactLine' isn't referenced -
+       lib\seller_dashboard.dart:343:10 - unused_element
+
+- On signup (buyer), force number and surname to be a requirement (dart).
 
 On-hold
 - Check whether authenticated GraphQL exposure warnings should be further reduced by moving sensitive reads behind RPCs. Current judgment: product/store/review/variant/discount/price-history reads are still needed by public marketplace screens, so revoking direct SELECT would require a larger RPC/view rewrite.

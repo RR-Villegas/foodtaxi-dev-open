@@ -488,3 +488,78 @@ Current verification handoff
 Latest analyzer patch
 - Fixed seller_dashboard discount dialog analyzer errors by replacing ambiguous nested ternary/null-aware expressions with explicit locals.
 - Removed unused _money helper from seller_page.dart after seller storefront prices moved to DatabaseService.displayProductPrice().
+
+Latest seller/buyer dashboard patch
+- Seller Products tab now has local filtering/sorting:
+  - category filter.
+  - sort by newest/oldest, alphabetical, price, and active discount percentage.
+  - pagination at 10 products per page.
+- Seller Orders tab now renders ordered products more clearly:
+  - product image/name, variant size, quantity, unit price, and line subtotal.
+  - Recent Sales item count now uses item quantities instead of row count.
+- DatabaseService.summarizeSales now treats Delivered orders as successful sales for revenue/items-sold.
+- Seller Offers tab was reorganized into Product Discounts and Shop Coupons sections with action buttons beside each section heading.
+- Buyer product detail now auto-selects the first in-stock variant when the default/base option has no stock, disables out-of-stock size chips, and labels them "(out)".
+- Checkout now verifies current stock before creating the order and gives a more specific stock error instead of treating every order_item insert failure as stock.
+
+Latest price/checkout correction
+- Product card/list prices now show the base/default displayed price with a trailing "*" when the product has active variants/sizes, instead of a long min-max range.
+- Removed the extra Dart-side checkout stock preflight because it could reject valid variant/shared-stock orders before the database trigger had a chance to process them.
+- Checkout still relies on the order_items stock trigger as the authoritative stock/decrement check.
+
+Latest product click/cart stock fix
+- Fixed product_click 403 without granting broad SELECT on product_click:
+  - added app_private.can_insert_product_click(uuid, uuid, text) as a private security-definer helper.
+  - product_click INSERT policy now calls that helper for the 30-second rate-limit self-check.
+- Product page now passes max_quantity into cart items based on the selected base/variant available stock.
+- CartModel.addItem() and updateQuantity() now cap quantities at max_quantity, preventing cart quantity from exceeding selected stock through repeated adds or cart +/- controls.
+- Checkout has a lightweight current-stock check before creating the order, with quantity-specific messages such as "Cart has X, but only Y available"; this prevents orphan orders before the database stock trigger runs.
+
+Latest atomic checkout fix
+- Applied Supabase function public.place_order_with_items(...), SECURITY INVOKER.
+  - Inserts orders and all order_items in one Postgres transaction.
+  - Existing order_items stock trigger still performs authoritative stock decrement.
+  - Any item stock failure rolls back the whole order, preventing zero-item/partial orders.
+- CheckoutPage now calls DatabaseService.placeOrderWithItems() instead of insertOrder() followed by separate insertOrderItem() calls.
+- Removed 8 recent Processing orders with zero order_items that were created by the old non-transactional checkout bug.
+- Follow-up stock trigger fix:
+  - checkout failures like "Insufficient product stock" with visible stock were caused by app_private.decrement_order_item_stock() running as SECURITY INVOKER under buyer RLS.
+  - changed app_private.decrement_order_item_stock() to SECURITY DEFINER owned by postgres.
+  - revoked direct EXECUTE on that trigger function from public/anon/authenticated; it remains usable through the order_items trigger only.
+
+Latest product click RPC fix
+- Direct client insert into public.product_click still produced 403, so DatabaseService.trackProductClick now calls public.track_product_click(...) instead.
+- Applied Supabase function public.track_product_click(uuid, uuid, text), SECURITY DEFINER.
+  - Derives account_id from auth.uid() inside the database.
+  - Uses ip_hash for anonymous visitors.
+  - Preserves 30-second per-product rate limiting.
+  - Client only needs EXECUTE on the RPC, not table access to product_click.
+
+Latest seller verification/order detail fix
+- Admin seller/rider approval now writes account.date_verified at the same time as account.is_verified.
+- Existing approved seller/rider accounts with null account.date_verified were backfilled from their application date_approved values; verification query showed 0 missing verified dates afterward.
+- Seller order item loading now uses explicit PostgREST relationship aliases for product and product_variant to avoid ambiguous/missing nested order item details.
+- Seller Orders cards now show a bottom-right note icon; tapping it opens a dialog listing every ordered product, variant/size, quantity, unit price, and subtotal.
+- Seller item counts continue to sum order_items.quantity, so Items Sold tracks individual delivered units rather than just order rows.
+
+Latest seller sales item-count correction
+- Live DB check showed the seller orders do have order_items, but the embedded seller orders response could still arrive without hydrated items in the dashboard.
+- DatabaseService.getSellerOrders() now loads seller orders first, then fetches order_items separately with explicit product/product_variant relationship aliases, and attaches items back by order_id.
+- Seller Sales "Recent Sales" now lists only delivered orders, so Processing/Ready for Pickup entries are no longer labelled as sold.
+
+Latest seller order item visibility correction
+- Added Supabase RPC public.get_seller_order_items(uuid), granted to authenticated only.
+  - It is guarded by auth.uid() + seller account ownership before returning order item rows.
+  - It returns flat seller order item rows with product name/image, variant size, quantity, unit price, and subtotal.
+- DatabaseService.getSellerOrders() now hydrates order_items from that RPC and reshapes them into the existing dashboard item structure.
+- Seller Sales rows now include an ordered-items preview and a note icon that opens the same item detail dialog as the Orders tab.
+
+Latest seller buyer-identity fix
+- Account RLS only lets users read their own account, so seller dashboard could not reliably fetch buyer profiles through direct account table reads.
+- Added Supabase RPC public.get_seller_orders(uuid), granted to authenticated only and guarded by auth.uid() + seller account ownership.
+  - It returns seller-owned orders plus buyer firstname, surname, email, and phone in the order account payload.
+- DatabaseService.getSellerOrders() now uses get_seller_orders() instead of reading orders/account directly.
+- Seller dashboard now formats buyer identity consistently in Orders and Sales:
+  - prefers buyer full name.
+  - falls back to email, then phone, then a shortened buyer account id.
+  - Orders cards show buyer email/phone under the buyer name when available.

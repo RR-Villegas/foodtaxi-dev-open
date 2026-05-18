@@ -41,6 +41,36 @@ class _ProductPageState extends State<ProductPage> {
     return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
+  int _availableStockForOption(
+    Map<String, dynamic> product,
+    Map<String, dynamic>? variant,
+  ) {
+    final stock = _toInt(product['stock_quantity']);
+    final stockMode = product['stock_mode']?.toString() == 'shared'
+        ? 'shared'
+        : 'independent';
+    if (stockMode == 'shared') {
+      final unitQuantity = variant == null
+          ? _toInt(product['base_unit_quantity'])
+          : _toInt(variant['stock_unit_quantity']);
+      final safeUnitQuantity = unitQuantity < 1 ? 1 : unitQuantity;
+      return stock ~/ safeUnitQuantity;
+    }
+    return variant == null ? stock : _toInt(variant['stock_quantity']);
+  }
+
+  Map<String, dynamic>? _firstAvailableVariant(Map<String, dynamic> product) {
+    if (_availableStockForOption(product, null) > 0) return null;
+    final variants = product['product_variant'];
+    if (variants is! List) return null;
+    for (final variant in variants.whereType<Map>()) {
+      if (variant['is_active'] == false) continue;
+      final normalized = Map<String, dynamic>.from(variant);
+      if (_availableStockForOption(product, normalized) > 0) return normalized;
+    }
+    return null;
+  }
+
   String? _resolveImagePath(dynamic imageValue) {
     final path = imageValue?.toString().trim();
     if (path == null || path.isEmpty) return null;
@@ -65,6 +95,9 @@ class _ProductPageState extends State<ProductPage> {
 
       setState(() {
         _product = response == null ? null : Map<String, dynamic>.from(response);
+        if (_product != null) {
+          _selectedVariant = _firstAvailableVariant(_product!);
+        }
         _reviews = reviews;
         _priceHistory = priceHistory;
         _hasError = response == null;
@@ -89,15 +122,18 @@ class _ProductPageState extends State<ProductPage> {
       return;
     }
 
+    final selectedStock = _availableStockForOption(product, _selectedVariant);
+    var added = 0;
+    final discount = DatabaseService.activeProductDiscount(product);
+    final baseCartPrice = DatabaseService.discountedPrice(
+      _toDouble(product['price']),
+      discount,
+    );
     for (var i = 0; i < _quantity; i++) {
-      final discount = DatabaseService.activeProductDiscount(product);
-      final baseCartPrice = DatabaseService.discountedPrice(
-        _toDouble(product['price']),
-        discount,
-      );
-      CartModel.addItem({
+      final didAdd = CartModel.addItem({
         ...product,
         'price': baseCartPrice,
+        'max_quantity': selectedStock,
         if (_selectedVariant == null) ...{
           'selected_size': product['base_size_label'],
           'selected_sku': product['sku'],
@@ -112,12 +148,16 @@ class _ProductPageState extends State<ProductPage> {
           'stock_quantity': _selectedVariant!['stock_quantity'],
         },
       });
+      if (!didAdd) break;
+      added++;
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          '${DatabaseService.displayProductName(product['name'])} x$_quantity added to cart!',
+          added > 0
+              ? '${DatabaseService.displayProductName(product['name'])} x$added added to cart!'
+              : 'Cart already has all available stock for this item.',
         ),
         duration: const Duration(seconds: 2),
       ),
@@ -317,18 +357,11 @@ class _ProductPageState extends State<ProductPage> {
 
     final product = _product!;
     final imagePath = _resolveImagePath(product['main_image_url']);
-    final stock = _toInt(product['stock_quantity']);
     final price = _toDouble(product['price']);
-    final stockMode = product['stock_mode']?.toString() == 'shared'
-        ? 'shared'
-        : 'independent';
     final baseSizeLabel =
         product['base_size_label']?.toString().trim().isNotEmpty == true
             ? product['base_size_label'].toString()
             : 'Default';
-    final baseUnitQuantity = _toInt(product['base_unit_quantity']) < 1
-        ? 1
-        : _toInt(product['base_unit_quantity']);
     final variants = product['product_variant'];
     final activeVariants = variants is List
         ? variants
@@ -343,16 +376,7 @@ class _ProductPageState extends State<ProductPage> {
     final activeDiscount = DatabaseService.activeProductDiscount(product);
     final displayedSelectedPrice =
         DatabaseService.discountedPrice(selectedPrice, activeDiscount);
-    final selectedUnitQuantity = _selectedVariant == null
-        ? baseUnitQuantity
-        : (_toInt(_selectedVariant!['stock_unit_quantity']) < 1
-            ? 1
-            : _toInt(_selectedVariant!['stock_unit_quantity']));
-    final selectedStock = stockMode == 'shared'
-        ? stock ~/ selectedUnitQuantity
-        : _selectedVariant == null
-            ? stock
-            : _toInt(_selectedVariant!['stock_quantity']);
+    final selectedStock = _availableStockForOption(product, _selectedVariant);
     final isActive = product['is_active'] != false;
     final canPurchase = isActive && selectedStock > 0;
     final description = product['description']?.toString().trim() ?? '';
@@ -466,29 +490,35 @@ class _ProductPageState extends State<ProductPage> {
                             children: [
                               ChoiceChip(
                                 label: Text(
-                                  '$baseSizeLabel - ${DatabaseService.money(DatabaseService.discountedPrice(price, activeDiscount))}',
+                                  '$baseSizeLabel - ${DatabaseService.money(DatabaseService.discountedPrice(price, activeDiscount))}${_availableStockForOption(product, null) <= 0 ? ' (out)' : ''}',
                                 ),
                                 selected: _selectedVariant == null,
-                                onSelected: (_) {
-                                  setState(() {
-                                    _selectedVariant = null;
-                                    _quantity = 1;
-                                  });
-                                },
+                                onSelected: _availableStockForOption(product, null) <= 0
+                                    ? null
+                                    : (_) {
+                                        setState(() {
+                                          _selectedVariant = null;
+                                          _quantity = 1;
+                                        });
+                                      },
                               ),
                               ...activeVariants.map((variant) {
+                                final variantStock =
+                                    _availableStockForOption(product, variant);
                                 return ChoiceChip(
                                   label: Text(
-                                    '${variant['size_label']} - ${DatabaseService.money(DatabaseService.discountedPrice(_toDouble(variant['price']), activeDiscount))}',
+                                    '${variant['size_label']} - ${DatabaseService.money(DatabaseService.discountedPrice(_toDouble(variant['price']), activeDiscount))}${variantStock <= 0 ? ' (out)' : ''}',
                                   ),
                                   selected: _selectedVariant?['variant_id'] ==
                                       variant['variant_id'],
-                                  onSelected: (_) {
-                                    setState(() {
-                                      _selectedVariant = variant;
-                                      _quantity = 1;
-                                    });
-                                  },
+                                  onSelected: variantStock <= 0
+                                      ? null
+                                      : (_) {
+                                          setState(() {
+                                            _selectedVariant = variant;
+                                            _quantity = 1;
+                                          });
+                                        },
                                 );
                               }),
                             ],

@@ -45,8 +45,22 @@ class _SellerDashboardState extends State<SellerDashboard> {
   bool _isLoading = true;
   String _overviewRange = 'Day';
   String _orderStatusFilter = 'All';
+  String _productCategoryFilter = 'All';
+  String _productSort = 'Newest';
+  int _productsPage = 0;
 
   static const List<String> _overviewRanges = ['Day', 'Week', 'Month', 'Year'];
+  static const int _productsPerPage = 10;
+  static const List<String> _productSortOptions = [
+    'Newest',
+    'Oldest',
+    'A-Z',
+    'Z-A',
+    'Price: Low to High',
+    'Price: High to Low',
+    'Discount: High to Low',
+    'Discount: Low to High',
+  ];
   static const List<String> _orderStatusFilters = [
     'All',
     'Processing',
@@ -149,6 +163,93 @@ class _SellerDashboardState extends State<SellerDashboard> {
     return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
+  DateTime _productDate(Map<String, dynamic> product) {
+    return DateTime.tryParse(
+          product['created_at']?.toString() ??
+              product['updated_at']?.toString() ??
+              '',
+        ) ??
+        DateTime(0);
+  }
+
+  double _productLowestPrice(Map<String, dynamic> product) {
+    final prices = <double>[_number(product['price'])];
+    final variants = product['product_variant'];
+    if (variants is List) {
+      for (final variant in variants.whereType<Map>()) {
+        if (variant['is_active'] == false) continue;
+        prices.add(_number(variant['price']));
+      }
+    }
+    final discount = DatabaseService.activeProductDiscount(product);
+    final discounted = prices
+        .map((price) => DatabaseService.discountedPrice(price, discount))
+        .where((price) => price >= 0)
+        .toList();
+    if (discounted.isEmpty) return 0;
+    discounted.sort();
+    return discounted.first;
+  }
+
+  double _productDiscountPercent(Map<String, dynamic> product) {
+    final discount = DatabaseService.activeProductDiscount(product);
+    if (discount == null) return 0;
+    final value = _number(discount['discount_value']);
+    if (discount['discount_type']?.toString() == 'percent') return value;
+    final basePrices = <double>[_number(product['price'])];
+    final variants = product['product_variant'];
+    if (variants is List) {
+      for (final variant in variants.whereType<Map>()) {
+        if (variant['is_active'] == false) continue;
+        basePrices.add(_number(variant['price']));
+      }
+    }
+    basePrices.sort();
+    final base = basePrices.isEmpty ? 0 : basePrices.first;
+    return base <= 0 ? 0 : (value / base) * 100;
+  }
+
+  List<Map<String, dynamic>> _filteredProducts() {
+    final availableCategories = _products
+        .map((product) => product['category']?.toString() ?? '')
+        .where((category) => category.isNotEmpty)
+        .toSet();
+    final categoryFilter = availableCategories.contains(_productCategoryFilter)
+        ? _productCategoryFilter
+        : 'All';
+    final filtered = _products.where((product) {
+      if (categoryFilter == 'All') return true;
+      return product['category']?.toString() == categoryFilter;
+    }).toList();
+
+    filtered.sort((a, b) {
+      switch (_productSort) {
+        case 'Oldest':
+          return _productDate(a).compareTo(_productDate(b));
+        case 'A-Z':
+          return DatabaseService.displayProductName(a['name'])
+              .toLowerCase()
+              .compareTo(DatabaseService.displayProductName(b['name']).toLowerCase());
+        case 'Z-A':
+          return DatabaseService.displayProductName(b['name'])
+              .toLowerCase()
+              .compareTo(DatabaseService.displayProductName(a['name']).toLowerCase());
+        case 'Price: Low to High':
+          return _productLowestPrice(a).compareTo(_productLowestPrice(b));
+        case 'Price: High to Low':
+          return _productLowestPrice(b).compareTo(_productLowestPrice(a));
+        case 'Discount: Low to High':
+          return _productDiscountPercent(a).compareTo(_productDiscountPercent(b));
+        case 'Discount: High to Low':
+          return _productDiscountPercent(b).compareTo(_productDiscountPercent(a));
+        case 'Newest':
+        default:
+          return _productDate(b).compareTo(_productDate(a));
+      }
+    });
+    return filtered;
+  }
+
   Widget _profileMenuHeader() {
     final account = _account;
     if (account == null) return const Text('Profile');
@@ -207,6 +308,46 @@ class _SellerDashboardState extends State<SellerDashboard> {
 
   bool _isDelivered(Map<String, dynamic> order) {
     return _status(order).toLowerCase() == 'delivered';
+  }
+
+  Map<dynamic, dynamic>? _buyerFor(Map<String, dynamic> order) {
+    final account = order['account'];
+    if (account is Map) return account;
+    final buyer = order['buyer'];
+    if (buyer is Map) return buyer;
+    return null;
+  }
+
+  String _buyerName(Map<String, dynamic> order) {
+    final buyer = _buyerFor(order);
+    final firstName = buyer?['firstname']?.toString().trim() ?? '';
+    final surname = buyer?['surname']?.toString().trim() ?? '';
+    final fullName = '$firstName $surname'.trim();
+    if (fullName.isNotEmpty) return fullName;
+
+    final email = buyer?['email']?.toString().trim() ?? '';
+    if (email.isNotEmpty) return email;
+
+    final phone = buyer?['phone_number']?.toString().trim() ?? '';
+    if (phone.isNotEmpty) return phone;
+
+    final buyerId = order['buyer_account_id']?.toString() ?? '';
+    if (buyerId.length >= 8) return 'Buyer ${buyerId.substring(0, 8)}';
+    return 'Unknown Buyer';
+  }
+
+  String _buyerPhone(Map<String, dynamic> order) {
+    return _buyerFor(order)?['phone_number']?.toString().trim() ?? '';
+  }
+
+  String _buyerContactLine(Map<String, dynamic> order) {
+    final buyer = _buyerFor(order);
+    final email = buyer?['email']?.toString().trim() ?? '';
+    final phone = buyer?['phone_number']?.toString().trim() ?? '';
+    return [
+      if (email.isNotEmpty) email,
+      if (phone.isNotEmpty) phone,
+    ].join(' | ');
   }
 
   DateTime? _orderDate(Map<String, dynamic> order, {bool preferDelivered = false}) {
@@ -413,6 +554,140 @@ class _SellerDashboardState extends State<SellerDashboard> {
     if (ok) _loadDashboard();
   }
 
+  Widget _buildProductFilters(int visibleCount) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: FilledButton.icon(
+            onPressed: () => _openProductForm(),
+            icon: const Icon(Icons.add),
+            label: const Text('Add Product'),
+          ),
+        ),
+        const SizedBox(height: 12),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final compact = constraints.maxWidth < 620;
+            final categories = <String>{
+              'All',
+              ..._categories,
+              ..._products
+                  .map((product) => product['category']?.toString() ?? '')
+                  .where((category) => category.isNotEmpty),
+            }.toList();
+            final selectedCategory = categories.contains(_productCategoryFilter)
+                ? _productCategoryFilter
+                : 'All';
+            final categoryField = DropdownButtonFormField<String>(
+              initialValue: selectedCategory,
+              decoration: const InputDecoration(
+                labelText: 'Category',
+                border: OutlineInputBorder(),
+              ),
+              items: categories
+                  .map(
+                    (category) => DropdownMenuItem(
+                      value: category,
+                      child: Text(
+                        category,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() {
+                  _productCategoryFilter = value;
+                  _productsPage = 0;
+                });
+              },
+            );
+            final sortField = DropdownButtonFormField<String>(
+              initialValue: _productSort,
+              decoration: const InputDecoration(
+                labelText: 'Sort',
+                border: OutlineInputBorder(),
+              ),
+              items: _productSortOptions
+                  .map(
+                    (sort) => DropdownMenuItem(
+                      value: sort,
+                      child: Text(sort),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() {
+                  _productSort = value;
+                  _productsPage = 0;
+                });
+              },
+            );
+
+            if (compact) {
+              return Column(
+                children: [
+                  categoryField,
+                  const SizedBox(height: 10),
+                  sortField,
+                ],
+              );
+            }
+
+            return Row(
+              children: [
+                Expanded(child: categoryField),
+                const SizedBox(width: 10),
+                Expanded(child: sortField),
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '$visibleCount product${visibleCount == 1 ? '' : 's'} shown',
+          style: const TextStyle(color: Colors.black54),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProductsPager(int totalPages) {
+    if (totalPages <= 1) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 12),
+      child: Row(
+        children: [
+          OutlinedButton.icon(
+            onPressed: _productsPage <= 0
+                ? null
+                : () => setState(() => _productsPage--),
+            icon: const Icon(Icons.chevron_left),
+            label: const Text('Previous'),
+          ),
+          Expanded(
+            child: Center(
+              child: Text('Page ${_productsPage + 1} of $totalPages'),
+            ),
+          ),
+          OutlinedButton.icon(
+            onPressed: _productsPage >= totalPages - 1
+                ? null
+                : () => setState(() => _productsPage++),
+            icon: const Icon(Icons.chevron_right),
+            label: const Text('Next'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildProductsTab() {
     if (_store == null) {
       return Center(
@@ -463,32 +738,49 @@ class _SellerDashboardState extends State<SellerDashboard> {
       );
     }
 
+    final visibleProducts = _filteredProducts();
+    final totalPages = visibleProducts.isEmpty
+        ? 1
+        : (visibleProducts.length / _productsPerPage).ceil();
+    if (_productsPage >= totalPages) _productsPage = totalPages - 1;
+    if (_productsPage < 0) _productsPage = 0;
+    final start = _productsPage * _productsPerPage;
+    final requestedEnd = start + _productsPerPage;
+    final end =
+        requestedEnd > visibleProducts.length ? visibleProducts.length : requestedEnd;
+    final pageProducts = visibleProducts.sublist(start, end);
+
     return RefreshIndicator(
       onRefresh: _loadDashboard,
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: _products.length + 1,
+        itemCount: pageProducts.length + 2,
         itemBuilder: (context, index) {
           if (index == 0) {
             return Padding(
               padding: const EdgeInsets.only(bottom: 16),
-              child: SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: FilledButton.icon(
-                  onPressed: () => _openProductForm(),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Add Product'),
-                ),
-              ),
+              child: _buildProductFilters(visibleProducts.length),
             );
           }
 
+          if (index == 1 && pageProducts.isEmpty) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 80),
+              child: Center(child: Text('No products match these filters')),
+            );
+          }
+
+          if (index == pageProducts.length + 1) {
+            return _buildProductsPager(totalPages);
+          }
+
           index -= 1;
-          final product = _products[index];
+          final product = pageProducts[index];
           final active = product['is_active'] != false;
           final variants = product['product_variant'];
           final variantCount = variants is List ? variants.length : 0;
+          final category = product['category']?.toString() ?? '';
+          final discountPercent = _productDiscountPercent(product);
 
           return Card(
             margin: const EdgeInsets.only(bottom: 12),
@@ -502,9 +794,12 @@ class _SellerDashboardState extends State<SellerDashboard> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(DatabaseService.displayProductPrice(product)),
+                  if (category.isNotEmpty) Text(category),
                   Text('Stock: ${_stock(product['stock_quantity'])}'),
                   if (variantCount > 0)
                     Text('$variantCount alternate size${variantCount == 1 ? '' : 's'}'),
+                  if (discountPercent > 0)
+                    Text('${discountPercent.toStringAsFixed(0)}% active discount'),
                   Text(
                     active ? 'Active' : 'Hidden',
                     style: TextStyle(color: active ? Colors.green : Colors.grey),
@@ -823,13 +1118,8 @@ class _SellerDashboardState extends State<SellerDashboard> {
             )
           else
             ..._orders.map((order) {
-              final buyer = order['account'];
-              final buyerName = buyer is Map
-                  ? '${buyer['firstname'] ?? 'Buyer'} ${buyer['surname'] ?? ''}'
-                      .trim()
-                  : 'Buyer';
-              final items = order['order_items'];
-              final itemCount = items is List ? items.length : 0;
+              final buyerName = _buyerName(order);
+              final itemCount = _itemCount(order);
 
               return Card(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -839,7 +1129,7 @@ class _SellerDashboardState extends State<SellerDashboard> {
                   ),
                   title: Text(_money(order['total_amount'])),
                   subtitle: Text(
-                    '$buyerName | $itemCount item${itemCount == 1 ? '' : 's'} | ${order['order_status'] ?? 'Processing'}',
+                    '$buyerName | $itemCount item${itemCount == 1 ? '' : 's'} sold | ${order['order_status'] ?? 'Processing'}',
                   ),
                   trailing: Text(
                     order['payment_status']?.toString() ?? 'Pending',
@@ -933,15 +1223,16 @@ class _SellerDashboardState extends State<SellerDashboard> {
           }
 
           final order = visibleOrders[index - 1];
-          final buyer = order['account'];
+          final buyer = order['account'] ?? order['buyer'];
           final buyerName = buyer is Map
-              ? '${buyer['firstname'] ?? 'Buyer'} ${buyer['surname'] ?? ''}'.trim()
-              : 'Buyer';
+            ? '${buyer['firstname'] ?? ''} ${buyer['surname'] ?? ''}'.trim()
+            : '';
           final buyerPhone =
               buyer is Map ? buyer['phone_number']?.toString() ?? '' : '';
           final items = order['order_items'];
           final orderItems = items is List ? items : const [];
           final status = order['order_status']?.toString() ?? 'Processing';
+          final itemCount = _itemCount(order);
 
           return Card(
             margin: const EdgeInsets.only(bottom: 12),
@@ -954,10 +1245,10 @@ class _SellerDashboardState extends State<SellerDashboard> {
                     children: [
                       Expanded(
                         child: Text(
-                          buyerName.isEmpty ? 'Buyer' : buyerName,
+                          buyerName.isEmpty ? 'Unknown Buyer' : buyerName,
                           style: const TextStyle(
-                            fontSize: 16,
                             fontWeight: FontWeight.bold,
+                            fontSize: 16,
                           ),
                         ),
                       ),
@@ -965,23 +1256,75 @@ class _SellerDashboardState extends State<SellerDashboard> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  ...orderItems.map((item) {
-                    if (item is! Map) return const SizedBox.shrink();
-                    final product = item['product'];
-                    final variant = item['product_variant'];
-                    final productName = product is Map
-                        ? DatabaseService.displayProductName(product['name'])
-                        : 'Product';
-                    final size = variant is Map
-                        ? variant['size_label']?.toString() ?? ''
-                        : '';
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Text(
-                        '${item['quantity'] ?? 1}x $productName${size.isEmpty ? '' : ' ($size)'}',
-                      ),
-                    );
-                  }),
+                  Text(
+                    'Ordered products ($itemCount item${itemCount == 1 ? '' : 's'})',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 6),
+                  if (orderItems.isEmpty)
+                    const Text(
+                      'No product details loaded for this order.',
+                      style: TextStyle(color: Colors.black54),
+                    )
+                  else
+                    ...orderItems.map((item) {
+                      if (item is! Map) return const SizedBox.shrink();
+                      final product = item['product'];
+                      final variant = item['product_variant'];
+                      final productName = product is Map
+                          ? DatabaseService.displayProductName(product['name'])
+                          : 'Product';
+                      final image = product is Map ? product['main_image_url'] : null;
+                      final size = variant is Map
+                          ? variant['size_label']?.toString() ?? ''
+                          : '';
+                      final quantity = _stock(item['quantity']);
+                      final unitPrice = _number(item['unit_price_at_sale']);
+                      final subtotal = item.containsKey('subtotal')
+                          ? _number(item['subtotal'])
+                          : unitPrice * quantity;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(6),
+                              child: _buildProductImage(image, size: 42),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    productName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  Text(
+                                    [
+                                      if (size.isNotEmpty) size,
+                                      'Qty $quantity',
+                                      _money(unitPrice),
+                                    ].join(' | '),
+                                    style: const TextStyle(color: Colors.black54),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _money(subtotal),
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
                   const SizedBox(height: 8),
                   _orderStateActions(order, status),
                   if (status == 'Ready for Pickup' &&
@@ -1401,20 +1744,20 @@ class _SellerDashboardState extends State<SellerDashboard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 24),
-        const Text(
-          'Product Discounts',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-        ),
-        const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: OutlinedButton.icon(
-            onPressed: () => _openProductDiscountForm(),
-            icon: const Icon(Icons.percent),
-            label: const Text('Schedule Product Discounts'),
-          ),
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Product Discounts',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => _openProductDiscountForm(),
+              icon: const Icon(Icons.percent),
+              label: const Text('Schedule'),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
         if (_productDiscounts.isEmpty)
@@ -1432,11 +1775,16 @@ class _SellerDashboardState extends State<SellerDashboard> {
                 ? '${DatabaseService.money(discount['discount_value'])} off'
                 : '${discount['discount_value']}% off';
             return Card(
+              margin: const EdgeInsets.only(bottom: 10),
               child: ListTile(
                 leading: const Icon(Icons.percent),
                 title: Text(productName),
-                subtitle: Text(
-                  '$type | ${discount['starts_at']} to ${discount['ends_at']}',
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(type),
+                    Text('${discount['starts_at']} to ${discount['ends_at']}'),
+                  ],
                 ),
                 trailing: Switch(
                   value: discount['is_active'] != false,
@@ -1469,25 +1817,27 @@ class _SellerDashboardState extends State<SellerDashboard> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: FilledButton.icon(
-              onPressed: () => _openCouponForm(),
-              icon: const Icon(Icons.add),
-              label: const Text('Add Shop Coupon'),
-            ),
-          ),
           _buildProductDiscountsSection(),
           const SizedBox(height: 24),
-          const Text(
-            'Shop Coupons',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Shop Coupons',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: () => _openCouponForm(),
+                icon: const Icon(Icons.add),
+                label: const Text('Add'),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           if (_coupons.isEmpty)
             const Padding(
-              padding: EdgeInsets.only(top: 120),
+              padding: EdgeInsets.symmetric(vertical: 16),
               child: Center(child: Text('No shop coupons yet')),
             )
           else
@@ -1496,11 +1846,18 @@ class _SellerDashboardState extends State<SellerDashboard> {
                   ? 'PHP ${coupon['discount_value']} off'
                   : '${coupon['discount_value']}% off';
               return Card(
+                margin: const EdgeInsets.only(bottom: 10),
                 child: ListTile(
                   leading: const Icon(Icons.local_offer_outlined),
                   title: Text(coupon['code']?.toString() ?? 'COUPON'),
-                  subtitle: Text(
-                    '$type | Used ${coupon['times_used'] ?? 0} time(s)',
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(type),
+                      Text('Used ${coupon['times_used'] ?? 0} time(s)'),
+                      if ((coupon['expires_at']?.toString() ?? '').isNotEmpty)
+                        Text('Expires ${coupon['expires_at']}'),
+                    ],
                   ),
                   trailing: Switch(
                     value: coupon['is_active'] != false,

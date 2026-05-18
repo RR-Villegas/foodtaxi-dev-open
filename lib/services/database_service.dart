@@ -1,6 +1,5 @@
 import 'dart:convert';
-import 'dart:math';
-
+import 'dart:math' show Random;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -78,12 +77,11 @@ class DatabaseService {
     final prices = _productOptionPrices(product);
     if (prices.isEmpty) return money(0);
     final discount = activeProductDiscount(product);
-    final discountedPrices =
-        prices.map((price) => discountedPrice(price, discount)).toList();
-    final minPrice = discountedPrices.reduce(min);
-    final maxPrice = discountedPrices.reduce(max);
-    if ((maxPrice - minPrice).abs() < 0.01) return money(minPrice);
-    return '${money(minPrice)} - ${money(maxPrice)}';
+    final basePrice = discountedPrice(_toDouble(product['price']), discount);
+    final variants = product['product_variant'];
+    final hasVariants = variants is List &&
+        variants.whereType<Map>().any((variant) => variant['is_active'] != false);
+    return hasVariants ? '${money(basePrice)}*' : money(basePrice);
   }
 
   static String _stableHash(String value) {
@@ -168,7 +166,7 @@ class DatabaseService {
 
   static bool _isSuccessfulOrder(Map<String, dynamic> order) {
     final status = order['order_status']?.toString().toLowerCase() ?? '';
-    return status != 'cancelled' && status != 'canceled';
+    return status == 'delivered';
   }
 
   static String generateSku(String productName, String? sizeLabel) {
@@ -584,6 +582,110 @@ class DatabaseService {
     }
   }
 
+  static Future<String> placeOrderWithItems({
+    required String accountId,
+    required String addressId,
+    required double totalAmount,
+    required double shippingFee,
+    double serviceFee = 0,
+    double discountAmount = 0,
+    double? deliveryDistanceKm,
+    String deliveryMode = 'standard',
+    int bulkDeliveryMinOrders = 1,
+    int bulkDeliveryMaxOrders = 1,
+    required String paymentMethod,
+    String? discountCode,
+    String? sellerAccountId,
+    required List<Map<String, dynamic>> items,
+  }) async {
+    try {
+      final response = await _supabase.rpc(
+        'place_order_with_items',
+        params: {
+          'p_account_id': accountId,
+          'p_address_id': addressId,
+          'p_total_amount': totalAmount,
+          'p_shipping_fee': shippingFee,
+          'p_service_fee': serviceFee,
+          'p_discount_amount': discountAmount,
+          'p_delivery_distance_km': deliveryDistanceKm,
+          'p_delivery_mode': deliveryMode,
+          'p_bulk_delivery_min_orders': bulkDeliveryMinOrders,
+          'p_bulk_delivery_max_orders': bulkDeliveryMaxOrders,
+          'p_payment_method': paymentMethod,
+          'p_discount_code': _blankToNull(discountCode),
+          'p_seller_account_id': _blankToNull(sellerAccountId),
+          'p_items': items,
+        },
+      );
+      return response?.toString() ?? '';
+    } catch (e) {
+      _logDbError('Failed to place order with items', e);
+      rethrow;
+    }
+  }
+
+  static Future<String?> checkoutStockError(Map<String, dynamic> item) async {
+    try {
+      final productId = item['product_id']?.toString();
+      if (productId == null || productId.isEmpty) {
+        return 'Cart item is missing product ID';
+      }
+
+      final quantity = _toInt(item['quantity']);
+      if (quantity <= 0) return 'Invalid cart quantity';
+
+      final product = await _supabase
+          .from('product')
+          .select('product_id, name, stock_quantity, stock_mode, base_unit_quantity')
+          .eq('product_id', productId)
+          .maybeSingle();
+      if (product == null) return 'Product is no longer available';
+
+      final name = displayProductName(product['name'] ?? item['name']);
+      final stockMode = product['stock_mode']?.toString() == 'shared'
+          ? 'shared'
+          : 'independent';
+      final variantId = _blankToNull(item['selected_variant_id']?.toString());
+
+      if (variantId != null) {
+        final variant = await _supabase
+            .from('product_variant')
+            .select('variant_id, size_label, stock_quantity, stock_unit_quantity')
+            .eq('variant_id', variantId)
+            .eq('product_id', productId)
+            .maybeSingle();
+        if (variant == null) return '$name size is no longer available';
+
+        final size = variant['size_label']?.toString() ?? 'selected size';
+        final unitQuantity = _toInt(variant['stock_unit_quantity']) < 1
+            ? 1
+            : _toInt(variant['stock_unit_quantity']);
+        final available = stockMode == 'shared'
+            ? _toInt(product['stock_quantity']) ~/ unitQuantity
+            : _toInt(variant['stock_quantity']);
+        if (quantity > available) {
+          return 'Cart has $quantity of $name ($size), but only $available available.';
+        }
+        return null;
+      }
+
+      final unitQuantity = _toInt(product['base_unit_quantity']) < 1
+          ? 1
+          : _toInt(product['base_unit_quantity']);
+      final available = stockMode == 'shared'
+          ? _toInt(product['stock_quantity']) ~/ unitQuantity
+          : _toInt(product['stock_quantity']);
+      if (quantity > available) {
+        return 'Cart has $quantity of $name, but only $available available. Update the cart quantity.';
+      }
+      return null;
+    } catch (e) {
+      _logDbError('Failed to check checkout stock', e);
+      return 'Could not verify cart stock. Please try again.';
+    }
+  }
+
   static Future<Map<String, dynamic>?> getCurrentSellerStore() async {
     try {
       final accountId = await getCurrentAccountId();
@@ -913,13 +1015,11 @@ class DatabaseService {
     String? storeId,
   }) async {
     try {
-      final accountId = await getCurrentAccountId();
       final ipHash = await _publicIpHash();
-      await _supabase.from('product_click').insert({
-        'product_id': productId,
-        'store_id': _blankToNull(storeId),
-        'account_id': accountId,
-        'ip_hash': ipHash,
+      await _supabase.rpc('track_product_click', params: {
+        'p_product_id': productId,
+        'p_store_id': _blankToNull(storeId),
+        'p_ip_hash': ipHash,
       });
     } catch (e) {
       _logDbError('Failed to track product click', e);
@@ -1019,15 +1119,70 @@ class DatabaseService {
     String sellerAccountId,
   ) async {
     try {
-      final response = await _supabase
-          .from('orders')
-          .select(
-            '*, account!orders_buyer_account_id_fkey(firstname, surname, email, phone_number), order_items(*, product(name, main_image_url), product_variant(size_label))',
-          )
-          .eq('seller_account_id', sellerAccountId)
-          .order('order_date', ascending: false);
+      final response = await _supabase.rpc(
+        'get_seller_orders',
+        params: {'p_seller_account_id': sellerAccountId},
+      );
+      final orders = List<Map<String, dynamic>>.from(response);
+      final orderIds = orders
+          .map((order) => order['order_id']?.toString() ?? '')
+          .where((orderId) => orderId.isNotEmpty)
+          .toList();
 
-      return List<Map<String, dynamic>>.from(response);
+      if (orderIds.isEmpty) {
+        return orders.map((order) {
+          return {
+            ...order,
+            'buyer': order['account'],
+            'order_items': <Map<String, dynamic>>[],
+          };
+        }).toList();
+      }
+
+      final itemResponse = await _supabase.rpc(
+        'get_seller_order_items',
+        params: {'p_seller_account_id': sellerAccountId},
+      );
+
+      final itemsByOrderId = <String, List<Map<String, dynamic>>>{};
+
+      for (final item in List<Map<String, dynamic>>.from(itemResponse)) {
+        final orderId = item['order_id']?.toString();
+        if (orderId == null || orderId.isEmpty) continue;
+
+        itemsByOrderId.putIfAbsent(orderId, () => []).add({
+          'order_item_id': item['order_item_id'],
+          'order_id': item['order_id'],
+          'product_id': item['product_id'],
+          'product_variant_id': item['product_variant_id'],
+          'quantity': item['quantity'],
+          'unit_price_at_sale': item['unit_price_at_sale'],
+          'subtotal': item['subtotal'],
+          'product': {
+            'product_id': item['product_id'],
+            'name': item['product_name'],
+            'main_image_url': item['main_image_url'],
+          },
+          'product_variant': item['product_variant_id'] == null
+              ? null
+              : {
+                  'variant_id': item['product_variant_id'],
+                  'size_label': item['size_label'],
+                },
+        });
+      }
+
+      return orders.map((order) {
+        final orderId = order['order_id']?.toString();
+
+        return {
+          ...order,
+          'buyer': order['account'],
+          'order_items': orderId == null
+              ? <Map<String, dynamic>>[]
+              : itemsByOrderId[orderId] ?? <Map<String, dynamic>>[],
+        };
+      }).toList();
     } catch (e) {
       _logDbError('Failed to fetch seller orders', e);
       return [];
@@ -2309,6 +2464,7 @@ class DatabaseService {
     String? reviewNotes,
   }) async {
     try {
+      final approvedAt = DateTime.now().toIso8601String();
       final application = await _supabase
           .from('rider_application')
           .select('province, city, barangay, street, house_number, zip_code, latitude, longitude')
@@ -2331,7 +2487,11 @@ class DatabaseService {
 
       await _supabase
           .from('account')
-          .update({'account_type': 'Rider', 'is_verified': true})
+          .update({
+            'account_type': 'Rider',
+            'is_verified': true,
+            'date_verified': approvedAt,
+          })
           .eq('account_id', accountId);
       if (application != null) {
         try {
@@ -2355,7 +2515,7 @@ class DatabaseService {
           .update({
             'status': 'Approved',
             'review_notes': _blankToNull(reviewNotes),
-            'date_approved': DateTime.now().toIso8601String(),
+            'date_approved': approvedAt,
             'zip_code': _blankToNull(resolvedZipCode),
             'latitude': point?.latitude ?? _toDouble(application?['latitude']),
             'longitude': point?.longitude ?? _toDouble(application?['longitude']),
@@ -2479,6 +2639,7 @@ class DatabaseService {
     String? reviewNotes,
   }) async {
     try {
+      final approvedAt = DateTime.now().toIso8601String();
       final point = await LocationService.geocodeAddress(
         houseNumber: houseNumber,
         street: street,
@@ -2493,7 +2654,11 @@ class DatabaseService {
       // Update account type to Seller
       await _supabase
           .from('account')
-          .update({'account_type': 'Seller', 'is_verified': true})
+          .update({
+            'account_type': 'Seller',
+            'is_verified': true,
+            'date_verified': approvedAt,
+          })
           .eq('account_id', accountId);
 
       final existingStore = await _supabase
@@ -2550,7 +2715,7 @@ class DatabaseService {
           .update({
             'status': 'Approved',
             'review_notes': _blankToNull(reviewNotes),
-            'date_approved': DateTime.now().toIso8601String(),
+            'date_approved': approvedAt,
             'zip_code': _blankToNull(resolvedZipCode),
           })
           .eq('application_id', applicationId);
