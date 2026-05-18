@@ -121,7 +121,7 @@ class _AddressPageState extends State<AddressPage> {
       });
     }
 
-    if (selectedProvince != null && selectedProvince!.isNotEmpty) {
+    if (selectedProvince != null && selectedProvince.isNotEmpty) {
       final province = provinces.firstWhere(
         (p) => p['name'] == selectedProvince,
         orElse: () => {},
