@@ -75,6 +75,12 @@ Storage
 - New seller product uploads go to product-images/seller-products/<timestamp>.<ext>.
 - profile-images bucket added and public.
 - New profile uploads go to profile-images/<auth.uid>/<timestamp>.<ext>.
+- Current upload restrictions:
+  - application-documents: PDF, PNG, JPG, WEBP only.
+  - delivery-proofs: PNG, JPG, WEBP only.
+  - product-images: PNG, JPG, WEBP only.
+  - profile-images: PNG, JPG, WEBP only.
+  - Supabase Storage upload policies reject disallowed filename extensions such as JFIF/JPEG, even when MIME type is image/jpeg.
 
 New/changed files
 - lib/edit_product_page.dart:
@@ -214,7 +220,7 @@ Latest document/delivery/location batch
   - Verified columns, buckets, and policies exist.
 - Seller registration:
   - Step 2 now requires business permit upload.
-  - Allows PDF/PNG/JPG/JPEG/WEBP up to 5MB.
+  - Allows PDF/PNG/JPG/WEBP up to 5MB.
   - Images selected through image_picker use imageQuality 65 and max 1600px.
   - Application document storage filenames include seller/rider, document type, account id, and timestamp.
   - If the user is not authenticated, compressed file bytes are temporarily stored in local signup application data and uploaded after login sync.
@@ -407,9 +413,27 @@ Latest analyzer/storefront/dashboard cleanup
   - shows next-ride status, ready/in-transit counts, and quick actions to Queue and History.
 - TODO.md is synced with these completions.
 
+Latest storage file-type tightening
+- DatabaseService now centralizes allowed upload extensions.
+  - Application documents: pdf, png, jpg, webp.
+  - Images for product/profile/delivery proof: png, jpg, webp.
+- Seller/rider registration file pickers no longer allow jpeg; app-side validation rejects any document outside PDF/PNG/JPG/WEBP.
+- Product image, profile image, application document, and delivery proof upload helpers return null before upload when the filename extension is not allowed.
+- Applied Supabase migration tighten_storage_file_types.
+  - product-images/profile-images buckets now have allowed MIME types image/png, image/jpeg, image/webp.
+  - application-documents upload policy now requires extension pdf/png/jpg/webp.
+  - delivery-proofs, product-images, and profile-images upload policies now require extension png/jpg/webp.
+
+Latest seller storefront conflict recovery
+- seller_page.dart was re-synced after a conflict dropped part of the storefront work.
+- Restored owner/profile header using the store owner account relation.
+- Restored full formatted store location from house/street/barangay/city/province/zip.
+- Restored All Products pagination at 20 products per page.
+- Restored safer product click navigation guards in seller storefront cards/rows.
+
 Current verification handoff
 - Ask the user to run this in VS Code when analyzer verification is needed:
   flutter analyze
+- User reran flutter analyze in VS Code after the latest analyzer patches and reported: no issues found.
 - Remaining TODO after current sync:
-  - Recheck/paste any remaining analyzer warnings.
   - Judge whether authenticated GraphQL exposure warnings should be further reduced by moving sensitive reads behind RPCs.

@@ -22,7 +22,7 @@ Latest done
 - Rider registration now uploads license/vehicle documents instead of text notes.
 - Rider registration now includes API-driven location selection.
 - Uploaded application document filenames now include seller/rider, document type, account id, and timestamp.
-- Application documents accept PDF, PNG, JPG/JPEG, WEBP; image picker uses reduced quality/size.
+- Application documents accept only PDF, PNG, JPG, and WEBP; image picker uses reduced quality/size.
 - Admin application detail dialogs are wider and can show uploaded image documents or signed PDF links.
 - Seller orders can only move Processing, Ready for Pickup, or Cancelled.
 - Ready-for-pickup orders show a pickup code for rider scan/entry.
@@ -107,6 +107,14 @@ Latest done
 - Seller Overview now works as a landing dashboard with current order state counts, low-stock count, and quick actions.
 - Rider Overview now works as a landing dashboard with next-ride status, ready/in-transit counts, and quick actions.
 - Flutter analyzer was rerun by the user in VS Code and reported no issues.
+- File upload requirements were tightened in app code and Supabase Storage:
+  - application documents: PDF, PNG, JPG, WEBP only.
+  - product/profile/delivery images: PNG, JPG, WEBP only.
+  - storage upload policies now reject disallowed filename extensions like JFIF/JPEG.
+- Seller storefront improvements were restored after a conflict:
+  - owner/profile header and complete store location display.
+  - All Products pagination at 20 products per page.
+  - safer product click navigation/context guards.
 
 To do / verify next
 - Check whether authenticated GraphQL exposure warnings should be further reduced by moving sensitive reads behind RPCs.

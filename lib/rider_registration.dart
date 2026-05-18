@@ -294,7 +294,8 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
       PickedDocument(
         label: 'Rider verification',
         fileName: image.name,
-        contentType: _contentTypeFor(image.name),
+        contentType:
+            DatabaseService.applicationDocumentContentTypeFor(image.name) ?? '',
         bytes: await image.readAsBytes(),
       ),
     );
@@ -303,7 +304,7 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
   Future<void> _pickRiderFile() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: const ['pdf', 'png', 'jpg', 'jpeg', 'webp'],
+      allowedExtensions: DatabaseService.allowedApplicationDocumentExtensions,
       withData: true,
     );
     final file = result?.files.single;
@@ -313,13 +314,18 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
       PickedDocument(
         label: 'Rider verification',
         fileName: file.name,
-        contentType: _contentTypeFor(file.name),
+        contentType:
+            DatabaseService.applicationDocumentContentTypeFor(file.name) ?? '',
         bytes: bytes,
       ),
     );
   }
 
   void _addPickedDocument(PickedDocument document) {
+    if (!DatabaseService.isAllowedApplicationDocumentName(document.fileName)) {
+      setState(() => _step3Error = 'Only PDF, PNG, JPG, or WEBP files are allowed');
+      return;
+    }
     if (document.size > 5 * 1024 * 1024) {
       setState(() => _step3Error = 'Document must be 5MB or smaller');
       return;
@@ -328,15 +334,6 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
       _step3Error = null;
       _riderDocuments.add(document);
     });
-  }
-
-  String _contentTypeFor(String fileName) {
-    final lower = fileName.toLowerCase();
-    if (lower.endsWith('.pdf')) return 'application/pdf';
-    if (lower.endsWith('.png')) return 'image/png';
-    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
-    if (lower.endsWith('.webp')) return 'image/webp';
-    return 'application/octet-stream';
   }
 
   Future<List<Map<String, dynamic>>> _uploadRiderDocuments(String accountId) async {
@@ -1056,7 +1053,9 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
           if (documents.isEmpty)
             const Padding(
               padding: EdgeInsets.only(top: 8),
-              child: Text('Upload license, OR/CR, plate, or permit files.'),
+              child: Text(
+                'Upload license, OR/CR, plate, or permit files as PDF, PNG, JPG, or WEBP up to 5MB.',
+              ),
             )
           else
             ...documents.asMap().entries.map((entry) {

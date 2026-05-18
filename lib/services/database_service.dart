@@ -11,6 +11,13 @@ import 'location_service.dart';
 class DatabaseService {
   static final _supabase = Supabase.instance.client;
   static String? _cachedPublicIpHash;
+  static const List<String> allowedApplicationDocumentExtensions = [
+    'pdf',
+    'png',
+    'jpg',
+    'webp',
+  ];
+  static const List<String> allowedImageExtensions = ['png', 'jpg', 'webp'];
 
   static void _logDbError(String message, Object error) {
     debugPrint('DB Error: $message: $error');
@@ -141,13 +148,32 @@ class DatabaseService {
     return parts.last.toLowerCase();
   }
 
-  static String _contentTypeFor(String fileName, [String? fallback]) {
-    final lower = fileName.toLowerCase();
-    if (lower.endsWith('.pdf')) return 'application/pdf';
-    if (lower.endsWith('.png')) return 'image/png';
-    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
-    if (lower.endsWith('.webp')) return 'image/webp';
-    return fallback ?? 'application/octet-stream';
+  static bool isAllowedApplicationDocumentName(String fileName) {
+    return allowedApplicationDocumentExtensions.contains(_extensionFor(fileName));
+  }
+
+  static bool isAllowedImageName(String fileName) {
+    return allowedImageExtensions.contains(_extensionFor(fileName));
+  }
+
+  static String? applicationDocumentContentTypeFor(String fileName) {
+    final extension = _extensionFor(fileName);
+    if (!allowedApplicationDocumentExtensions.contains(extension)) return null;
+    return _contentTypeForExtension(extension);
+  }
+
+  static String? imageContentTypeFor(String fileName) {
+    final extension = _extensionFor(fileName);
+    if (!allowedImageExtensions.contains(extension)) return null;
+    return _contentTypeForExtension(extension);
+  }
+
+  static String _contentTypeForExtension(String extension) {
+    if (extension == 'pdf') return 'application/pdf';
+    if (extension == 'png') return 'image/png';
+    if (extension == 'jpg') return 'image/jpeg';
+    if (extension == 'webp') return 'image/webp';
+    return 'application/octet-stream';
   }
 
   static String _storageSafeSegment(String? value, {String fallback = 'document'}) {
@@ -768,17 +794,21 @@ class DatabaseService {
     required String fileName,
   }) async {
     try {
-      final extension = fileName.split('.').last.toLowerCase();
-      final safeExtension = extension == fileName ? 'jpg' : extension;
+      if (!isAllowedImageName(fileName)) return null;
+      final extension = _extensionFor(fileName);
       final path =
-          'seller-products/${DateTime.now().millisecondsSinceEpoch}.$safeExtension';
+          'seller-products/${DateTime.now().millisecondsSinceEpoch}.$extension';
+      final mimeType = imageContentTypeFor(fileName)!;
 
       await _supabase.storage
           .from('product-images')
           .uploadBinary(
             path,
             bytes,
-            fileOptions: const FileOptions(upsert: false),
+            fileOptions: FileOptions(
+              upsert: false,
+              contentType: mimeType,
+            ),
           );
 
       return path;
@@ -1611,17 +1641,20 @@ class DatabaseService {
       final user = _supabase.auth.currentUser;
       if (user == null) return null;
 
-      final extension = fileName.split('.').last.toLowerCase();
-      final safeExtension = extension == fileName ? 'jpg' : extension;
-      final path =
-          '${user.id}/${DateTime.now().millisecondsSinceEpoch}.$safeExtension';
+      if (!isAllowedImageName(fileName)) return null;
+      final extension = _extensionFor(fileName);
+      final path = '${user.id}/${DateTime.now().millisecondsSinceEpoch}.$extension';
+      final mimeType = imageContentTypeFor(fileName)!;
 
       await _supabase.storage
           .from('profile-images')
           .uploadBinary(
             path,
             bytes,
-            fileOptions: const FileOptions(upsert: false),
+            fileOptions: FileOptions(
+              upsert: false,
+              contentType: mimeType,
+            ),
           );
 
       return path;
@@ -1644,6 +1677,7 @@ class DatabaseService {
       final user = _supabase.auth.currentUser;
       if (user == null) return null;
       final userFolder = user.id;
+      if (!isAllowedApplicationDocumentName(fileName)) return null;
       final extension = _extensionFor(fileName);
       final role = _storageSafeSegment(applicationType, fallback: 'application');
       final document = _storageSafeSegment(
@@ -1654,7 +1688,7 @@ class DatabaseService {
       final storedFileName =
           '${role}_${document}_${owner}_${DateTime.now().millisecondsSinceEpoch}.$extension';
       final path = '$userFolder/applications/$storedFileName';
-      final mimeType = _contentTypeFor(fileName, contentType);
+      final mimeType = applicationDocumentContentTypeFor(fileName)!;
 
       await _supabase.storage.from('application-documents').uploadBinary(
             path,
@@ -1689,10 +1723,11 @@ class DatabaseService {
     try {
       final user = _supabase.auth.currentUser;
       if (user == null) return null;
+      if (!isAllowedImageName(fileName)) return null;
       final extension = _extensionFor(fileName);
       final path =
           '$orderId/${user.id}/${DateTime.now().millisecondsSinceEpoch}.$extension';
-      final mimeType = _contentTypeFor(fileName, contentType);
+      final mimeType = imageContentTypeFor(fileName)!;
 
       await _supabase.storage.from('delivery-proofs').uploadBinary(
             path,

@@ -353,7 +353,8 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
       PickedDocument(
         label: 'Business permit',
         fileName: image.name,
-        contentType: _contentTypeFor(image.name),
+        contentType:
+            DatabaseService.applicationDocumentContentTypeFor(image.name) ?? '',
         bytes: bytes,
       ),
     );
@@ -362,7 +363,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
   Future<void> _pickPermitFile() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: const ['pdf', 'png', 'jpg', 'jpeg', 'webp'],
+      allowedExtensions: DatabaseService.allowedApplicationDocumentExtensions,
       withData: true,
     );
     final file = result?.files.single;
@@ -373,13 +374,18 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
       PickedDocument(
         label: 'Business permit',
         fileName: file.name,
-        contentType: _contentTypeFor(file.name),
+        contentType:
+            DatabaseService.applicationDocumentContentTypeFor(file.name) ?? '',
         bytes: bytes,
       ),
     );
   }
 
   void _addPickedDocument(PickedDocument document) {
+    if (!DatabaseService.isAllowedApplicationDocumentName(document.fileName)) {
+      setState(() => _step2Error = 'Only PDF, PNG, JPG, or WEBP files are allowed');
+      return;
+    }
     if (document.size > 5 * 1024 * 1024) {
       setState(() => _step2Error = 'Document must be 5MB or smaller');
       return;
@@ -388,15 +394,6 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
       _step2Error = null;
       _permitDocuments.add(document);
     });
-  }
-
-  String _contentTypeFor(String fileName) {
-    final lower = fileName.toLowerCase();
-    if (lower.endsWith('.pdf')) return 'application/pdf';
-    if (lower.endsWith('.png')) return 'image/png';
-    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
-    if (lower.endsWith('.webp')) return 'image/webp';
-    return 'application/octet-stream';
   }
 
   Future<List<Map<String, dynamic>>> _uploadPermitDocuments(String accountId) async {
