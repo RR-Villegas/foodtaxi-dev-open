@@ -100,11 +100,11 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
             onPressed: () async {
               if (_isLoggingOut) return;
               setState(() => _isLoggingOut = true);
+              final navigator = Navigator.of(context);
               Navigator.pop(context); // close dialog
               await AuthService.clearLoginSession();
-              if (mounted) {
-                Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
-              }
+              if (!mounted || !navigator.mounted) return;
+              navigator.pushNamedAndRemoveUntil('/login', (route) => false);
             },
             child: const Text('Yes'),
           ),
@@ -119,7 +119,7 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
       final trending = await DatabaseService.getTrendingProducts();
       if (!mounted) return;
       _products = products;
-      
+
       // Group by category with display names
       Map<String, List<Map<String, dynamic>>> grouped = {};
       if (trending.isNotEmpty) {
@@ -128,13 +128,13 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
       for (var product in _products) {
         final category = product['category'] ?? 'Other';
         final displayName = categoryNames[category] ?? category;
-        
+
         if (!grouped.containsKey(displayName)) {
           grouped[displayName] = [];
         }
         grouped[displayName]!.add(product);
       }
-      
+
       _groupedProducts = grouped;
 
       if (!mounted) return;
@@ -216,9 +216,8 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
                       productId: productId,
                       storeId: item['store_id']?.toString(),
                     );
-                    if (mounted) {
-                      Navigator.pushNamed(context, '/product/$productId');
-                    }
+                    if (!context.mounted) return;
+                    Navigator.pushNamed(context, '/product/$productId');
                   }
                 : null,
             child: Container(
@@ -238,7 +237,9 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
                           top: Radius.circular(16),
                         ),
                         child: Image.network(
-                          DatabaseService.getProductImageUrl(item['main_image_url']),
+                          DatabaseService.getProductImageUrl(
+                            item['main_image_url'],
+                          ),
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) => Image.asset(
                             'assets/images/burger.jpg',
@@ -249,26 +250,26 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
                     ),
                     Expanded(
                       child: Padding(
-                      padding: const EdgeInsets.all(6),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
+                        padding: const EdgeInsets.all(6),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
                             DatabaseService.displayProductName(item['name']),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
-                          const SizedBox(height: 2),
-                          Text(
+                            const SizedBox(height: 2),
+                            Text(
                             '₱${item['price']}',
                             style: TextStyle(
                               color: Theme.of(context).colorScheme.primary,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          const SizedBox(height: 2),
-                          Row(
+                            const SizedBox(height: 2),
+                            Row(
                             children: [
                               _stars(rating),
                               const SizedBox(width: 4),
@@ -278,8 +279,8 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
                               ),
                             ],
                           ),
-                          const Spacer(),
-                          SizedBox(
+                            const Spacer(),
+                            SizedBox(
                             width: double.infinity,
                             height: 34,
                             child: FilledButton(
@@ -289,21 +290,20 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
                                         productId: productId,
                                         storeId: item['store_id']?.toString(),
                                       );
-                                      if (mounted) {
-                                        Navigator.pushNamed(
-                                          context,
-                                          '/product/$productId',
-                                        );
-                                      }
+                                      if (!context.mounted) return;
+                                      Navigator.pushNamed(
+                                        context,
+                                        '/product/$productId',
+                                      );
                                     }
                                   : null,
                               child: const Text('Buy'),
                             ),
                           ),
-                        ],
+                          ],
+                        ),
                       ),
-                      ),
-                    )
+                    ),
                   ],
                 ),
               ),

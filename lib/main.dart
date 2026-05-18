@@ -478,9 +478,8 @@ class _MyHomePageState extends State<MyHomePage> {
                       productId: productId,
                       storeId: item['store_id']?.toString(),
                     );
-                    if (mounted) {
-                      Navigator.pushNamed(context, '/product/$productId');
-                    }
+                    if (!context.mounted) return;
+                    Navigator.pushNamed(context, '/product/$productId');
                   }
                 : null,
             child: Container(
@@ -554,12 +553,11 @@ class _MyHomePageState extends State<MyHomePage> {
                                           productId: productId,
                                           storeId: item['store_id']?.toString(),
                                         );
-                                        if (mounted) {
-                                          Navigator.pushNamed(
-                                            context,
-                                            '/product/$productId',
-                                          );
-                                        }
+                                        if (!context.mounted) return;
+                                        Navigator.pushNamed(
+                                          context,
+                                          '/product/$productId',
+                                        );
                                       }
                                     : null,
                                 child: const Text('View'),

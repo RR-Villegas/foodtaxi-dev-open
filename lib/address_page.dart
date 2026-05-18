@@ -144,6 +144,7 @@ class _AddressPageState extends State<AddressPage> {
       }
     }
 
+    if (!mounted) return;
     await showDialog<void>(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -274,6 +275,7 @@ class _AddressPageState extends State<AddressPage> {
                   province: selectedProvince,
                   zipCode: zipController.text,
                 );
+                if (!context.mounted) return;
                 if (point == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(

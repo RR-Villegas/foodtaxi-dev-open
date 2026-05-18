@@ -87,7 +87,7 @@ class _SearchPageState extends State<SearchPage> {
     return Image.network(
       DatabaseService.getProductImageUrl(path),
       fit: BoxFit.cover,
-      errorBuilder: (_, _, __) =>
+      errorBuilder: (context, error, stackTrace) =>
           Image.asset('assets/images/burger.jpg', fit: BoxFit.cover),
     );
   }

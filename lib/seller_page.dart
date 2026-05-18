@@ -266,7 +266,7 @@ class _SellerPageState extends State<SellerPage> {
     return Image.network(
       path.startsWith('http') ? path : DatabaseService.getProductImageUrl(path),
       fit: BoxFit.cover,
-      errorBuilder: (_, _, __) =>
+      errorBuilder: (context, error, stackTrace) =>
           Image.asset('assets/images/burger.jpg', fit: BoxFit.cover),
     );
   }
@@ -565,7 +565,7 @@ class _SellerPageState extends State<SellerPage> {
             _allProductsPageSize);
     final currentPage = activeProducts.isEmpty
         ? 0
-        : _allProductsPage.clamp(0, totalPages - 1) as int;
+        : _allProductsPage.clamp(0, totalPages - 1);
     final pagedProducts = activeProducts
         .skip(currentPage * _allProductsPageSize)
         .take(_allProductsPageSize)

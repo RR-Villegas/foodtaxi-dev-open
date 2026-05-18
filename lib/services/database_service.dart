@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
@@ -343,8 +342,9 @@ class DatabaseService {
       if (city != null) updateData['city'] = _blankToNull(city);
       if (barangay != null) updateData['barangay'] = _blankToNull(barangay);
       if (street != null) updateData['street'] = _blankToNull(street);
-      if (houseNumber != null)
+      if (houseNumber != null) {
         updateData['house_number'] = _blankToNull(houseNumber);
+      }
       if (zipCode != null) updateData['zip_code'] = _blankToNull(zipCode);
       if (latitude != null) updateData['latitude'] = latitude;
       if (longitude != null) updateData['longitude'] = longitude;

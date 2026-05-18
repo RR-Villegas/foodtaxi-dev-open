@@ -545,6 +545,12 @@ class _RiderDashboardState extends State<RiderDashboard> {
       orders: _historyOrders,
       range: _overviewRange,
     );
+    final nearestReady = readyOrders.isEmpty ? null : readyOrders.first;
+    final nextActionText = inTransitOrders.isNotEmpty
+        ? 'Finish ${inTransitOrders.length} active delivery${inTransitOrders.length == 1 ? '' : 'ies'}.'
+        : readyOrders.isNotEmpty
+            ? 'There ${readyOrders.length == 1 ? 'is' : 'are'} ${readyOrders.length} order${readyOrders.length == 1 ? '' : 's'} ready for pickup.'
+            : 'No pickup jobs are ready right now.';
 
     return RefreshIndicator(
       onRefresh: _loadOrders,
@@ -597,6 +603,52 @@ class _RiderDashboardState extends State<RiderDashboard> {
             ],
           ),
           const SizedBox(height: 24),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Next Ride',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(nextActionText),
+                  if (nearestReady != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      _formatAddress(nearestReady['address']),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.black54),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: () => setState(() => _currentIndex = 1),
+                          icon: const Icon(Icons.local_shipping_outlined),
+                          label: const Text('Open Queue'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => setState(() => _currentIndex = 2),
+                          icon: const Icon(Icons.history_outlined),
+                          label: const Text('History'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
           const Text(
             'Delivery History',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),

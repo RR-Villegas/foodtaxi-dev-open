@@ -85,51 +85,28 @@ Latest done
 - Main anonymous dashboard product rows now match buyer dashboard card behavior more closely, including ratings, ellipsis, click tracking, and anonymous product-page access.
 - Main page product loading now guards setState after navigation/dispose, reducing the logout/product-click return-to-main issue.
 - Replaced remaining print calls found by rg with debugPrint.
+- Input validator now sanitizes profile/address/product inputs and product title display uses the shared cleaner.
+- Product titles are cleaned and card titles use one-line ellipsis where layout stability matters.
+- Adaptive hamburger dropdown items now choose light/dark icon/text color based on popup background brightness.
+- Main product cards now have stable element placement, one-line title truncation, and aligned one-line price.
+- Main Create Account is now a dropdown for Buy Products, Become Seller, and Become Rider; old seller/rider CTA cards were removed.
+- Theme selection is saved per account and resets to Default on logout.
+- Removed the old Supabase connection status/debug space above the main hero.
+- README.md was rewritten to match the current app.
+- Main and buyer dashboard horizontal product sections support mouse/trackpad drag scrolling.
+- Logout uses a timeout/fallback and resets local theme/session state.
+- Product click tracking now stores a hashed public IP when available.
+- Trending sections now show on main, buyer dashboard, and seller storefront; store pages only use that store's clicks.
+- Product click records are pruned after 7 days by a database trigger.
+- Supabase Realtime now refreshes buyer orders, seller orders/products, rider delivery queues, and notifications.
+- Supabase RLS/grants were tightened: no always-true write policies remain, anon access is limited to public marketplace reads plus product_click inserts, and unused internal security-definer RPCs are no longer public.
+- Reset password now has a Forgot password flow from login and routes recovery links to the reset page.
+- Profile images in hamburger headers now resolve Supabase Storage paths correctly.
+- Seller storefront now has a better header, properly formatted store location, and All Products pagination at 20 per page.
+- Patched the latest analyzer cleanup list: async BuildContext guards, unnecessary underscore callbacks, seller page cast, database service import, and single-line if braces.
+- Seller Overview now works as a landing dashboard with current order state counts, low-stock count, and quick actions.
+- Rider Overview now works as a landing dashboard with next-ride status, ready/in-transit counts, and quick actions.
+- Flutter analyzer was rerun by the user in VS Code and reported no issues.
 
-To do (recheck)
-- Verify implementation of input validator
-- Some yellow: input_validator, address_page, buyer_dashboard, profile_page
-- Product titles is not very clean.
-- Add protection against directly talking to the database (unauthorized)
-- Clean warnings on supabase without compromising the app.
-- The icon inside the hamburger dropdown doesn't really change from white, making it blend on white bg, make it adjust on how bright/dark bg is (white<->dark)
-
-To do
-- in main.dart, the product box is really unbalanced in terms of element placement (price looks ugly af), it also destroys the space because of long text, please do "Alaska Condens..." to preserve element placement. 
-- Move Become Seller and Rider to Create Account, Create Account becomes a dropdown: Buy Products, Become Seller, Become Rider
-- Themes should only be saved per account, not leak on logout, goes back to default.
-- I think there's a stray space above the hero in main.dart (i remember having a debug element for supabase there.)
-- Improve README.md (some information are inaccurate)
-- In main, long text breaks position of elements, truncate it to not break position, price is way over to the left (only one line only, 2 lines break the position of elements)
-- Add scroll (carousel) to sections (categories) on buyer's dashboard (i can't move the products to the left to see more products on the right), both main and buyer's dashboard
-- Logout stuck on dashboard (it just doesn't go back for some reason and need to restart), after restart, show login, press x, and main doesn't even load, after refresh, login again press x and back to normal again.
-- Fetch public IP on click tracking
-- Create Trending section (For all products in buyer's dashboard/main, Only their items fetched in Store front), fetched using click tracking.
-- Make sure that the records on the click tracking only last for 1 week (individually), then it will automatically be removed.
-- Implement Realtime (supabase) for critical functions.
-
-
-blue errors (remove this on fix):
-Don't use 'BuildContext's across async gaps.
-Try rewriting the code to not use the 'BuildContext', or guard the use with a 'mounted' check.
-'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre.
-Try replacing the use of the deprecated member with the replacement.
-Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check.
-Guard a 'State.context' use with a 'mounted' check on the State, and other BuildContext use with a 'mounted' check on the BuildContext.
-'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss.
-Try replacing the use of the deprecated member with the replacement.
-Use of 'return' in a 'finally' clause.
-Try restructuring the code.
-'groupValue' is deprecated and shouldn't be used. Use a RadioGroup ancestor to manage group value instead. This feature was deprecated after v3.32.0-0.0.pre.
-Try replacing the use of the deprecated member with the replacement.
-'onChanged' is deprecated and shouldn't be used. Use RadioGroup to handle value change instead. This feature was deprecated after v3.32.0-0.0.pre.
-Try replacing the use of the deprecated member with the replacement.
-Unnecessary use of multiple underscores.
-Try using '_'.
-The import of 'package:flutter/foundation.dart' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart'.
-Try removing the import directive.
-
-
-yellow errors (remove this on fix)
-bool _isLoadingProfile = true; (buyers_dashboard)
-line 120 (address_page)
+To do / verify next
+- Check whether authenticated GraphQL exposure warnings should be further reduced by moving sensitive reads behind RPCs.

@@ -3,6 +3,7 @@ Last updated in this chat.
 
 Important workflow note
 - Do not run Flutter shell commands in this workspace. The user reports flutter/dart commands stall.
+- When Flutter/Dart verification is needed, paste the exact command for the user to run in VS Code instead.
 - Work has been done through file edits and direct Supabase SQL only.
 
 Supabase project
@@ -255,7 +256,7 @@ Latest buyer/search/admin batch
   - Popular sorting ranks by review count first, then average rating.
 - Admin dashboard commission metrics/report now use admin_commission from non-cancelled orders instead of gross order totals.
 - Seller sales summary remains seller-facing and uses seller_payout when available.
-- TODO includes a future item for proper seller and rider landing dashboards.
+- Seller and rider landing dashboards have since been implemented in the Overview tabs.
 
 Latest location verification fix
 - LocationService.geocodeAddress now tries multiple API query candidates before failing:
@@ -384,3 +385,31 @@ Latest validator/security/theme cleanup
   - Set search_path for public.handle_new_user(), public.create_email_otp(uuid), and public.verify_email_otp(uuid, text).
   - Security advisors no longer report function_search_path_mutable for those functions.
   - A broader grant/RLS cleanup was rejected by safety review because it can break live signup/order/admin flows; explicit approval is needed before changing those production permissions.
+
+Latest analyzer/storefront/dashboard cleanup
+- Forgot password now has a reachable login-page flow and recovery links route to the reset password page.
+- Product page and search page constant-expression errors were fixed by avoiding const TextStyle where Theme.of(context) is used.
+- Rider dashboard null-aware assignment lint was addressed for the ready-orders realtime channel.
+- Hamburger profile images now resolve Supabase Storage paths correctly through DatabaseService.getProfileImageUrl().
+- Seller storefront was improved:
+  - Header now shows owner avatar/name, open/closed status, product count, rating, formatted store location, and description.
+  - All Products paginates at 20 products per page.
+- Latest pasted analyzer warnings were patched:
+  - BuildContext async-gap guards in address_page, admin_dashboard, buyer_dashboard, login_page, and main.
+  - unnecessary underscore callback parameters in search_page, seller_page, and notification_bell.
+  - unnecessary seller_page cast.
+  - unnecessary dart:typed_data import in database_service.
+  - single-line if braces in database_service.
+- Seller Overview now works as a landing dashboard:
+  - shows current Processing, Ready for Pickup, In Transit, low-stock counts.
+  - includes quick actions to Manage Orders and Products.
+- Rider Overview now works as a landing dashboard:
+  - shows next-ride status, ready/in-transit counts, and quick actions to Queue and History.
+- TODO.md is synced with these completions.
+
+Current verification handoff
+- Ask the user to run this in VS Code when analyzer verification is needed:
+  flutter analyze
+- Remaining TODO after current sync:
+  - Recheck/paste any remaining analyzer warnings.
+  - Judge whether authenticated GraphQL exposure warnings should be further reduced by moving sensitive reads behind RPCs.

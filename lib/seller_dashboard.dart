@@ -604,12 +604,22 @@ class _SellerDashboardState extends State<SellerDashboard> {
 
   Widget _buildOverviewTab() {
     final deliveredOrders = _orders.where(_isDelivered).toList();
+    final processingOrders =
+        _orders.where((order) => _status(order) == 'Processing').toList();
+    final readyOrders =
+        _orders.where((order) => _status(order) == 'Ready for Pickup').toList();
+    final inTransitOrders =
+        _orders.where((order) => _status(order) == 'In Transit').toList();
     final activeOrders = _orders.where((order) {
       final status = _status(order);
       return status == 'Processing' ||
           status == 'Ready for Pickup' ||
           status == 'In Transit';
     }).toList();
+    final lowStockProducts = _products
+        .where((product) =>
+            product['is_active'] != false && _stock(product['stock_quantity']) <= 5)
+        .toList();
     final deliveredRevenue = deliveredOrders.fold<double>(
       0,
       (sum, order) => sum + _sellerOrderValue(order),
@@ -670,6 +680,52 @@ class _SellerDashboardState extends State<SellerDashboard> {
             ],
           ),
           const SizedBox(height: 24),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Today',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      Chip(label: Text('${processingOrders.length} processing')),
+                      Chip(label: Text('${readyOrders.length} ready')),
+                      Chip(label: Text('${inTransitOrders.length} in transit')),
+                      Chip(label: Text('${lowStockProducts.length} low stock')),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: () => setState(() => _currentIndex = 2),
+                          icon: const Icon(Icons.receipt_long_outlined),
+                          label: const Text('Manage Orders'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => setState(() => _currentIndex = 1),
+                          icon: const Icon(Icons.inventory_2_outlined),
+                          label: const Text('Products'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
           const Text(
             'History',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),

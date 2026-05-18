@@ -245,7 +245,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 contactPhone: app['contact_phone']?.toString(),
                 reviewNotes: notesController.text,
               );
-              if (!mounted) return;
+              if (!context.mounted || !mounted) return;
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -293,7 +293,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   applicationId: app['application_id'],
                   reviewNotes: notesController.text,
                 );
-                if (mounted) {
+                if (context.mounted && mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Application rejected'),
@@ -304,7 +304,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   _loadSellerApplications();
                 }
               } catch (e) {
-                if (mounted) {
+                if (context.mounted && mounted) {
                   ScaffoldMessenger.of(
                     context,
                   ).showSnackBar(SnackBar(content: Text('Error: $e')));
@@ -345,7 +345,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 accountId: app['account_id'].toString(),
                 reviewNotes: notesController.text,
               );
-              if (!mounted) return;
+              if (!context.mounted || !mounted) return;
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -392,7 +392,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 applicationId: app['rider_app_id'],
                 reviewNotes: notesController.text,
               );
-              if (mounted) {
+              if (context.mounted && mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text('Rider application rejected'),

@@ -32,7 +32,7 @@ class _NotificationBellState extends State<NotificationBell> {
       barrierLabel: 'Notifications',
       barrierColor: Colors.black26,
       transitionDuration: const Duration(milliseconds: 160),
-      pageBuilder: (context, _, __) {
+      pageBuilder: (context, animation, secondaryAnimation) {
         return SafeArea(
           child: Align(
             alignment: Alignment.topLeft,

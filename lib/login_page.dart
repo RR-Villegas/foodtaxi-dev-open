@@ -384,6 +384,7 @@ class _LoginPageState extends State<LoginPage> {
     final application = await DatabaseService.getSellerApplicationByAccountId(
       accountId,
     );
+    if (!mounted) return;
     final status = application?['status']?.toString();
 
     if (status == 'Approved') {
@@ -413,6 +414,7 @@ class _LoginPageState extends State<LoginPage> {
     final application = await DatabaseService.getRiderApplicationByAccountId(
       accountId,
     );
+    if (!mounted) return;
     final status = application?['status']?.toString();
 
     if (status == 'Approved') {
