@@ -87,6 +87,12 @@ class _SellerPageState extends State<SellerPage> {
     return DatabaseService.getProfileImageUrl(imagePath);
   }
 
+  String? _storeBannerUrl() {
+    final path = _store?['banner_image_url']?.toString().trim() ?? '';
+    if (path.isEmpty) return null;
+    return DatabaseService.getStoreBannerImageUrl(path);
+  }
+
   String _storeLocation() {
     final store = _store;
     if (store == null) return '';
@@ -558,6 +564,7 @@ class _SellerPageState extends State<SellerPage> {
     final storeName = _store?['store_name']?.toString() ?? 'Seller';
     final description = _store?['description']?.toString() ?? '';
     final ownerImageUrl = _ownerImageUrl();
+    final bannerUrl = _storeBannerUrl();
     final location = _storeLocation();
     final isOpen = _store?['is_open'] != false;
     final activeProducts =
@@ -597,109 +604,154 @@ class _SellerPageState extends State<SellerPage> {
                   SliverToBoxAdapter(
                     child: Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.fromLTRB(20, 22, 20, 24),
-                      color: Theme.of(context).colorScheme.primaryContainer,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              CircleAvatar(
-                                radius: 30,
-                                backgroundImage: ownerImageUrl.isNotEmpty
-                                    ? NetworkImage(ownerImageUrl)
-                                    : null,
-                                child: ownerImageUrl.isEmpty
-                                    ? const Icon(Icons.storefront)
-                                    : null,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primaryContainer,
+                        image: bannerUrl == null
+                            ? null
+                            : DecorationImage(
+                                image: NetworkImage(bannerUrl),
+                                fit: BoxFit.cover,
                               ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
+                      ),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.fromLTRB(20, 22, 20, 24),
+                        decoration: BoxDecoration(
+                          gradient: bannerUrl == null
+                              ? null
+                              : LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Colors.black.withAlpha(105),
+                                    Colors.black.withAlpha(65),
+                                    Colors.black.withAlpha(125),
+                                  ],
+                                ),
+                        ),
+                        child: DefaultTextStyle.merge(
+                          style: TextStyle(
+                            color: bannerUrl == null
+                                ? Theme.of(context).colorScheme.onPrimaryContainer
+                                : Colors.white,
+                            shadows: bannerUrl == null
+                                ? null
+                                : const [
+                                    Shadow(
+                                      blurRadius: 6,
+                                      color: Colors.black,
+                                      offset: Offset(0, 1),
+                                    ),
+                                  ],
+                          ),
+                          child: IconTheme.merge(
+                            data: IconThemeData(
+                              color: bannerUrl == null
+                                  ? Theme.of(context).colorScheme.onPrimaryContainer
+                                  : Colors.white,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      storeName,
-                                      style: const TextStyle(
-                                        fontSize: 26,
-                                        fontWeight: FontWeight.bold,
+                                    CircleAvatar(
+                                      radius: 30,
+                                      backgroundImage: ownerImageUrl.isNotEmpty
+                                          ? NetworkImage(ownerImageUrl)
+                                          : null,
+                                      child: ownerImageUrl.isEmpty
+                                          ? const Icon(Icons.storefront)
+                                          : null,
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            storeName,
+                                            style: const TextStyle(
+                                              fontSize: 26,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            _ownerName(),
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      _ownerName(),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
+                                    Chip(
+                                      avatar: Icon(
+                                        isOpen
+                                            ? Icons.check_circle_outline
+                                            : Icons.pause_circle_outline,
+                                      ),
+                                      label: Text(isOpen ? 'Open' : 'Closed'),
+                                    ),
+                                  ],
+                                ),
+                                if (location.isNotEmpty) ...[
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Icon(Icons.place_outlined, size: 18),
+                                      const SizedBox(width: 6),
+                                      Expanded(child: Text(location)),
+                                    ],
+                                  ),
+                                ],
+                                if (description.isNotEmpty) ...[
+                                  const SizedBox(height: 10),
+                                  Text(description),
+                                ],
+                                const SizedBox(height: 16),
+                                Wrap(
+                                  spacing: 10,
+                                  runSpacing: 8,
+                                  children: [
+                                    Chip(
+                                      avatar: const Icon(Icons.inventory_2_outlined),
+                                      label: Text('${activeProducts.length} products'),
+                                    ),
+                                    Chip(
+                                      avatar: const Icon(Icons.star_border),
+                                      label: Text(
+                                        '${_storeRating.toStringAsFixed(1)} (${_reviews.length})',
                                       ),
                                     ),
                                   ],
                                 ),
-                              ),
-                              Chip(
-                                avatar: Icon(
-                                  isOpen
-                                      ? Icons.check_circle_outline
-                                      : Icons.pause_circle_outline,
+                                const SizedBox(height: 12),
+                                Wrap(
+                                  spacing: 10,
+                                  runSpacing: 8,
+                                  children: [
+                                    OutlinedButton.icon(
+                                      onPressed: _reviewStore,
+                                      icon: const Icon(Icons.rate_review_outlined),
+                                      label: Text(
+                                        _myReview == null ? 'Review Shop' : 'Edit Review',
+                                      ),
+                                    ),
+                                    OutlinedButton.icon(
+                                      onPressed: _reportStore,
+                                      icon: const Icon(Icons.flag_outlined),
+                                      label: const Text('Report Shop'),
+                                    ),
+                                  ],
                                 ),
-                                label: Text(isOpen ? 'Open' : 'Closed'),
-                              ),
-                            ],
-                          ),
-                          if (location.isNotEmpty) ...[
-                            const SizedBox(height: 12),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Icon(Icons.place_outlined, size: 18),
-                                const SizedBox(width: 6),
-                                Expanded(child: Text(location)),
                               ],
                             ),
-                          ],
-                          if (description.isNotEmpty) ...[
-                            const SizedBox(height: 10),
-                            Text(description),
-                          ],
-                          const SizedBox(height: 16),
-                          Wrap(
-                            spacing: 10,
-                            runSpacing: 8,
-                            children: [
-                              Chip(
-                                avatar: const Icon(Icons.inventory_2_outlined),
-                                label: Text('${activeProducts.length} products'),
-                              ),
-                              Chip(
-                                avatar: const Icon(Icons.star_border),
-                                label: Text(
-                                  '${_storeRating.toStringAsFixed(1)} (${_reviews.length})',
-                                ),
-                              ),
-                            ],
                           ),
-                          const SizedBox(height: 12),
-                          Wrap(
-                            spacing: 10,
-                            runSpacing: 8,
-                            children: [
-                              OutlinedButton.icon(
-                                onPressed: _reviewStore,
-                                icon: const Icon(Icons.rate_review_outlined),
-                                label: Text(
-                                  _myReview == null
-                                      ? 'Review Shop'
-                                      : 'Edit Review',
-                                ),
-                              ),
-                              OutlinedButton.icon(
-                                onPressed: _reportStore,
-                                icon: const Icon(Icons.flag_outlined),
-                                label: const Text('Report Shop'),
-                              ),
-                            ],
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   ),

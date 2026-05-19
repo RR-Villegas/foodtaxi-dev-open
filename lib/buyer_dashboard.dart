@@ -4,6 +4,7 @@ import 'services/auth_service.dart';
 import 'services/database_service.dart';
 import 'cart_model.dart';
 import 'widgets/adaptive_menu_item.dart';
+import 'services/theme_service.dart';
 
 class BuyerDashboard extends StatefulWidget {
   const BuyerDashboard({super.key});
@@ -17,6 +18,9 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
   final _navSearchController = TextEditingController();
   final _navSearchFocusNode = FocusNode();
 
+  RealtimeChannel? _productsChannel;
+  bool _isRefreshingRealtime = false;
+
   List<Map<String, dynamic>> _products = [];
   Map<String, List<Map<String, dynamic>>> _groupedProducts = {};
   Map<String, dynamic>? _userProfile;
@@ -24,10 +28,12 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
   bool _hasError = false;
   bool _isLoggingOut = false;
 
-  @override
+@override
   void dispose() {
-    _navSearchController.dispose();
+    _productsChannel?.unsubscribe();
     _navSearchFocusNode.dispose();
+    _navSearchController.dispose();
+
     super.dispose();
   }
 
@@ -52,11 +58,63 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
 @override
   void initState() {
     super.initState();
+    _fetchProfile();
+    _fetchProducts();
     _navSearchFocusNode.addListener(() {
       if (mounted) setState(() {});
     });
-    _fetchProfile();
-    _fetchProducts();
+
+    _setupRealtime();
+  }
+
+  void _setupRealtime() {
+    _productsChannel = _supabase
+        .channel('buyer-dashboard-realtime')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'product',
+          callback: (_) => _handleRealtimeRefresh(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'product_variant',
+          callback: (_) => _handleRealtimeRefresh(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'product_discount',
+          callback: (_) => _handleRealtimeRefresh(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'product_review',
+          callback: (_) => _handleRealtimeRefresh(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'store',
+          callback: (_) => _handleRealtimeRefresh(),
+        )
+        .subscribe();
+  }
+
+  Future<void> _handleRealtimeRefresh() async {
+    if (_isRefreshingRealtime) return;
+
+    _isRefreshingRealtime = true;
+
+    try {
+      await _fetchProducts();
+    } catch (e) {
+      debugPrint('Realtime refresh error: $e');
+    } finally {
+      _isRefreshingRealtime = false;
+    }
   }
 
   Future<void> _fetchProfile() async {
@@ -196,6 +254,70 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
     );
   }
 
+  double _productBasePrice(Map<String, dynamic> product) {
+    final value = product['price'];
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  String _discountLabel(Map<String, dynamic> discount) {
+    final type = discount['discount_type']?.toString();
+
+    if (type == 'amount') {
+      return '-${DatabaseService.money(discount['discount_value'])}';
+    }
+
+    return '-${discount['discount_value']}%';
+  }
+
+  Widget _discountAwarePrice(Map<String, dynamic> product) {
+    final scheme = Theme.of(context).colorScheme;
+    final discount = DatabaseService.activeProductDiscount(product);
+    final basePrice = _productBasePrice(product);
+    final discountedPrice = DatabaseService.discountedPrice(basePrice, discount);
+
+    if (discount == null || discountedPrice >= basePrice) {
+      return Text(
+        DatabaseService.displayProductPrice(product),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: scheme.primary,
+          fontWeight: FontWeight.bold,
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        Flexible(
+          child: Text(
+            DatabaseService.money(discountedPrice),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: scheme.tertiary,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        const SizedBox(width: 5),
+        Flexible(
+          child: Text(
+            _discountLabel(discount),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: scheme.secondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget horizontalList(List<Map<String, dynamic>> items) {
     return SizedBox(
       height: 306,
@@ -261,13 +383,7 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
                             style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
                             const SizedBox(height: 2),
-                            Text(
-                            DatabaseService.displayProductPrice(item),
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.primary,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                            _discountAwarePrice(item),
                             const SizedBox(height: 2),
                             Row(
                             children: [
@@ -318,124 +434,195 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
     Navigator.pushNamed(
       context,
       '/search',
-      arguments: _navSearchController.text.trim(),
+      arguments: {
+        'query': _navSearchController.text.trim(),
+        'showFilters': filters,
+      },
+    );
+  }
+  
+  Widget _centerSearchBar({
+    required TextEditingController controller,
+    String hintText = 'Search products',
+    VoidCallback? onFilter,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return SizedBox(
+      height: 42,
+      width: double.infinity,
+      child: TextField(
+        controller: controller,
+        focusNode: _navSearchFocusNode,
+        textInputAction: TextInputAction.search,
+        style: const TextStyle(height: 1.0),
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: hintText,
+          filled: true,
+          fillColor: scheme.surface,
+          prefixIcon: Icon(Icons.search, color: scheme.primary),
+          suffixIcon: IconButton(
+            tooltip: 'Filters',
+            onPressed: onFilter,
+            icon: Icon(Icons.tune, color: scheme.primary),
+          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(999),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(999),
+            borderSide: BorderSide.none,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(999),
+            borderSide: BorderSide.none,
+          ),
+        ),
+        onSubmitted: (_) => _openSearch(),
+      ),
     );
   }
 
   // ✅ HERO (UNCHANGED EXACTLY)
-Widget heroSection() {
-  final scheme = Theme.of(context).colorScheme;
+  Widget heroSection() {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isFlandre = ThemeService.selectedThemeId.value == 'flandre';
 
-  return Container(
-    height: 250,
-    width: double.infinity,
-    decoration: BoxDecoration(
-      gradient: LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          scheme.primary,
-          scheme.primary.withAlpha(217),
-        ],
-      ),
-    ),
-    child: Stack(
-      children: [
-        Positioned.fill(
-          child: Opacity(
-            opacity: 0.10,
-            child: Image.asset(
-              'assets/images/tacos.jpg',
-              fit: BoxFit.cover,
-            ),
-          ),
-        ),
-
-        Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                "Your Philippine Marketplace",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: scheme.onPrimary,
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                ),
+    final gradient = isFlandre
+        ? const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF050505),
+              Color(0xFF2B1A2E),
+              Color(0xFF76283C),
+              Color(0xFFB83B54),
+            ],
+          )
+        : LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color.alphaBlend(
+                Colors.black.withAlpha(isDark ? 70 : 35),
+                scheme.primary,
               ),
-              const SizedBox(height: 8),
-              Text(
-                "for Specialty Foods",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: scheme.onPrimary,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w300,
-                ),
-              ),
-              const SizedBox(height: 14),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Text(
-                  "Shop local food, specialty goods, and pantry finds delivered from nearby sellers.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: scheme.onPrimary,
-                    fontSize: 16,
-                  ),
-                ),
+              Color.alphaBlend(
+                Colors.black.withAlpha(isDark ? 110 : 55),
+                scheme.primaryContainer,
               ),
             ],
+          );
+
+    final titleColor = Colors.white;
+    final subtitleColor = isFlandre ? const Color(0xFFFFD9E2) : Colors.white.withAlpha(230);
+    final bodyColor = isFlandre ? const Color(0xFFFFEAF0) : Colors.white.withAlpha(215);
+
+    final textShadow = const [
+      Shadow(
+        blurRadius: 8,
+        color: Colors.black,
+        offset: Offset(0, 2),
+      ),
+    ];
+
+    return Container(
+      height: 250,
+      width: double.infinity,
+      decoration: BoxDecoration(gradient: gradient),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Opacity(
+              opacity: isFlandre ? 0.18 : (isDark ? 0.12 : 0.07),
+              child: Image.asset(
+                'assets/images/tacos.jpg',
+                fit: BoxFit.cover,
+              ),
+            ),
           ),
-        ),
-      ],
-    ),
-  );
-}
+
+          Container(
+            color: Colors.black.withAlpha(isFlandre ? 85 : (isDark ? 55 : 35)),
+          ),
+
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  "Your Philippine Marketplace",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: titleColor,
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    shadows: textShadow,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "for Specialty Foods",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: subtitleColor,
+                    fontSize: 24,
+                    fontWeight: isFlandre ? FontWeight.w400 : FontWeight.w300,
+                    shadows: textShadow,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Text(
+                    "Shop local food, specialty goods, and pantry finds delivered from nearby sellers.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: bodyColor,
+                      fontSize: 16,
+                      shadows: textShadow,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
   appBar: AppBar(
         automaticallyImplyLeading: false,
+        titleSpacing: 12,
         title: Row(
           children: [
-            const Text('FoodTaxi Omega'),
-            const SizedBox(width: 12),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              width: _navSearchFocusNode.hasFocus ? 140 : 70,
-              child: SizedBox(
-                height: 40,
-                child: TextField(
-                  controller: _navSearchController,
-                  focusNode: _navSearchFocusNode,
-                  textInputAction: TextInputAction.search,
-                  decoration: InputDecoration(
-                    hintText:
-                        _navSearchFocusNode.hasFocus ? 'Search products' : 'Search',
-                    filled: true,
-                    fillColor: Theme.of(context).colorScheme.surface,
-                    prefixIcon: const Icon(Icons.search),
-                    contentPadding: EdgeInsets.zero,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                  onSubmitted: (_) => _openSearch(),
+            if (!_navSearchFocusNode.hasFocus) ...[
+              const Flexible(
+                child: Text(
+                  'FoodTaxi Omega',
+                  overflow: TextOverflow.ellipsis,
                 ),
+              ),
+              const SizedBox(width: 16),
+            ],
+
+            Expanded(
+              child: _centerSearchBar(
+                controller: _navSearchController,
+                onFilter: () => _openSearch(filters: true),
               ),
             ),
           ],
         ),
         actions: [
-          IconButton(
-            tooltip: 'Filters',
-            onPressed: () => _openSearch(filters: true),
-            icon: const Icon(Icons.filter_list),
-          ),
           Center(
             child: ValueListenableBuilder<int>(
               valueListenable: CartModel.itemCountNotifier,

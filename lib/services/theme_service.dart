@@ -30,6 +30,10 @@ class FoodTaxiTheme {
   final Color? surfaceVariant;
   final Color? onSurfaceVariant;
   final Color? outline;
+  final Gradient? appBarGradient;
+  final Gradient? navBarGradient;
+  final Gradient? heroGradient;
+  
 
   const FoodTaxiTheme({
     required this.id,
@@ -58,6 +62,9 @@ class FoodTaxiTheme {
     this.surfaceVariant,
     this.onSurfaceVariant,
     this.outline,
+    this.appBarGradient,
+    this.navBarGradient,
+    this.heroGradient,
   });
 
   Color _contrastColor(Color background) {
@@ -297,12 +304,27 @@ class ThemeService {
       id: 'default',
       name: 'Default',
       seed: Color(0xFF2D8F4E),
+
       primary: Color(0xFF2D8F4E),
-      secondary: Color(0xFF66A87A),
-      tertiary: Color(0xFFE6B43C),
+      onPrimary: Color(0xFFFFFFFF),
+      primaryContainer: Color(0xFFD8F3DF),
+      onPrimaryContainer: Color(0xFF073B18),
+
+      // sale badge orange
+      secondary: Color(0xFFE85D04),
+      onSecondary: Color(0xFFFFFFFF),
+      secondaryContainer: Color(0xFFFFDCC7),
+      onSecondaryContainer: Color(0xFF4A1600),
+
+      // discounted price blue
+      tertiary: Color(0xFF0077CC),
+      onTertiary: Color(0xFFFFFFFF),
+      tertiaryContainer: Color(0xFFD6ECFF),
+      onTertiaryContainer: Color(0xFF002B4D),
+
       appBar: Color(0xFF2D8F4E),
       navBar: Color(0xFFFFFFFF),
-      selectedIcon: Color(0xFF111111),
+      selectedIcon: Color(0xFF2D8F4E),
       unselectedIcon: Color(0xFF555555),
     ),
 
@@ -311,15 +333,31 @@ class ThemeService {
       name: 'Dark Mode',
       seed: Color(0xFF2D8F4E),
       brightness: Brightness.dark,
+
       scaffold: Color(0xFF1E1E1E),
       surface: Color(0xFF252526),
       surfaceVariant: Color(0xFF303134),
+
+      primary: Color(0xFF7DDA9B),
+      onPrimary: Color(0xFF062A12),
+      primaryContainer: Color(0xFF174525),
+      onPrimaryContainer: Color(0xFFC8FAD5),
+
+      // sale badge warm amber
+      secondary: Color(0xFFFFB86B),
+      onSecondary: Color(0xFF3B1B00),
+      secondaryContainer: Color(0xFF5A2B00),
+      onSecondaryContainer: Color(0xFFFFDDB8),
+
+      // discounted price bright mint
+      tertiary: Color(0xFF55F0C8),
+      onTertiary: Color(0xFF00382E),
+      tertiaryContainer: Color(0xFF005143),
+      onTertiaryContainer: Color(0xFFB6FFF0),
+
       appBar: Color(0xFF252526),
       navBar: Color(0xFF252526),
-      primary: Color(0xFF7DDA9B),
-      secondary: Color(0xFF8AB4F8),
-      tertiary: Color(0xFFFDD663),
-      selectedIcon: Color(0xFFFFFFFF),
+      selectedIcon: Color(0xFF7DDA9B),
       unselectedIcon: Color(0xFFC9D1D9),
     ),
 
@@ -333,12 +371,14 @@ class ThemeService {
       primaryContainer: Color(0xFFE8DDFF),
       onPrimaryContainer: Color(0xFF26104D),
 
-      secondary: Color(0xFF45A857),
+      // sale badge subconscious green
+      secondary: Color(0xFF1DAA4B),
       onSecondary: Color(0xFFFFFFFF),
       secondaryContainer: Color(0xFFD9F8D8),
       onSecondaryContainer: Color(0xFF083813),
 
-      tertiary: Color(0xFFFFC20A),
+      // discounted price golden third eye
+      tertiary: Color(0xFFFFB700),
       onTertiary: Color(0xFF2A1B00),
       tertiaryContainer: Color(0xFFFFE7A3),
       onTertiaryContainer: Color(0xFF3B2500),
@@ -366,12 +406,14 @@ class ThemeService {
       primaryContainer: Color(0xFFFFD8EA),
       onPrimaryContainer: Color(0xFF4A0B2E),
 
-      secondary: Color(0xFFD83246),
+      // sale badge red-pink
+      secondary: Color(0xFFE8324F),
       onSecondary: Color(0xFFFFFFFF),
       secondaryContainer: Color(0xFFFFD9DE),
       onSecondaryContainer: Color(0xFF4A0711),
 
-      tertiary: Color(0xFF3D7BFF),
+      // discounted price blue eye
+      tertiary: Color(0xFF2F6FFF),
       onTertiary: Color(0xFFFFFFFF),
       tertiaryContainer: Color(0xFFDCE6FF),
       onTertiaryContainer: Color(0xFF001A4D),
@@ -392,27 +434,23 @@ class ThemeService {
     FoodTaxiTheme(
       id: 'rin',
       name: 'Rin Kaenbyou',
-
-      // deep hellfire red
       seed: Color(0xFFD91E18),
-
       brightness: Brightness.dark,
 
-      // red/orange hair + fire
-      primary: Color(0xFFD91E18),
+      primary: Color(0xFFFF4A32),
       onPrimary: Color(0xFFFFFFFF),
       primaryContainer: Color(0xFF4A0A08),
       onPrimaryContainer: Color(0xFFFFB4A8),
 
-      // teal dress accents
-      secondary: Color(0xFF2FA7A0),
-      onSecondary: Color(0xFF001F1D),
-      secondaryContainer: Color(0xFF103A37),
-      onSecondaryContainer: Color(0xFF8FF5ED),
+      // sale badge hellfire orange
+      secondary: Color(0xFFFF9A1F),
+      onSecondary: Color(0xFF2B1200),
+      secondaryContainer: Color(0xFF5A2500),
+      onSecondaryContainer: Color(0xFFFFD8B0),
 
-      // blue ghost flames
-      tertiary: Color(0xFF4B6CFF),
-      onTertiary: Color(0xFFFFFFFF),
+      // discounted price ghost flame blue
+      tertiary: Color(0xFF65A8FF),
+      onTertiary: Color(0xFF001B3D),
       tertiaryContainer: Color(0xFF1B2A73),
       onTertiaryContainer: Color(0xFFC8D2FF),
 
@@ -425,55 +463,119 @@ class ThemeService {
 
       outline: Color(0xFF7D5A5A),
 
-      // darker crimson top bar
       appBar: Color(0xFF3B0908),
-
-      // near-black/navy inspired by dress
       navBar: Color(0xFF101522),
 
-      // glowing orange-yellow active
       selectedIcon: Color(0xFFFF9A1F),
-
-      // ghost-blue inactive
       unselectedIcon: Color(0xFF7EA2FF),
     ),
 
     FoodTaxiTheme(
-      id: 'utsuho',
-      name: 'Utsuho Reiuji',
-      seed: Color(0xFFC8FF00),
+      id: 'ixia',
+      name: 'Ixia Polystachya',
+      seed: Color(0xFF98A59D),
+
+      primary: Color(0xFF00A83B),
+      onPrimary: Color(0xFFFFFFFF),
+      primaryContainer: Color(0xFFB8FFD0),
+      onPrimaryContainer: Color(0xFF003B14),
+
+      // sale badge dusty rose
+      secondary: Color(0xFFD45A74),
+      onSecondary: Color(0xFFFFFFFF),
+      secondaryContainer: Color(0xFFF3D5D2),
+      onSecondaryContainer: Color(0xFF4A1F20),
+
+      // discounted price vivid green
+      tertiary: Color(0xFF00C853),
+      onTertiary: Color(0xFF00210A),
+      tertiaryContainer: Color(0xFFB6FFD0),
+      onTertiaryContainer: Color(0xFF003B14),
+
+      scaffold: Color(0xFFFBF5EA),
+      surface: Color(0xFFF2E7D3),
+      surfaceVariant: Color(0xFFD6D2C7),
+
+      onSurface: Color(0xFF27251E),
+      onSurfaceVariant: Color(0xFF53514E),
+
+      outline: Color(0xFF85807A),
+
+      appBar: Color(0xFF53514E),
+      navBar: Color(0xFF27251E),
+
+      selectedIcon: Color(0xFF00C853),
+      unselectedIcon: Color(0xFFACB3AD),
+    ),
+
+    FoodTaxiTheme(
+      id: 'flandre',
+      name: 'Flandre Scarlet',
+      seed: Color(0xFFFF5C7A),
       brightness: Brightness.dark,
 
-      // radioactive green
-      primary: Color(0xFFC8FF00),
-      onPrimary: Color(0xFF151900),
-      primaryContainer: Color(0xFF354600),
-      onPrimaryContainer: Color(0xFFE6FF73),
+      primary: Color(0xFFFF5C7A),
+      onPrimary: Color(0xFF220008),
+      primaryContainer: Color(0xFF76283C),
+      onPrimaryContainer: Color(0xFFFFD9E2),
 
-      // nuclear yellow
-      secondary: Color(0xFFFFF200),
-      onSecondary: Color(0xFF1D1B00),
-      secondaryContainer: Color(0xFF4A4500),
-      onSecondaryContainer: Color(0xFFFFF86A),
+      // sale badge gold crystal
+      secondary: Color(0xFFFFE45A),
+      onSecondary: Color(0xFF241B00),
+      secondaryContainer: Color(0xFF5C4700),
+      onSecondaryContainer: Color(0xFFFFF2C5),
 
-      // bring back her blue
-      tertiary: Color(0xFF2E7A8A),
-      onTertiary: Color(0xFFFFFFFF),
-      tertiaryContainer: Color(0xFF193940),
-      onTertiaryContainer: Color(0xFF9BE7F5),
+      // discounted price cyan crystal
+      tertiary: Color(0xFF49D9FF),
+      onTertiary: Color(0xFF001F29),
+      tertiaryContainer: Color(0xFF00495C),
+      onTertiaryContainer: Color(0xFFC9F4FF),
 
-      scaffold: Color(0xFF07100A),
-      surface: Color(0xFF101A12),
-      surfaceVariant: Color(0xFF1D2C20),
-      onSurface: Color(0xFFEAF7E9),
-      onSurfaceVariant: Color(0xFFB9D2B8),
-      outline: Color(0xFF6E8D68),
+      scaffold: Color(0xFF050505),
+      surface: Color(0xFF171217),
+      surfaceVariant: Color(0xFF2B1A2E),
 
-      appBar: Color(0xFF142400),
-      navBar: Color(0xFF071400),
+      onSurface: Color(0xFFFFEAF0),
+      onSurfaceVariant: Color(0xFFF2C7D3),
 
-      selectedIcon: Color(0xFFC8FF00),
-      unselectedIcon: Color(0xFF5FA8FF),
+      outline: Color(0xFF9A5F73),
+
+      appBar: Color(0xFF12070D),
+      navBar: Color(0xFF0B0509),
+
+      selectedIcon: Color(0xFFFFE45A),
+      unselectedIcon: Color(0xFFB88CFF),
+
+      appBarGradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color(0xFF050505),
+          Color(0xFF2B1A2E),
+          Color(0xFF76283C),
+        ],
+      ),
+
+      navBarGradient: LinearGradient(
+        begin: Alignment.centerLeft,
+        end: Alignment.centerRight,
+        colors: [
+          Color(0xFF0B0509),
+          Color(0xFF2B1A2E),
+          Color(0xFF12070D),
+        ],
+      ),
+
+      heroGradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color(0xFF050505),
+          Color(0xFF76283C),
+          Color(0xFFFF5C7A),
+          Color(0xFFFFE45A),
+        ],
+      ),
     ),
   ];
 

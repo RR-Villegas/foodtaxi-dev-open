@@ -42,18 +42,42 @@ class _SearchPageState extends State<SearchPage> {
   bool _isLoading = false;
   String _category = 'All';
   String _sort = 'New';
-  bool _appliedInitialQuery = false;
 
   @override
   void initState() {
     super.initState();
+
     _sellerController.addListener(() {
       if (mounted) setState(() {});
     });
+
     _sellerFocusNode.addListener(() {
       if (mounted) setState(() {});
     });
-    _search();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+
+      if (args is Map) {
+        final initialQuery = args['query']?.toString().trim() ?? '';
+        final showFilters = args['showFilters'] == true;
+
+        if (initialQuery.isNotEmpty) {
+          _queryController.text = initialQuery;
+        }
+
+        if (showFilters) {
+          _sellerFocusNode.requestFocus();
+        }
+      } else {
+        final initialQuery = args?.toString().trim() ?? '';
+        if (initialQuery.isNotEmpty) {
+          _queryController.text = initialQuery;
+        }
+      }
+
+      _search();
+    });
   }
 
   @override
@@ -340,14 +364,6 @@ class _SearchPageState extends State<SearchPage> {
 
   @override
   Widget build(BuildContext context) {
-    final initialQuery = ModalRoute.of(context)?.settings.arguments?.toString();
-    if (!_appliedInitialQuery) {
-      _appliedInitialQuery = true;
-      if (initialQuery != null && initialQuery.isNotEmpty) {
-        _queryController.text = initialQuery;
-        WidgetsBinding.instance.addPostFrameCallback((_) => _search());
-      }
-    }
 
     return Scaffold(
       appBar: AppBar(
@@ -366,7 +382,7 @@ class _SearchPageState extends State<SearchPage> {
         ),
         actions: [
           IconButton(
-            tooltip: 'Search',
+            tooltip: 'Apply search',
             onPressed: _search,
             icon: const Icon(Icons.search),
           ),

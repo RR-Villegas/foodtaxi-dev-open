@@ -26,6 +26,10 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _isUploading = false;
   String? _profileImagePath;
 
+  Map<String, dynamic>? _sellerStore;
+  String? _storeBannerPath;
+  bool _isUploadingBanner = false;
+
   @override
   void initState() {
     super.initState();
@@ -44,9 +48,15 @@ class _ProfilePageState extends State<ProfilePage> {
     setState(() => _isLoading = true);
     final account = await DatabaseService.getCurrentAccount();
     final accountId = account?['account_id']?.toString();
+    final accountType = account?['account_type']?.toString();
+
     final addresses = accountId == null
         ? <Address>[]
         : await DatabaseService.getUserAddresses(accountId);
+
+    final sellerStore = accountType == 'Seller'
+        ? await DatabaseService.getCurrentSellerStore()
+        : null;
 
     if (!mounted) return;
     setState(() {
@@ -56,6 +66,8 @@ class _ProfilePageState extends State<ProfilePage> {
       _surnameController.text = account?['surname']?.toString() ?? '';
       _phoneController.text = account?['phone_number']?.toString() ?? '';
       _profileImagePath = account?['profile_image_url']?.toString();
+      _sellerStore = sellerStore;
+      _storeBannerPath = sellerStore?['banner_image_url']?.toString();
       _isLoading = false;
     });
   }
@@ -120,6 +132,58 @@ class _ProfilePageState extends State<ProfilePage> {
     });
   }
 
+  Future<void> _pickStoreBannerImage() async {
+    final storeId = _sellerStore?['store_id']?.toString();
+
+    if (storeId == null || storeId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Seller store not found')),
+      );
+      return;
+    }
+
+    final image = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 88,
+      maxWidth: 1600,
+    );
+
+    if (image == null) return;
+
+    setState(() => _isUploadingBanner = true);
+
+    final path = await DatabaseService.uploadStoreBannerImage(
+      storeId: storeId,
+      bytes: await image.readAsBytes(),
+      fileName: image.name,
+    );
+
+    if (path != null) {
+      final ok = await DatabaseService.updateStoreBannerImage(
+        storeId: storeId,
+        bannerImageUrl: path,
+      );
+
+      if (ok) {
+        _storeBannerPath = path;
+      }
+    }
+
+    if (!mounted) return;
+
+    setState(() => _isUploadingBanner = false);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          path == null
+              ? 'Banner upload failed'
+              : 'Seller banner updated',
+        ),
+      ),
+    );
+  }
+
   Future<void> _logout() async {
     await AuthService.clearLoginSession();
     if (!mounted) return;
@@ -156,6 +220,40 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  Widget _sellerBannerPreview() {
+    final path = _storeBannerPath?.trim();
+
+    if (path == null || path.isEmpty) {
+      return Container(
+        height: 140,
+        width: double.infinity,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primaryContainer,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: const Text('No seller banner yet'),
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Image.network(
+        DatabaseService.getStoreBannerImageUrl(path),
+        height: 140,
+        width: double.infinity,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => Container(
+          height: 140,
+          width: double.infinity,
+          alignment: Alignment.center,
+          color: Colors.grey.shade300,
+          child: const Text('Could not load banner'),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -188,6 +286,26 @@ class _ProfilePageState extends State<ProfilePage> {
                     label: Text(_isUploading ? 'Uploading...' : 'Change Photo'),
                   ),
                 ),
+                if (_account?['account_type']?.toString() == 'Seller') ...[
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Seller Store Banner',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  _sellerBannerPreview(),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: _isUploadingBanner ? null : _pickStoreBannerImage,
+                    icon: const Icon(Icons.image_outlined),
+                    label: Text(
+                      _isUploadingBanner ? 'Uploading banner...' : 'Change Store Banner',
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 TextField(
                   controller: _firstNameController,

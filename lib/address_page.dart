@@ -235,7 +235,6 @@ class _AddressPageState extends State<AddressPage> {
                     labelText: 'Zip Code',
                     hintText: 'Auto-filled by location API',
                   ),
-                  readOnly: true,
                 ),
                 SwitchListTile(
                   value: isDefault,
@@ -267,13 +266,14 @@ class _AddressPageState extends State<AddressPage> {
                 String? savedAddressId = address?.addressId;
                 final houseNumber = _cleanAddressText(houseController.text);
                 final street = _cleanAddressText(streetController.text);
+                final manualZipCode = zipController.text.trim();
                 final point = await LocationService.geocodeAddress(
                   houseNumber: houseNumber,
                   street: street,
                   barangay: selectedBarangay,
                   city: selectedCity,
                   province: selectedProvince,
-                  zipCode: zipController.text,
+                  zipCode: manualZipCode,
                 );
                 if (!context.mounted) return;
                 if (point == null) {
@@ -284,9 +284,10 @@ class _AddressPageState extends State<AddressPage> {
                   );
                   return;
                 }
-                final resolvedZipCode = point.postalCode?.trim().isNotEmpty == true
-                    ? point.postalCode!.trim()
-                    : zipController.text.trim();
+                final resolvedZipCode = manualZipCode.isNotEmpty
+                    ? manualZipCode
+                    : point.postalCode?.trim() ?? '';
+
                 zipController.text = resolvedZipCode;
                 if (address == null) {
                   final saved = await DatabaseService.insertAddress(

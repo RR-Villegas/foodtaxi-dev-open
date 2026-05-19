@@ -296,30 +296,84 @@ class _CheckoutPageState extends State<CheckoutPage> {
         if (sellerAccountId != null) break;
       }
 
-      final orderItems = CartModel.cartItems.map((item) {
+      final orderItems = <Map<String, dynamic>>[];
+
+      for (final item in CartModel.cartItems) {
         final productId = item['product_id']?.toString();
+
         if (productId == null || productId.isEmpty) {
           throw Exception('Cart item is missing product ID');
         }
+
         final variantId = item['selected_variant_id']?.toString();
         final quantity = item['quantity'] ?? 1;
-        final price = CartModel.itemPrice(item);
-        return {
+
+        final freshProduct = await DatabaseService.getProductForCheckout(productId);
+
+        if (freshProduct == null) {
+          throw Exception('A product in your cart is no longer available');
+        }
+
+        final discount = DatabaseService.activeProductDiscount(freshProduct);
+
+        double basePrice = double.tryParse(
+              freshProduct['price']?.toString() ?? '',
+            ) ??
+            0;
+
+        if (variantId != null && variantId.isNotEmpty) {
+          final variants = freshProduct['product_variant'];
+
+          if (variants is List) {
+            final selectedVariant = variants.whereType<Map>().firstWhere(
+                  (variant) => variant['variant_id']?.toString() == variantId,
+                  orElse: () => {},
+                );
+
+            if (selectedVariant.isNotEmpty) {
+              basePrice = double.tryParse(
+                    selectedVariant['price']?.toString() ?? '',
+                  ) ??
+                  basePrice;
+            }
+          }
+        }
+
+        final price = DatabaseService.discountedPrice(basePrice, discount);
+
+        orderItems.add({
           'product_id': productId,
           'product_variant_id':
               variantId == null || variantId.isEmpty ? null : variantId,
           'quantity': quantity,
           'unit_price_at_sale': price,
-        };
-      }).toList();
+        });
+      }
+
+      final freshSubtotal = orderItems.fold<double>(
+      0,
+      (sum, item) {
+        final price = double.tryParse(item['unit_price_at_sale'].toString()) ?? 0;
+        final quantity = int.tryParse(item['quantity'].toString()) ?? 1;
+        return sum + (price * quantity);
+      },
+    );
+
+    final freshCommissionBase =
+        (freshSubtotal - _discountAmount) < 0 ? 0 : freshSubtotal - _discountAmount;
+
+    final freshServiceFee = freshCommissionBase * _serviceFeeRate;
+
+    final freshTotal =
+        freshSubtotal + _deliveryFee + freshServiceFee - _discountAmount;
 
       final orderId = await DatabaseService.placeOrderWithItems(
         accountId: _accountId!,
         addressId: _selectedAddress!.addressId!,
-        totalAmount: _total,
+        totalAmount: freshTotal,
         shippingFee: _deliveryFee,
         deliveryDistanceKm: _deliveryDistanceKm,
-        serviceFee: _serviceFee,
+        serviceFee: freshServiceFee,
         discountAmount: _discountAmount,
         deliveryMode: _isBulkDelivery ? 'bulk' : 'standard',
         bulkDeliveryMinOrders:
@@ -637,13 +691,14 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   const SizedBox(height: 24),
 
                   // Payment Method Section
+                  // Payment Method Section
                   _buildSectionTitle('Payment Method'),
                   const SizedBox(height: 8),
                   Card(
                     child: RadioGroup<String>(
                       groupValue: _selectedPaymentMethod,
                       onChanged: (value) {
-                        if (value != null) {
+                        if (value != null && value != 'Gcash') {
                           setState(() => _selectedPaymentMethod = value);
                         }
                       },
@@ -662,14 +717,48 @@ class _CheckoutPageState extends State<CheckoutPage> {
                               ],
                             ),
                           ),
-                          const RadioListTile<String>(
-                            value: 'Gcash',
-                            title: Row(
-                              children: [
-                                Icon(Icons.phone_android, color: Colors.blue),
-                                SizedBox(width: 8),
-                                Text('GCash'),
-                              ],
+                          Tooltip(
+                            message: 'Service unavailable',
+                            waitDuration: const Duration(milliseconds: 300),
+                            child: Opacity(
+                              opacity: 0.45,
+                              child: RadioListTile<String>(
+                                value: 'Gcash',
+                                enabled: false,
+                                title: Row(
+                                  children: [
+                                    const Icon(Icons.phone_android, color: Colors.grey),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'GCash',
+                                      style: TextStyle(color: Colors.grey),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade300,
+                                        borderRadius: BorderRadius.circular(999),
+                                      ),
+                                      child: const Text(
+                                        'Service unavailable',
+                                        style: TextStyle(
+                                          color: Colors.black54,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                subtitle: const Text(
+                                  'GCash payments are temporarily unavailable.',
+                                  style: TextStyle(color: Colors.grey),
+                                ),
+                              ),
                             ),
                           ),
                         ],

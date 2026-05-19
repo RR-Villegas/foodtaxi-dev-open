@@ -180,13 +180,15 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   @override
-  void initState() {
-    super.initState();
-    _loadAdminOrders();
-    _loadCoupons();
-    _loadReports();
-    _loadProfile();
-  }
+void initState() {
+  super.initState();
+  _loadAdminOrders();
+  _loadSellerApplications();
+  _loadRiderApplications();
+  _loadCoupons();
+  _loadReports();
+  _loadProfile();
+}
 
   Future<void> _loadProfile() async {
     final account = await DatabaseService.getCurrentAccount();

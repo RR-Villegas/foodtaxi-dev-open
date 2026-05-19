@@ -148,10 +148,7 @@ class _MyAppState extends State<MyApp> {
             ),
           );
         },
-        '/search': (context) => ProtectedRoute(
-          protection: RouteProtection.authenticated,
-          child: const SearchPage(),
-        ),
+        '/search': (context) => const SearchPage(),
         '/buyer-dashboard': (context) => ProtectedRoute(
           protection: RouteProtection.buyerOnly,
           child: const BuyerDashboard(),
@@ -222,8 +219,14 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
+  final _supabase = Supabase.instance.client;
+  RealtimeChannel? _productsChannel;
+  bool _isRefreshingRealtime = false;
+
   Map<String, List<Map<String, dynamic>>> foodCategories = {};
   bool isLoadingProducts = true;
+  final _navSearchController = TextEditingController();
+  final _navSearchFocusNode = FocusNode();
 
   // Product categories mapping
   static const Map<String, String> categoryNames = {
@@ -248,6 +251,79 @@ class _MyHomePageState extends State<MyHomePage> {
     super.initState();
     _redirectLoggedInUser();
     _loadProductsFromDatabase();
+    _navSearchFocusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
+    _setupRealtime();
+  }
+
+  void _setupRealtime() {
+    _productsChannel = _supabase
+        .channel('anon-home-realtime')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'product',
+          callback: (_) => _handleRealtimeRefresh(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'product_variant',
+          callback: (_) => _handleRealtimeRefresh(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'product_discount',
+          callback: (_) => _handleRealtimeRefresh(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'product_review',
+          callback: (_) => _handleRealtimeRefresh(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'store',
+          callback: (_) => _handleRealtimeRefresh(),
+        )
+        .subscribe();
+  }
+
+  Future<void> _handleRealtimeRefresh() async {
+    if (_isRefreshingRealtime) return;
+
+    _isRefreshingRealtime = true;
+
+    try {
+      await _loadProductsFromDatabase();
+    } catch (e) {
+      debugPrint('Anon realtime refresh error: $e');
+    } finally {
+      _isRefreshingRealtime = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _productsChannel?.unsubscribe();
+    _navSearchFocusNode.dispose();
+    _navSearchController.dispose();
+    super.dispose();
+  }
+
+  void _openSearch({bool filters = false}) {
+    Navigator.pushNamed(
+      context,
+      '/search',
+      arguments: {
+        'query': _navSearchController.text.trim(),
+        'showFilters': filters,
+      },
+    );
   }
 
   Future<void> _redirectLoggedInUser() async {
@@ -318,6 +394,150 @@ class _MyHomePageState extends State<MyHomePage> {
     return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
+  Widget heroSection() {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isFlandre = ThemeService.selectedThemeId.value == 'flandre';
+
+    final gradient = isFlandre
+        ? const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF050505),
+              Color(0xFF2B1A2E),
+              Color(0xFF76283C),
+              Color(0xFFB83B54),
+            ],
+          )
+        : LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color.alphaBlend(
+                Colors.black.withAlpha(isDark ? 70 : 35),
+                scheme.primary,
+              ),
+              Color.alphaBlend(
+                Colors.black.withAlpha(isDark ? 110 : 55),
+                scheme.primaryContainer,
+              ),
+            ],
+          );
+
+    final titleColor = Colors.white;
+    final subtitleColor =
+        isFlandre ? const Color(0xFFFFD9E2) : Colors.white.withAlpha(230);
+    final bodyColor =
+        isFlandre ? const Color(0xFFFFEAF0) : Colors.white.withAlpha(215);
+
+    final textShadow = const [
+      Shadow(
+        blurRadius: 8,
+        color: Colors.black,
+        offset: Offset(0, 2),
+      ),
+    ];
+
+    return Container(
+      height: 250,
+      width: double.infinity,
+      decoration: BoxDecoration(gradient: gradient),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Opacity(
+              opacity: isFlandre ? 0.18 : (isDark ? 0.12 : 0.07),
+              child: Image.asset(
+                'assets/images/tacos.jpg',
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+          Container(
+            color: Colors.black.withAlpha(isFlandre ? 85 : (isDark ? 55 : 35)),
+          ),
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  "Your Philippine Marketplace",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: titleColor,
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    shadows: textShadow,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "for Specialty Foods",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: subtitleColor,
+                    fontSize: 24,
+                    fontWeight: isFlandre ? FontWeight.w400 : FontWeight.w300,
+                    shadows: textShadow,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Text(
+                    "Shop local food, specialty goods, and pantry finds delivered from nearby sellers.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: bodyColor,
+                      fontSize: 16,
+                      shadows: textShadow,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _centerSearchBar({
+    required TextEditingController controller,
+    String hintText = 'Search products',
+    VoidCallback? onFilter,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return SizedBox(
+      height: 42,
+      width: double.infinity,
+      child: TextField(
+        controller: controller,
+        focusNode: _navSearchFocusNode,
+        textInputAction: TextInputAction.search,
+        decoration: InputDecoration(
+          hintText: hintText,
+          filled: true,
+          fillColor: scheme.surface,
+          prefixIcon: Icon(Icons.search, color: scheme.primary),
+          suffixIcon: IconButton(
+            tooltip: 'Filters',
+            onPressed: onFilter,
+            icon: Icon(Icons.tune, color: scheme.primary),
+          ),
+          contentPadding: EdgeInsets.zero,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(999),
+            borderSide: BorderSide.none,
+          ),
+        ),
+        onSubmitted: (_) => _openSearch(),
+      ),
+    );
+  }
+
   Widget _stars(double rating) {
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -342,149 +562,103 @@ class _MyHomePageState extends State<MyHomePage> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.primary,
-        title: Text(widget.title),
-        actions: [
-          PopupMenuButton<String>(
-            tooltip: 'Create Account',
-            onSelected: (value) {
-              final route = switch (value) {
-                'seller' => '/seller-registration',
-                'rider' => '/rider-registration',
-                _ => '/signup',
-              };
-              Navigator.pushNamed(context, route);
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: 'buyer',
-                child: ListTile(
-                  leading: Icon(Icons.shopping_bag_outlined),
-                  title: Text('Buy Products'),
+        titleSpacing: 12,
+        title: Row(
+          children: [
+            if (!_navSearchFocusNode.hasFocus) ...[
+              const Flexible(
+                child: Text(
+                  'FoodTaxi Omega',
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              PopupMenuItem(
-                value: 'seller',
-                child: ListTile(
-                  leading: Icon(Icons.storefront_outlined),
-                  title: Text('Become Seller'),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'rider',
-                child: ListTile(
-                  leading: Icon(Icons.delivery_dining_outlined),
-                  title: Text('Become Rider'),
-                ),
-              ),
+              const SizedBox(width: 12),
             ],
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8),
-              child: Row(
-                children: [
-                  Icon(Icons.person_add, size: 18),
-                  SizedBox(width: 6),
-                  Text('Create Account'),
-                  Icon(Icons.arrow_drop_down),
-                ],
+            Expanded(
+              child: _centerSearchBar(
+                controller: _navSearchController,
+                onFilter: () => _openSearch(filters: true),
               ),
             ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'Create Account',
+            color: Colors.white,
+            onPressed: () {
+              showMenu<String>(
+                context: context,
+                position: const RelativeRect.fromLTRB(999, 80, 8, 0),
+                items: const [
+                  PopupMenuItem(value: 'buyer', child: Text('Buy Products')),
+                  PopupMenuItem(value: 'seller', child: Text('Become Seller')),
+                  PopupMenuItem(value: 'rider', child: Text('Become Rider')),
+                ],
+              ).then((value) {
+                if (value == null || !context.mounted) return;
+
+                final route = switch (value) {
+                  'seller' => '/seller-registration',
+                  'rider' => '/rider-registration',
+                  _ => '/signup',
+                };
+
+                Navigator.pushNamed(context, route);
+              });
+            },
+            icon: const Icon(Icons.person_add),
           ),
-          const SizedBox(width: 16),
-          TextButton.icon(
-            onPressed: () => Navigator.pushNamed(context, '/login'),
-            icon: const Icon(Icons.login, size: 18),
-            label: const Text('Sign In'),
-            style: TextButton.styleFrom(foregroundColor: Colors.white),
-          ),
+
+          _navSearchFocusNode.hasFocus
+              ? IconButton(
+                  tooltip: 'Sign In',
+                  color: Colors.white,
+                  onPressed: () => Navigator.pushNamed(context, '/login'),
+                  icon: const Icon(Icons.login),
+                )
+              : TextButton.icon(
+                  onPressed: () => Navigator.pushNamed(context, '/login'),
+                  icon: const Icon(Icons.login, size: 18),
+                  label: const Text('Sign In'),
+                  style: TextButton.styleFrom(foregroundColor: Colors.white),
+                ),
+
+          const SizedBox(width: 8),
         ],
       ),
-
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // HERO
-            Container(
-              height: 250,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Theme.of(context).colorScheme.primary,
-                    Theme.of(context).colorScheme.primary.withAlpha(204),
-                  ],
-                ),
-              ),
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: Opacity(
-                      opacity: 0.1,
-                      child: Image.asset(
-                        'assets/images/tacos.jpg',
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  ),
-                  const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          "Your Philippine Marketplace",
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          "for Specialty Foods",
-                          style: TextStyle(color: Colors.white, fontSize: 24),
-                        ),
-                        SizedBox(height: 16),
-                        Text(
-                          "Shop local food, specialty goods, and pantry finds from nearby sellers.",
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.white, fontSize: 16),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
+            heroSection(),
             const SizedBox(height: 20),
 
-            // ✅ FETCHED FOOD CATEGORIES FROM DATABASE
             isLoadingProducts
                 ? const Padding(
                     padding: EdgeInsets.all(20),
                     child: CircularProgressIndicator(),
                   )
                 : foodCategories.isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.all(20),
-                    child: Text('No products available'),
-                  )
-                : Column(
-                    children: foodCategories.entries.map<Widget>((entry) {
-                      final categoryKey = entry.key;
-                      final categoryValue = entry.value;
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 10),
-                          sectionTitle(categoryKey),
-                          horizontalFoodList(categoryValue),
-                        ],
-                      );
-                    }).toList(),
-                  ),
+                    ? const Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Text('No products available'),
+                      )
+                    : Column(
+                        children: foodCategories.entries.map<Widget>((entry) {
+                          final categoryKey = entry.key;
+                          final categoryValue = entry.value;
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 10),
+                              sectionTitle(categoryKey),
+                              horizontalFoodList(categoryValue),
+                            ],
+                          );
+                        }).toList(),
+                      ),
+
             const SizedBox(height: 20),
           ],
         ),
@@ -505,16 +679,92 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
+  double _productBasePrice(Map<String, dynamic> product) {
+  final value = product['price'];
+  if (value is num) return value.toDouble();
+  return double.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+String _discountLabel(Map<String, dynamic> discount) {
+  final type = discount['discount_type']?.toString();
+
+  if (type == 'amount') {
+    return '-${DatabaseService.money(discount['discount_value'])}';
+  }
+
+  return '-${discount['discount_value']}%';
+}
+
+  Widget _discountAwarePrice(Map<String, dynamic> product) {
+    final scheme = Theme.of(context).colorScheme;
+    final discount = DatabaseService.activeProductDiscount(product);
+    final basePrice = _productBasePrice(product);
+    final discountedPrice = DatabaseService.discountedPrice(basePrice, discount);
+
+    if (discount == null || discountedPrice >= basePrice) {
+      return Text(
+        DatabaseService.displayProductPrice(product),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: scheme.primary,
+          fontWeight: FontWeight.bold,
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        Flexible(
+          child: Text(
+            DatabaseService.money(discountedPrice),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: scheme.tertiary,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        const SizedBox(width: 5),
+        Flexible(
+          child: Text(
+            _discountLabel(discount),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: scheme.secondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String? _resolveProductImageUrl(dynamic imageValue) {
+    final value = imageValue?.toString().trim();
+
+    if (value == null || value.isEmpty) return null;
+
+    if (value.startsWith('http') || value.startsWith('assets/')) {
+      return value;
+    }
+
+    return DatabaseService.getProductImageUrl(value);
+  }
+
   Widget horizontalFoodList(List<Map<String, dynamic>> items) {
     return SizedBox(
-      height: 304,
+      height: 306,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 12),
         itemCount: items.length,
         itemBuilder: (context, index) {
           final item = items[index];
-          final imageUrl = item['main_image_url'] as String?;
+          final imageUrl = _resolveProductImageUrl(item['main_image_url']);
           final productId = item['product_id']?.toString();
           final rating = _rating(item);
           final reviewCount = _reviewCount(item);
@@ -534,32 +784,47 @@ class _MyHomePageState extends State<MyHomePage> {
               width: 170,
               margin: const EdgeInsets.only(right: 12, bottom: 12),
               child: Card(
-                clipBehavior: Clip.antiAlias,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                elevation: 3,
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     AspectRatio(
                       aspectRatio: 1,
-                      child: imageUrl != null
-                          ? Image.network(
-                              DatabaseService.getProductImageUrl(imageUrl),
-                              fit: BoxFit.cover,
-                              width: double.infinity,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Container(
-                                  color: Colors.grey[300],
-                                  child: const Icon(Icons.image_not_supported),
-                                );
-                              },
-                            )
-                          : Container(
-                              color: Colors.grey[300],
-                              child: const Icon(Icons.image),
-                            ),
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(16),
+                        ),
+                        child: imageUrl != null
+                            ? imageUrl.startsWith('assets/')
+                                ? Image.asset(
+                                    imageUrl,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) =>
+                                        Image.asset(
+                                      'assets/images/burger.jpg',
+                                      fit: BoxFit.cover,
+                                    ),
+                                  )
+                                : Image.network(
+                                    imageUrl,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) =>
+                                        Image.asset(
+                                      'assets/images/burger.jpg',
+                                      fit: BoxFit.cover,
+                                    ),
+                                  )
+                            : Image.asset(
+                                'assets/images/burger.jpg',
+                                fit: BoxFit.cover,
+                              ),
+                      ),
                     ),
                     Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.all(8),
+                        padding: const EdgeInsets.all(6),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -567,19 +832,13 @@ class _MyHomePageState extends State<MyHomePage> {
                               DatabaseService.displayProductName(item['name']),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              DatabaseService.displayProductPrice(item),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.primary,
-                                fontWeight: FontWeight.bold,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
-                            const SizedBox(height: 3),
+                            const SizedBox(height: 2),
+                            _discountAwarePrice(item),
+                            const SizedBox(height: 2),
                             Row(
                               children: [
                                 _stars(rating),
@@ -608,7 +867,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                         );
                                       }
                                     : null,
-                                child: const Text('View'),
+                                child: const Text('Buy'),
                               ),
                             ),
                           ],

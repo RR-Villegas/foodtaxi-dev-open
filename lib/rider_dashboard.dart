@@ -342,26 +342,67 @@ class _RiderDashboardState extends State<RiderDashboard> {
                 maxLines: 4,
               ),
               const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () async {
-                    final image = await ImagePicker().pickImage(
-                      source: ImageSource.gallery,
-                      imageQuality: 60,
-                      maxWidth: 1600,
-                      maxHeight: 1600,
-                    );
-                    if (image != null) {
-                      setDialogState(() => proofImage = image);
-                    }
-                  },
-                  icon: const Icon(Icons.image_outlined),
-                  label: Text(
-                    proofImage == null ? 'Add delivery photo' : proofImage!.name,
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        final image = await ImagePicker().pickImage(
+                          source: ImageSource.camera,
+                          imageQuality: 60,
+                          maxWidth: 1600,
+                          maxHeight: 1600,
+                        );
+
+                        if (image != null) {
+                          setDialogState(() => proofImage = image);
+                        }
+                      },
+                      icon: const Icon(Icons.camera_alt_outlined),
+                      label: const Text('Camera'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        final image = await ImagePicker().pickImage(
+                          source: ImageSource.gallery,
+                          imageQuality: 60,
+                          maxWidth: 1600,
+                          maxHeight: 1600,
+                        );
+
+                        if (image != null) {
+                          setDialogState(() => proofImage = image);
+                        }
+                      },
+                      icon: const Icon(Icons.image_outlined),
+                      label: const Text('Gallery'),
+                    ),
+                  ),
+                ],
+              ),
+
+              if (proofImage != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  proofImage!.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.network(
+                    proofImage!.path,
+                    height: 120,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
                   ),
                 ),
-              ),
+              ],
             ],
           ),
           actions: [

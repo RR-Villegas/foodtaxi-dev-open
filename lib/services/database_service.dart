@@ -727,7 +727,7 @@ class DatabaseService {
     try {
       final response = await _supabase
           .from('product')
-          .select('*, product_variant(*)')
+          .select('*, product_variant(*), product_discount(*)')
           .eq('store_id', storeId)
           .order('product_id', ascending: false);
 
@@ -735,6 +735,28 @@ class DatabaseService {
     } catch (e) {
       _logDbError('Failed to fetch seller products', e);
       return [];
+    }
+  }
+
+  static Future<Map<String, dynamic>?> getProductForCheckout(
+    String productId,
+  ) async {
+    try {
+      final response = await _supabase
+          .from('product')
+          .select('''
+            *,
+            product_variant(*),
+            product_discount(*)
+          ''')
+          .eq('product_id', productId)
+          .eq('is_active', true)
+          .maybeSingle();
+
+      return response == null ? null : Map<String, dynamic>.from(response);
+    } catch (e) {
+      _logDbError('Failed to fetch product for checkout', e);
+      return null;
     }
   }
 
@@ -995,6 +1017,56 @@ class DatabaseService {
     }
   }
 
+  static Future<String?> uploadStoreBannerImage({
+    required String storeId,
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
+    try {
+      if (!isAllowedImageName(fileName)) return null;
+
+      final extension = _extensionFor(fileName);
+      final path =
+          '$storeId/banner_${DateTime.now().millisecondsSinceEpoch}.$extension';
+      final mimeType = imageContentTypeFor(fileName)!;
+
+      await _supabase.storage.from('store-banners').uploadBinary(
+            path,
+            bytes,
+            fileOptions: FileOptions(
+              upsert: true,
+              contentType: mimeType,
+            ),
+          );
+
+      return path;
+    } catch (e) {
+      _logDbError('Failed to upload store banner image', e);
+      return null;
+    }
+  }
+
+  static String getStoreBannerImageUrl(String path) {
+    if (path.startsWith('http')) return path;
+    return _supabase.storage.from('store-banners').getPublicUrl(path);
+  }
+
+  static Future<bool> updateStoreBannerImage({
+    required String storeId,
+    required String bannerImageUrl,
+  }) async {
+    try {
+      await _supabase.from('store').update({
+        'banner_image_url': _blankToNull(bannerImageUrl),
+      }).eq('store_id', storeId);
+
+      return true;
+    } catch (e) {
+      _logDbError('Failed to update store banner image', e);
+      return false;
+    }
+  }
+
   static Future<String?> getSellerAccountIdForProduct(String productId) async {
     try {
       final response = await _supabase
@@ -1069,7 +1141,7 @@ class DatabaseService {
 
       var productRequest = _supabase
           .from('product')
-          .select('*, product_variant(*)')
+          .select('*, product_variant(*), product_discount(*)')
           .inFilter('product_id', selectedIds)
           .eq('is_active', true);
       if (_blankToNull(storeId) != null) {
@@ -1396,15 +1468,74 @@ class DatabaseService {
     try {
       final response = await _supabase
           .from('product_review')
-          .select(
-            '*, account!product_review_buyer_account_id_fkey(firstname, surname)',
-          )
+          .select('''
+            review_id,
+            product_id,
+            buyer_account_id,
+            rating,
+            comment,
+            created_at,
+            account:product_review_buyer_account_id_fkey (
+              firstname,
+              surname,
+              email,
+              profile_image_url
+            )
+          ''')
           .eq('product_id', productId)
           .order('created_at', ascending: false);
+
+      debugPrint('Product Reviews: $response');
 
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       _logDbError('Failed to fetch product reviews', e);
+      return [];
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getProductReviewsForStore(
+    String storeId,
+  ) async {
+    try {
+      final products = await _supabase
+          .from('product')
+          .select('product_id')
+          .eq('store_id', storeId);
+
+      final productIds = List<Map<String, dynamic>>.from(products)
+          .map((item) => item['product_id']?.toString() ?? '')
+          .where((id) => id.isNotEmpty)
+          .toList();
+
+      if (productIds.isEmpty) return [];
+
+      final response = await _supabase
+          .from('product_review')
+          .select('''
+            review_id,
+            product_id,
+            buyer_account_id,
+            rating,
+            comment,
+            created_at,
+            product:product_review_product_id_fkey (
+              product_id,
+              name
+            ),
+            account:product_review_buyer_account_id_fkey (
+              firstname,
+              surname,
+              email,
+              profile_image_url
+            )
+          ''')
+          .inFilter('product_id', productIds)
+          .order('created_at', ascending: false);
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      _logDbError('Failed to fetch store product reviews', e);
       return [];
     }
   }
@@ -1605,6 +1736,23 @@ class DatabaseService {
     } catch (e) {
       _logDbError('Failed to save product discount', e);
       return false;
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getProductDiscountPriceHistory(
+    String productId,
+  ) async {
+    try {
+      final response = await _supabase
+          .from('product_discount_price_history')
+          .select('*')
+          .eq('product_id', productId)
+          .order('recorded_at', ascending: true);
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      _logDbError('Failed to fetch product discount price history', e);
+      return [];
     }
   }
 
@@ -1895,8 +2043,14 @@ class DatabaseService {
     try {
       final response = await _supabase
           .from('product')
-          .select('*, product_variant(*)')
-          .eq('is_active', true);
+          .select('''
+            *,
+            product_variant(*),
+            product_discount(*)
+          ''')
+          .eq('is_active', true)
+          .order('product_id', ascending: false);
+
       return _withProductRatings(List<Map<String, dynamic>>.from(response));
     } catch (e) {
       _logDbError('Failed to fetch products', e);
@@ -2235,7 +2389,7 @@ class DatabaseService {
             review_notes,
             date_approved,
             documents_path,
-            account (
+            account:seller_application_account_id_fkey (
               firstname,
               surname,
               email,
@@ -2484,7 +2638,7 @@ class DatabaseService {
             application_date,
             review_notes,
             date_approved,
-            account (
+            account:rider_application_account_id_fkey (
               firstname,
               surname,
               email,

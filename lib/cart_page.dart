@@ -196,8 +196,7 @@ class _CartPageState extends State<CartPage> {
                   '₱${(CartModel.totalPrice).toStringAsFixed(2)}',
                   style: TextStyle(
                     fontSize: 22, 
-                    fontWeight: FontWeight.bold, 
-                    color: Theme.of(context).colorScheme.primary,
+                    color: Colors.white,
                   ),
                 ),
               ],

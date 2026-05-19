@@ -41,6 +41,8 @@ class _SellerDashboardState extends State<SellerDashboard> {
   List<Map<String, dynamic>> _orders = [];
   List<Map<String, dynamic>> _coupons = [];
   List<Map<String, dynamic>> _productDiscounts = [];
+  List<Map<String, dynamic>> _storeReviews = [];
+  List<Map<String, dynamic>> _productReviews = [];
   int _currentIndex = 0;
   bool _isLoading = true;
   String _overviewRange = 'Day';
@@ -128,6 +130,13 @@ class _SellerDashboardState extends State<SellerDashboard> {
       final productDiscounts = storeId == null
           ? <Map<String, dynamic>>[]
           : await DatabaseService.getProductDiscountsForStore(storeId);
+      final storeReviews = storeId == null
+          ? <Map<String, dynamic>>[]
+          : await DatabaseService.getStoreReviews(storeId);
+
+      final productReviews = storeId == null
+          ? <Map<String, dynamic>>[]
+          : await DatabaseService.getProductReviewsForStore(storeId);
       _subscribeToDashboard(accountId: accountId, storeId: storeId);
 
       if (mounted) {
@@ -138,6 +147,8 @@ class _SellerDashboardState extends State<SellerDashboard> {
           _orders = orders;
           _coupons = coupons;
           _productDiscounts = productDiscounts;
+          _storeReviews = storeReviews;
+          _productReviews = productReviews;
           _isLoading = false;
         });
       }
@@ -652,7 +663,9 @@ class _SellerDashboardState extends State<SellerDashboard> {
         const SizedBox(height: 8),
         Text(
           '$visibleCount product${visibleCount == 1 ? '' : 's'} shown',
-          style: const TextStyle(color: Colors.black54),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       ],
     );
@@ -802,7 +815,7 @@ class _SellerDashboardState extends State<SellerDashboard> {
                     Text('${discountPercent.toStringAsFixed(0)}% active discount'),
                   Text(
                     active ? 'Active' : 'Hidden',
-                    style: TextStyle(color: active ? Colors.green : Colors.grey),
+                    style: TextStyle(color: active ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurfaceVariant),
                   ),
                 ],
               ),
@@ -850,7 +863,7 @@ class _SellerDashboardState extends State<SellerDashboard> {
           children: [
             Icon(icon, color: color),
             const SizedBox(height: 10),
-            Text(label, style: const TextStyle(color: Colors.black54)),
+            Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
             const SizedBox(height: 4),
             Text(
               value,
@@ -939,9 +952,11 @@ class _SellerDashboardState extends State<SellerDashboard> {
             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             'Sales, orders, and fulfillment history',
-            style: TextStyle(color: Colors.black54),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 16),
           Row(
@@ -950,14 +965,14 @@ class _SellerDashboardState extends State<SellerDashboard> {
                 'Sales',
                 _money(deliveredRevenue),
                 Icons.payments_outlined,
-                Colors.green,
+                Theme.of(context).colorScheme.primary,
               ),
               const SizedBox(width: 10),
               _metricCard(
                 'Delivered',
                 '${deliveredOrders.length}',
                 Icons.check_circle_outline,
-                Colors.blue,
+                Theme.of(context).colorScheme.secondary
               ),
             ],
           ),
@@ -968,14 +983,14 @@ class _SellerDashboardState extends State<SellerDashboard> {
                 'Active Orders',
                 '${activeOrders.length}',
                 Icons.local_shipping_outlined,
-                Colors.orange,
+                Theme.of(context).colorScheme.tertiary,
               ),
               const SizedBox(width: 10),
               _metricCard(
                 'Products',
                 '${_products.length}',
                 Icons.inventory_2_outlined,
-                Colors.purple,
+                Theme.of(context).colorScheme.outline,
               ),
             ],
           ),
@@ -1077,14 +1092,14 @@ class _SellerDashboardState extends State<SellerDashboard> {
                 'Revenue',
                 _money(summary['revenue']),
                 Icons.payments_outlined,
-                Colors.green,
+                Theme.of(context).colorScheme.primary,
               ),
               const SizedBox(width: 10),
               _metricCard(
                 'Orders',
                 '${summary['orders']}',
                 Icons.receipt_long_outlined,
-                Colors.blue,
+                Theme.of(context).colorScheme.secondary,
               ),
             ],
           ),
@@ -1095,14 +1110,14 @@ class _SellerDashboardState extends State<SellerDashboard> {
                 'Items Sold',
                 '${summary['itemsSold']}',
                 Icons.shopping_bag_outlined,
-                Colors.orange,
+                Theme.of(context).colorScheme.tertiary,
               ),
               const SizedBox(width: 10),
               _metricCard(
                 'Products',
                 '${_products.length}',
                 Icons.inventory_2_outlined,
-                Colors.purple,
+                Theme.of(context).colorScheme.outline,
               ),
             ],
           ),
@@ -1257,7 +1272,9 @@ class _SellerDashboardState extends State<SellerDashboard> {
                     const SizedBox(height: 4),
                     Text(
                       buyerContact,
-                      style: const TextStyle(color: Colors.black54),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ],
                   const SizedBox(height: 8),
@@ -1267,9 +1284,9 @@ class _SellerDashboardState extends State<SellerDashboard> {
                   ),
                   const SizedBox(height: 6),
                   if (orderItems.isEmpty)
-                    const Text(
+                    Text(
                       'No product details loaded for this order.',
-                      style: TextStyle(color: Colors.black54),
+                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
                     )
                   else
                     ...orderItems.map((item) {
@@ -1316,7 +1333,7 @@ class _SellerDashboardState extends State<SellerDashboard> {
                                       'Qty $quantity',
                                       _money(unitPrice),
                                     ].join(' | '),
-                                    style: const TextStyle(color: Colors.black54),
+                                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
                                   ),
                                 ],
                               ),
@@ -1420,88 +1437,148 @@ class _SellerDashboardState extends State<SellerDashboard> {
     final minController = TextEditingController(
       text: coupon?['min_subtotal']?.toString() ?? '0',
     );
+    final existingExpiry = DateTime.tryParse(
+      coupon?['expires_at']?.toString() ?? '',
+    );
     final expiryController = TextEditingController(
-      text: coupon?['expires_at']?.toString() ?? '',
+      text: existingExpiry == null ? '' : _formatDateTimeForInput(existingExpiry),
     );
     var type = coupon?['discount_type']?.toString() ?? 'percent';
     var active = coupon?['is_active'] != false;
 
     final saved = await showDialog<bool>(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(coupon == null ? 'Add Shop Coupon' : 'Edit Shop Coupon'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: codeController,
-                  textCapitalization: TextCapitalization.characters,
-                  decoration: const InputDecoration(labelText: 'Code'),
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: type,
-                  decoration: const InputDecoration(labelText: 'Discount Type'),
-                  items: const [
-                    DropdownMenuItem(value: 'percent', child: Text('Percent')),
-                    DropdownMenuItem(value: 'amount', child: Text('Amount')),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          return AlertDialog(
+            insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+            title: Text(coupon == null ? 'Add Shop Coupon' : 'Edit Shop Coupon'),
+            content: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: 520,
+                maxHeight: MediaQuery.of(dialogContext).size.height * 0.72,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: codeController,
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: const InputDecoration(labelText: 'Code'),
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      initialValue: type,
+                      decoration: const InputDecoration(labelText: 'Discount Type'),
+                      items: const [
+                        DropdownMenuItem(value: 'percent', child: Text('Percent')),
+                        DropdownMenuItem(value: 'amount', child: Text('Amount')),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) setDialogState(() => type = value);
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: valueController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Discount Value'),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: minController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Minimum Subtotal'),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: expiryController,
+                      readOnly: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Expires At',
+                        hintText: 'Select expiry date and time',
+                        prefixIcon: Icon(Icons.event_available_outlined),
+                        suffixIcon: Icon(Icons.edit_calendar_outlined),
+                      ),
+                      onTap: () async {
+                        FocusScope.of(dialogContext).unfocus();
+
+                        final current = _parseDateTimeInput(expiryController.text) ??
+                            DateTime.now().add(const Duration(days: 7));
+
+                        Navigator.pop(dialogContext, null);
+
+                        final picked = await _pickDateTimeValue(
+                          initial: current,
+                          isStart: false,
+                        );
+
+                        if (picked == null || !mounted) return;
+
+                        expiryController.text = _formatDateTimeForInput(picked);
+
+                        await _openCouponForm({
+                          if (coupon != null) ...coupon,
+                          'code': codeController.text,
+                          'description': descriptionController.text,
+                          'discount_type': type,
+                          'discount_value': valueController.text,
+                          'min_subtotal': minController.text,
+                          'expires_at': picked.toIso8601String(),
+                          'is_active': active,
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: descriptionController,
+                      decoration: const InputDecoration(labelText: 'Description'),
+                    ),
+                    const SizedBox(height: 10),
+                    SwitchListTile(
+                      value: active,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Active'),
+                      onChanged: (value) => setDialogState(() => active = value),
+                    ),
                   ],
-                  onChanged: (value) {
-                    if (value != null) setDialogState(() => type = value);
-                  },
                 ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: valueController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Discount Value'),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: minController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Minimum Subtotal'),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: expiryController,
-                  decoration: const InputDecoration(
-                    labelText: 'Expires At',
-                    hintText: '2026-12-31T23:59:59Z',
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: descriptionController,
-                  decoration: const InputDecoration(labelText: 'Description'),
-                ),
-                SwitchListTile(
-                  value: active,
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Active'),
-                  onChanged: (value) => setDialogState(() => active = value),
-                ),
-              ],
+              ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Save'),
-            ),
-          ],
-        ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
       ),
     );
 
     if (saved == true) {
       final storeId = _store?['store_id']?.toString();
+      final expiryText = expiryController.text.trim();
+      final expiryDate = expiryText.isEmpty ? null : _parseDateTimeInput(expiryText);
+
+      if (expiryText.isNotEmpty && expiryDate == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Select a valid coupon expiry date/time')),
+          );
+        }
+        return;
+      }
+
+      final expiresAt = expiryDate == null
+          ? null
+          : _formatDateTimeForSupabase(expiryDate);
+
       final ok = storeId != null &&
           await DatabaseService.saveCoupon(
             code: codeController.text,
@@ -1509,7 +1586,7 @@ class _SellerDashboardState extends State<SellerDashboard> {
             discountValue: double.tryParse(valueController.text.trim()) ?? 0,
             minSubtotal: double.tryParse(minController.text.trim()) ?? 0,
             description: descriptionController.text,
-            expiresAt: expiryController.text,
+            expiresAt: expiresAt,
             isActive: active,
             storeId: storeId,
           );
@@ -1528,14 +1605,125 @@ class _SellerDashboardState extends State<SellerDashboard> {
     expiryController.dispose();
   }
 
+  String _readableDateTime(dynamic value) {
+    final date = DateTime.tryParse(value?.toString() ?? '');
+
+    if (date == null) return 'No date';
+
+    final local = date.toLocal();
+    final hour = local.hour > 12
+        ? local.hour - 12
+        : local.hour == 0
+            ? 12
+            : local.hour;
+    final minute = local.minute.toString().padLeft(2, '0');
+    final period = local.hour >= 12 ? 'PM' : 'AM';
+
+    return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')} $hour:$minute $period';
+  }
+
+  String _formatDateTimeForInput(DateTime dateTime) {
+    final local = dateTime.toLocal();
+
+    return '${local.year.toString().padLeft(4, '0')}-'
+        '${local.month.toString().padLeft(2, '0')}-'
+        '${local.day.toString().padLeft(2, '0')} '
+        '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _formatDateTimeForSupabase(DateTime dateTime) {
+    return dateTime.toUtc().toIso8601String();
+  }
+
+  DateTime? _parseDateTimeInput(String value) {
+    final raw = value.trim();
+    if (raw.isEmpty) return null;
+
+    return DateTime.tryParse(raw.replaceFirst(' ', 'T'));
+  }
+
+  Future<DateTime?> _pickDateTimeValue({
+    required DateTime initial,
+    required bool isStart,
+  }) async {
+    final now = DateTime.now();
+
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(now.year - 1),
+      lastDate: DateTime(now.year + 5),
+    );
+
+    if (pickedDate == null || !mounted) return null;
+
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(initial),
+    );
+
+    if (pickedTime == null || !mounted) return null;
+
+    return DateTime(
+      pickedDate.year,
+      pickedDate.month,
+      pickedDate.day,
+      pickedTime.hour,
+      pickedTime.minute,
+    );
+  }
+
+  Future<void> _pickDateTime(
+    TextEditingController controller, {
+    required bool isStart,
+  }) async {
+    final now = DateTime.now();
+    final current = _parseDateTimeInput(controller.text) ??
+        (isStart ? now : now.add(const Duration(days: 7)));
+
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: current,
+      firstDate: DateTime(now.year - 1),
+      lastDate: DateTime(now.year + 5),
+    );
+
+    if (pickedDate == null || !mounted) return;
+
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(current),
+    );
+
+    if (pickedTime == null || !mounted) return;
+
+    final picked = DateTime(
+      pickedDate.year,
+      pickedDate.month,
+      pickedDate.day,
+      pickedTime.hour,
+      pickedTime.minute,
+    );
+
+    controller.text = _formatDateTimeForInput(picked);
+  }
+
   Future<void> _openProductDiscountForm([
     Map<String, dynamic>? discount,
   ]) async {
+    final existingStart = DateTime.tryParse(
+      discount?['starts_at']?.toString() ?? '',
+    );
+    final existingEnd = DateTime.tryParse(
+      discount?['ends_at']?.toString() ?? '',
+    );
+
     final startsController = TextEditingController(
-      text: discount?['starts_at']?.toString() ?? '',
+      text: existingStart == null ? '' : _formatDateTimeForInput(existingStart),
     );
     final endsController = TextEditingController(
-      text: discount?['ends_at']?.toString() ?? '',
+      text: existingEnd == null ? '' : _formatDateTimeForInput(existingEnd),
     );
     final defaultValueController = TextEditingController(
       text: discount?['discount_value']?.toString() ?? '',
@@ -1585,18 +1773,26 @@ class _SellerDashboardState extends State<SellerDashboard> {
                   const SizedBox(height: 10),
                   TextField(
                     controller: startsController,
+                    readOnly: true,
                     decoration: const InputDecoration(
                       labelText: 'Starts At',
-                      hintText: '2026-05-19T00:00:00Z',
+                      hintText: 'Select start date and time',
+                      prefixIcon: Icon(Icons.event_outlined),
+                      suffixIcon: Icon(Icons.edit_calendar_outlined),
                     ),
+                    onTap: () => _pickDateTime(startsController, isStart: true),
                   ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: endsController,
+                    readOnly: true,
                     decoration: const InputDecoration(
                       labelText: 'Ends At',
-                      hintText: '2026-05-24T23:59:59Z',
+                      hintText: 'Select end date and time',
+                      prefixIcon: Icon(Icons.event_available_outlined),
+                      suffixIcon: Icon(Icons.edit_calendar_outlined),
                     ),
+                    onTap: () => _pickDateTime(endsController, isStart: false),
                   ),
                   const SizedBox(height: 10),
                   SwitchListTile(
@@ -1669,9 +1865,11 @@ class _SellerDashboardState extends State<SellerDashboard> {
                       );
                     }),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     'Anti-deceptive pricing: a discount is blocked if the current base or variant price is above the lowest recorded price in the last 30 days.',
-                    style: TextStyle(color: Colors.black54),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -1693,9 +1891,31 @@ class _SellerDashboardState extends State<SellerDashboard> {
 
     if (saved == true) {
       final storeId = _store?['store_id']?.toString();
-      final startsAt = startsController.text.trim();
-      final endsAt = endsController.text.trim();
-      var ok = storeId != null && startsAt.isNotEmpty && endsAt.isNotEmpty;
+      final startsDate = _parseDateTimeInput(startsController.text);
+      final endsDate = _parseDateTimeInput(endsController.text);
+
+      if (startsDate == null || endsDate == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Select start and end date/time')),
+          );
+        }
+        return;
+      }
+
+      if (!endsDate.isAfter(startsDate)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('End date/time must be after start date/time')),
+          );
+        }
+        return;
+      }
+
+      final startsAt = _formatDateTimeForSupabase(startsDate);
+      final endsAt = _formatDateTimeForSupabase(endsDate);
+
+      var ok = storeId != null;
       var savedCount = 0;
       if (ok) {
         for (final entry in selected.entries) {
@@ -1788,7 +2008,9 @@ class _SellerDashboardState extends State<SellerDashboard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(type),
-                    Text('${discount['starts_at']} to ${discount['ends_at']}'),
+                    Text(
+                      '${_readableDateTime(discount['starts_at'])} → ${_readableDateTime(discount['ends_at'])}',
+                    ),
                   ],
                 ),
                 trailing: Switch(
@@ -1813,6 +2035,56 @@ class _SellerDashboardState extends State<SellerDashboard> {
             );
           }),
       ],
+    );
+  }
+
+  String _reviewerName(Map<String, dynamic> review) {
+    final account = review['account'];
+
+    if (account is Map) {
+      final first = account['firstname']?.toString().trim() ?? '';
+      final last = account['surname']?.toString().trim() ?? '';
+      final name = '$first $last'.trim();
+
+      if (name.isNotEmpty) return name;
+
+      final email = account['email']?.toString().trim() ?? '';
+      if (email.isNotEmpty) return email;
+    }
+
+    return 'Buyer';
+  }
+
+  String _reviewDate(dynamic value) {
+    final date = DateTime.tryParse(value?.toString() ?? '');
+    if (date == null) return 'Unknown time';
+
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  String _productNameFromReview(Map<String, dynamic> review) {
+    final product = review['product'];
+
+    if (product is Map) {
+      final name = product['name']?.toString().trim() ?? '';
+      if (name.isNotEmpty) return DatabaseService.displayProductName(name);
+    }
+
+    return 'Product';
+  }
+
+  Widget _reviewStars(dynamic value) {
+    final rating = int.tryParse(value?.toString() ?? '') ?? 0;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(5, (index) {
+        return Icon(
+          index < rating ? Icons.star : Icons.star_border,
+          size: 14,
+          color: Colors.amber,
+        );
+      }),
     );
   }
 
@@ -1861,7 +2133,7 @@ class _SellerDashboardState extends State<SellerDashboard> {
                       Text(type),
                       Text('Used ${coupon['times_used'] ?? 0} time(s)'),
                       if ((coupon['expires_at']?.toString() ?? '').isNotEmpty)
-                        Text('Expires ${coupon['expires_at']}'),
+                        Text('Expires ${_readableDateTime(coupon['expires_at'])}'),
                     ],
                   ),
                   trailing: Switch(
@@ -1886,6 +2158,249 @@ class _SellerDashboardState extends State<SellerDashboard> {
               );
             }),
         ],
+      ),
+    );
+  }
+
+  Widget _buildReviewCard(Map<String, dynamic> review) {
+  final comment = review['comment']?.toString().trim() ?? '';
+
+  return Padding(
+    padding: const EdgeInsets.only(left: 14, top: 8, bottom: 8),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '- ${_reviewerName(review)}',
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 3),
+        _reviewStars(review['rating']),
+        if (comment.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(comment),
+        ],
+      ],
+    ),
+  );
+}
+
+Widget _buildProductReviewsPanel() {
+  final grouped = <String, Map<String, List<Map<String, dynamic>>>>{};
+
+  for (final review in _productReviews) {
+    final time = _reviewDate(review['created_at']);
+    final productName = _productNameFromReview(review);
+
+    grouped.putIfAbsent(time, () => {});
+    grouped[time]!.putIfAbsent(productName, () => []);
+    grouped[time]![productName]!.add(review);
+  }
+
+  if (grouped.isEmpty) {
+    return const Card(
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Text('No product reviews yet'),
+      ),
+    );
+  }
+
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: grouped.entries.map((timeEntry) {
+      return Card(
+        margin: const EdgeInsets.only(bottom: 12),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                timeEntry.key,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+              const SizedBox(height: 10),
+              ...timeEntry.value.entries.map((productEntry) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '> ${productEntry.key}',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      ...productEntry.value.map(_buildReviewCard),
+                    ],
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+      );
+    }).toList(),
+  );
+}
+
+Widget _buildStoreReviewsPanel() {
+  final grouped = <String, List<Map<String, dynamic>>>{};
+
+  for (final review in _storeReviews) {
+    final time = _reviewDate(review['created_at']);
+    grouped.putIfAbsent(time, () => []);
+    grouped[time]!.add(review);
+  }
+
+  if (grouped.isEmpty) {
+    return const Card(
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Text('No store reviews yet'),
+      ),
+    );
+  }
+
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: grouped.entries.map((entry) {
+      return Card(
+        margin: const EdgeInsets.only(bottom: 12),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                entry.key,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+              const SizedBox(height: 10),
+              ...entry.value.map((review) {
+                final comment = review['comment']?.toString().trim() ?? '';
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _reviewerName(review),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 3),
+                      _reviewStars(review['rating']),
+                      if (comment.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(comment),
+                      ],
+                    ],
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+      );
+    }).toList(),
+  );
+}
+
+  Widget _buildReviewsTab() {
+    return RefreshIndicator(
+      onRefresh: _loadDashboard,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Text(
+            'Reviews',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Product reviews and store reviews from buyers',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          const Text(
+            'Product Reviews',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          ),
+          const SizedBox(height: 10),
+          _buildProductReviewsPanel(),
+
+          const SizedBox(height: 24),
+
+          const Text(
+            'Store Reviews',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          ),
+          const SizedBox(height: 10),
+          _buildStoreReviewsPanel(),
+        ],
+      ),
+    );
+  }
+
+  Widget _sellerNavItem(
+    int index,
+    IconData icon,
+    IconData selectedIcon,
+    String label,
+  ) {
+    final selected = _currentIndex == index;
+    final scheme = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => setState(() => _currentIndex = index),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          width: 86,
+          height: 52,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+          decoration: BoxDecoration(
+            color: selected ? scheme.primaryContainer : Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: selected ? scheme.primary : scheme.outline.withAlpha(70),
+            ),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                selected ? selectedIcon : icon,
+                color: selected ? scheme.primary : scheme.onSurfaceVariant,
+                size: 20,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: selected ? scheme.primary : scheme.onSurfaceVariant,
+                  fontSize: 10,
+                  height: 1.0,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1939,48 +2454,112 @@ class _SellerDashboardState extends State<SellerDashboard> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _currentIndex == 0
-              ? _buildOverviewTab()
-              : _currentIndex == 1
-                  ? _buildProductsTab()
-                  : _currentIndex == 2
-                      ? _buildOrdersTab()
-                      : _currentIndex == 3
-                          ? _buildSalesTab()
-                          : _buildCouponsTab(),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (index) {
-          setState(() => _currentIndex = index);
+        ? const Center(child: CircularProgressIndicator())
+        : _currentIndex == 0
+            ? _buildOverviewTab()
+            : _currentIndex == 1
+                ? _buildProductsTab()
+                : _currentIndex == 2
+                    ? _buildOrdersTab()
+                    : _currentIndex == 3
+                        ? _buildSalesTab()
+                        : _currentIndex == 4
+                            ? _buildCouponsTab()
+                            : _buildReviewsTab(),
+      bottomNavigationBar: LayoutBuilder(
+        builder: (context, constraints) {
+          final isMobile = MediaQuery.of(context).size.width < 700;
+
+          if (!isMobile) {
+            return NavigationBar(
+              selectedIndex: _currentIndex,
+              onDestinationSelected: (index) {
+                setState(() => _currentIndex = index);
+              },
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.dashboard_outlined),
+                  selectedIcon: Icon(Icons.dashboard),
+                  label: 'Overview',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.inventory_2_outlined),
+                  selectedIcon: Icon(Icons.inventory_2),
+                  label: 'Products',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.receipt_long_outlined),
+                  selectedIcon: Icon(Icons.receipt_long),
+                  label: 'Orders',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.bar_chart_outlined),
+                  selectedIcon: Icon(Icons.bar_chart),
+                  label: 'Sales',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.local_offer_outlined),
+                  selectedIcon: Icon(Icons.local_offer),
+                  label: 'Offers',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.reviews_outlined),
+                  selectedIcon: Icon(Icons.reviews),
+                  label: 'Reviews',
+                ),
+              ],
+            );
+          }
+
+          return SafeArea(
+            top: false,
+            child: SizedBox(
+              height: 64,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                children: [
+                  _sellerNavItem(
+                    0,
+                    Icons.dashboard_outlined,
+                    Icons.dashboard,
+                    'Overview',
+                  ),
+                  _sellerNavItem(
+                    1,
+                    Icons.inventory_2_outlined,
+                    Icons.inventory_2,
+                    'Products',
+                  ),
+                  _sellerNavItem(
+                    2,
+                    Icons.receipt_long_outlined,
+                    Icons.receipt_long,
+                    'Orders',
+                  ),
+                  _sellerNavItem(
+                    3,
+                    Icons.bar_chart_outlined,
+                    Icons.bar_chart,
+                    'Sales',
+                  ),
+                  _sellerNavItem(
+                    4,
+                    Icons.local_offer_outlined,
+                    Icons.local_offer,
+                    'Offers',
+                  ),
+                  _sellerNavItem(
+                    5,
+                    Icons.reviews_outlined,
+                    Icons.reviews,
+                    'Reviews',
+                  ),
+                ],
+              ),
+            ),
+          );
         },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard),
-            label: 'Overview',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.inventory_2_outlined),
-            selectedIcon: Icon(Icons.inventory_2),
-            label: 'Products',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.receipt_long_outlined),
-            selectedIcon: Icon(Icons.receipt_long),
-            label: 'Orders',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.bar_chart_outlined),
-            selectedIcon: Icon(Icons.bar_chart),
-            label: 'Sales',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.local_offer_outlined),
-            selectedIcon: Icon(Icons.local_offer),
-            label: 'Offers',
-          ),
-        ],
       ),
     );
   }

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
+import 'dart:async';
 import 'cart_model.dart';
 import 'services/database_service.dart';
 
@@ -15,10 +15,13 @@ class ProductPage extends StatefulWidget {
 
 class _ProductPageState extends State<ProductPage> {
   final _supabase = Supabase.instance.client;
+  RealtimeChannel? _priceHistoryChannel;
+  Timer? _discountCountdownTimer;
 
   Map<String, dynamic>? _product;
   List<Map<String, dynamic>> _reviews = [];
   List<Map<String, dynamic>> _priceHistory = [];
+  List<Map<String, dynamic>> _discountPriceHistory = [];
   bool _isLoading = true;
   bool _hasError = false;
   int _quantity = 1;
@@ -28,11 +31,84 @@ class _ProductPageState extends State<ProductPage> {
   void initState() {
     super.initState();
     _fetchProduct();
+    _subscribeToPriceHistory();
+    _startDiscountCountdownTimer();
+  }
+  
+  @override
+  void dispose() {
+    _discountCountdownTimer?.cancel();
+
+    final channel = _priceHistoryChannel;
+    if (channel != null) {
+      _supabase.removeChannel(channel);
+    }
+
+    super.dispose();
+  }
+
+  void _startDiscountCountdownTimer() {
+    _discountCountdownTimer?.cancel();
+
+    _discountCountdownTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) {
+        if (!mounted) return;
+
+        final product = _product;
+        if (product == null) return;
+
+        final discount = DatabaseService.activeProductDiscount(product);
+        if (discount == null) return;
+
+        setState(() {});
+      },
+    );
   }
 
   double _toDouble(dynamic value) {
     if (value is num) return value.toDouble();
     return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  String _readableDateTime(dynamic value) {
+    final date = DateTime.tryParse(value?.toString() ?? '');
+    if (date == null) return 'unknown time';
+
+    final local = date.toLocal();
+    final hour = local.hour > 12
+        ? local.hour - 12
+        : local.hour == 0
+            ? 12
+            : local.hour;
+
+    final minute = local.minute.toString().padLeft(2, '0');
+    final period = local.hour >= 12 ? 'PM' : 'AM';
+
+    return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')} $hour:$minute $period';
+  }
+
+  String _discountRemainingText(Map<String, dynamic> discount) {
+    final endsAt = DateTime.tryParse(discount['ends_at']?.toString() ?? '');
+
+    if (endsAt == null) return 'Until unknown';
+
+    final now = DateTime.now();
+    final remaining = endsAt.difference(now);
+
+    if (remaining.isNegative || remaining.inSeconds <= 0) {
+      return 'Ended';
+    }
+
+    if (remaining.inDays >= 1) {
+      return 'Until ${_readableDateTime(endsAt.toIso8601String())}, ${remaining.inDays} day${remaining.inDays == 1 ? '' : 's'} left';
+    }
+
+    final hours = remaining.inHours.toString().padLeft(2, '0');
+    final minutes = remaining.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = remaining.inSeconds.remainder(60).toString().padLeft(2, '0');
+
+    return 'Until ${_readableDateTime(endsAt.toIso8601String())}, $hours:$minutes:$seconds left';
   }
 
   int _toInt(dynamic value) {
@@ -78,6 +154,21 @@ class _ProductPageState extends State<ProductPage> {
     return DatabaseService.getProductImageUrl(path);
   }
 
+    Future<void> _refreshPriceHistory() async {
+    try {
+      final priceHistory =
+          await DatabaseService.getProductPriceHistory(widget.productId);
+
+      if (!mounted) return;
+
+      setState(() {
+        _priceHistory = priceHistory;
+      });
+    } catch (e) {
+      debugPrint('Error refreshing price history: $e');
+    }
+  }
+
   Future<void> _fetchProduct() async {
     try {
       final response = await _supabase
@@ -90,6 +181,8 @@ class _ProductPageState extends State<ProductPage> {
       final reviews = await DatabaseService.getProductReviews(widget.productId);
       final priceHistory =
           await DatabaseService.getProductPriceHistory(widget.productId);
+      final discountPriceHistory =
+          await DatabaseService.getProductDiscountPriceHistory(widget.productId);
 
       if (!mounted) return;
 
@@ -100,6 +193,7 @@ class _ProductPageState extends State<ProductPage> {
         }
         _reviews = reviews;
         _priceHistory = priceHistory;
+        _discountPriceHistory = discountPriceHistory;
         _hasError = response == null;
         _isLoading = false;
       });
@@ -113,26 +207,93 @@ class _ProductPageState extends State<ProductPage> {
       });
     }
   }
+    Future<void> _refreshDiscountPriceHistory() async {
+    try {
+      final discountPriceHistory =
+          await DatabaseService.getProductDiscountPriceHistory(widget.productId);
+
+      if (!mounted) return;
+
+      setState(() {
+        _discountPriceHistory = discountPriceHistory;
+      });
+    } catch (e) {
+      debugPrint('Error refreshing discount price history: $e');
+    }
+  }
+
+  void _subscribeToPriceHistory() {
+    if (_priceHistoryChannel != null) return;
+
+    _priceHistoryChannel = _supabase
+        .channel('product-price-history-${widget.productId}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'product_price_history',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'product_id',
+            value: widget.productId,
+          ),
+          callback: (_) => _refreshPriceHistory(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'product_discount',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'product_id',
+            value: widget.productId,
+          ),
+          callback: (_) => _fetchProduct(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'product_discount_price_history',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'product_id',
+            value: widget.productId,
+          ),
+          callback: (_) => _refreshDiscountPriceHistory(),
+        )
+        .subscribe();
+  }
 
   void _addToCart() {
     final product = _product;
     if (product == null) return;
+
     if (Supabase.instance.client.auth.currentUser == null) {
       Navigator.pushNamed(context, '/login');
       return;
     }
 
     final selectedStock = _availableStockForOption(product, _selectedVariant);
-    var added = 0;
     final discount = DatabaseService.activeProductDiscount(product);
-    final baseCartPrice = DatabaseService.discountedPrice(
-      _toDouble(product['price']),
+
+    final originalPrice = _selectedVariant == null
+        ? _toDouble(product['price'])
+        : _toDouble(_selectedVariant!['price']);
+
+    final cartPrice = DatabaseService.discountedPrice(
+      originalPrice,
       discount,
     );
+
+    var added = 0;
+
     for (var i = 0; i < _quantity; i++) {
       final didAdd = CartModel.addItem({
         ...product,
-        'price': baseCartPrice,
+        'price': cartPrice,
+        'original_price': originalPrice,
+        'discount_id': discount?['discount_id'],
+        'discount_type': discount?['discount_type'],
+        'discount_value': discount?['discount_value'],
         'max_quantity': selectedStock,
         if (_selectedVariant == null) ...{
           'selected_size': product['base_size_label'],
@@ -141,13 +302,10 @@ class _ProductPageState extends State<ProductPage> {
           'selected_variant_id': _selectedVariant!['variant_id'],
           'selected_size': _selectedVariant!['size_label'],
           'selected_sku': _selectedVariant!['sku'],
-          'price': DatabaseService.discountedPrice(
-            _toDouble(_selectedVariant!['price']),
-            discount,
-          ),
           'stock_quantity': _selectedVariant!['stock_quantity'],
         },
       });
+
       if (!didAdd) break;
       added++;
     }
@@ -234,48 +392,137 @@ class _ProductPageState extends State<ProductPage> {
   }
 
   Widget _buildPriceHistorySection() {
-    final baseHistory = _priceHistory
-        .where((row) => row['variant_id'] == null)
-        .toList()
+    final selectedVariantId = _selectedVariant?['variant_id']?.toString();
+
+    final relevantHistory = _priceHistory.where((row) {
+      final variantId = row['variant_id']?.toString();
+
+      if (selectedVariantId == null || selectedVariantId.isEmpty) {
+        return variantId == null || variantId.isEmpty || variantId == 'null';
+      }
+
+      return variantId == selectedVariantId;
+    }).toList()
       ..sort(
-        (a, b) => (DateTime.tryParse(a['recorded_at']?.toString() ?? '') ??
-                DateTime(0))
-            .compareTo(
-          DateTime.tryParse(b['recorded_at']?.toString() ?? '') ?? DateTime(0),
+        (a, b) {
+          final aDate = DateTime.tryParse(a['recorded_at']?.toString() ?? '') ??
+              DateTime(0);
+          final bDate = DateTime.tryParse(b['recorded_at']?.toString() ?? '') ??
+              DateTime(0);
+          return aDate.compareTo(bDate);
+        },
+      );
+
+    final rowsWithCurrent = [...relevantHistory];
+
+    final currentPrice = _selectedVariant == null
+        ? _toDouble(_product!['price'])
+        : _toDouble(_selectedVariant!['price']);
+
+    rowsWithCurrent.add({
+      'price': currentPrice,
+      'recorded_at': DateTime.now().toIso8601String(),
+      'variant_id': selectedVariantId,
+      'is_live': true,
+    });
+
+    final rows = rowsWithCurrent.length > 24
+        ? rowsWithCurrent.sublist(rowsWithCurrent.length - 24)
+        : rowsWithCurrent;
+
+    if (rows.isEmpty) {
+      return Text(
+        selectedVariantId == null
+            ? 'No base price history yet.'
+            : 'No price history for this size yet.',
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
         ),
       );
-    final rows = baseHistory.length > 24
-        ? baseHistory.sublist(baseHistory.length - 24)
-        : baseHistory;
-    if (rows.isEmpty) {
-      return const Text('No price history yet.');
     }
-    final prices = rows.map((row) => _toDouble(row['price'])).toList();
+
+    double graphPrice(Map<String, dynamic> row) {
+    return _toDouble(row['price']);
+  }
+
+    final prices = rows.map(graphPrice).toList();
     final low = prices.reduce((a, b) => a < b ? a : b);
     final high = prices.reduce((a, b) => a > b ? a : b);
+    final latest = prices.last;
+    final previous = prices.length >= 2 ? prices[prices.length - 2] : latest;
     final spread = high - low;
+    final scheme = Theme.of(context).colorScheme;
+
+    String readableTime(dynamic value) {
+      final date = DateTime.tryParse(value?.toString() ?? '');
+      if (date == null) return 'Unknown time';
+
+      final local = date.toLocal();
+      final hour = local.hour > 12
+          ? local.hour - 12
+          : local.hour == 0
+              ? 12
+              : local.hour;
+      final minute = local.minute.toString().padLeft(2, '0');
+      final period = local.hour >= 12 ? 'PM' : 'AM';
+
+      return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')} $hour:$minute $period';
+    }
+
+    Color barColor(double price) {
+      if (price <= low) return scheme.tertiary;
+      if (price >= high && high != low) return scheme.secondary;
+      return scheme.primary;
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            Chip(
+              avatar: const Icon(Icons.trending_down_outlined),
+              label: Text('Low ${DatabaseService.money(low)}'),
+            ),
+            Chip(
+              avatar: const Icon(Icons.trending_up_outlined),
+              label: Text('High ${DatabaseService.money(high)}'),
+            ),
+            Chip(
+              avatar: Icon(
+                latest <= previous
+                    ? Icons.arrow_downward
+                    : Icons.arrow_upward,
+              ),
+              label: Text('Latest ${DatabaseService.money(latest)}'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
         SizedBox(
-          height: 120,
+          height: 140,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: rows.map((row) {
-              final price = _toDouble(row['price']);
-              final height = spread <= 0 ? 56.0 : 28 + ((price - low) / spread) * 82;
+              final price = graphPrice(row);
+              final height =
+                  spread <= 0 ? 64.0 : 32 + ((price - low) / spread) * 92;
+
               return Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 2),
                   child: Tooltip(
-                    message: '${DatabaseService.money(price)}\n${row['recorded_at']}',
+                    message:
+                        '${DatabaseService.money(price)}\n${readableTime(row['recorded_at'])}',
                     child: Align(
                       alignment: Alignment.bottomCenter,
-                      child: Container(
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 220),
                         height: height,
                         decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary,
+                          color: barColor(price),
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ),
@@ -287,11 +534,145 @@ class _ProductPageState extends State<ProductPage> {
           ),
         ),
         const SizedBox(height: 8),
-        Row(
+        Text(
+          'Showing ${rows.length} recorded price${rows.length == 1 ? '' : 's'}'
+          '${selectedVariantId == null ? ' for base item' : ' for selected size'}',
+          style: TextStyle(
+            color: scheme.onSurfaceVariant,
+            fontSize: 12,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDiscountPriceHistorySection() {
+    final selectedVariantId = _selectedVariant?['variant_id']?.toString();
+
+    final relevantHistory = _discountPriceHistory.where((row) {
+      final variantId = row['variant_id']?.toString();
+
+      if (selectedVariantId == null || selectedVariantId.isEmpty) {
+        return variantId == null || variantId.isEmpty || variantId == 'null';
+      }
+
+      return variantId == selectedVariantId;
+    }).toList()
+      ..sort((a, b) {
+        final aDate = DateTime.tryParse(a['recorded_at']?.toString() ?? '') ??
+            DateTime(0);
+        final bDate = DateTime.tryParse(b['recorded_at']?.toString() ?? '') ??
+            DateTime(0);
+        return aDate.compareTo(bDate);
+      });
+
+    final rows = relevantHistory.length > 24
+        ? relevantHistory.sublist(relevantHistory.length - 24)
+        : relevantHistory;
+
+    if (rows.isEmpty) {
+      return Text(
+        'No sale price history yet.',
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      );
+    }
+
+    double graphPrice(Map<String, dynamic> row) {
+      return _toDouble(row['discounted_price']);
+    }
+
+    final prices = rows.map(graphPrice).toList();
+    final low = prices.reduce((a, b) => a < b ? a : b);
+    final high = prices.reduce((a, b) => a > b ? a : b);
+    final latest = prices.last;
+    final spread = high - low;
+    final scheme = Theme.of(context).colorScheme;
+
+    String readableTime(dynamic value) {
+      final date = DateTime.tryParse(value?.toString() ?? '');
+      if (date == null) return 'Unknown time';
+
+      final local = date.toLocal();
+      final hour = local.hour > 12
+          ? local.hour - 12
+          : local.hour == 0
+              ? 12
+              : local.hour;
+      final minute = local.minute.toString().padLeft(2, '0');
+      final period = local.hour >= 12 ? 'PM' : 'AM';
+
+      return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')} $hour:$minute $period';
+    }
+
+    Color barColor(double price) {
+      if (price <= low) return scheme.tertiary;
+      if (price >= high && high != low) return scheme.secondary;
+      return scheme.primary;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            Expanded(child: Text('Low: ${DatabaseService.money(low)}')),
-            Text('High: ${DatabaseService.money(high)}'),
+            Chip(
+              avatar: const Icon(Icons.local_offer_outlined),
+              label: Text('Sale low ${DatabaseService.money(low)}'),
+            ),
+            Chip(
+              avatar: const Icon(Icons.sell_outlined),
+              label: Text('Sale high ${DatabaseService.money(high)}'),
+            ),
+            Chip(
+              avatar: const Icon(Icons.history),
+              label: Text('Latest ${DatabaseService.money(latest)}'),
+            ),
           ],
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 120,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: rows.map((row) {
+              final price = graphPrice(row);
+              final height =
+                  spread <= 0 ? 64.0 : 32 + ((price - low) / spread) * 82;
+
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: Tooltip(
+                    message:
+                        '${DatabaseService.money(price)}\nBase: ${DatabaseService.money(row['base_price'])}\n${readableTime(row['recorded_at'])}',
+                    child: Align(
+                      alignment: Alignment.bottomCenter,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 220),
+                        height: height,
+                        decoration: BoxDecoration(
+                          color: barColor(price),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Showing ${rows.length} recorded sale price${rows.length == 1 ? '' : 's'}',
+          style: TextStyle(
+            color: scheme.onSurfaceVariant,
+            fontSize: 12,
+          ),
         ),
       ],
     );
@@ -471,11 +852,22 @@ class _ProductPageState extends State<ProductPage> {
                           if (activeDiscount != null) ...[
                             const SizedBox(height: 4),
                             Text(
-                              activeDiscount['discount_type']?.toString() ==
-                                      'amount'
+                              activeDiscount['discount_type']?.toString() == 'amount'
                                   ? '${DatabaseService.money(activeDiscount['discount_value'])} scheduled shop discount'
                                   : '${activeDiscount['discount_value']}% scheduled shop discount',
-                              style: const TextStyle(color: Colors.green),
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.secondary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _discountRemainingText(activeDiscount),
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
                           ],
                           const SizedBox(height: 12),
@@ -641,11 +1033,18 @@ class _ProductPageState extends State<ProductPage> {
             ],
             const SizedBox(height: 28),
             const Text(
-              'Price History',
+              'Base Price History',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             _buildPriceHistorySection(),
+            const SizedBox(height: 28),
+            const Text(
+              'Sale Price History',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            _buildDiscountPriceHistorySection(),
             const SizedBox(height: 28),
             const Text(
               'Reviews',
