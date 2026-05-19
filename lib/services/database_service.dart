@@ -1282,31 +1282,117 @@ class DatabaseService {
       final accountId = await getCurrentAccountId();
       if (accountId == null) return [];
 
-      var response = await _supabase
+      final response = await _supabase
           .from('orders')
           .select(
-            '*, address(*), order_items(*, product(name, main_image_url), product_variant(size_label), product_review(review_id, rating, comment))',
+            '''
+            *,
+            address(*),
+            rider:account!orders_rider_account_id_fkey(
+              account_id,
+              firstname,
+              surname,
+              phone_number,
+              email,
+              profile_image_url
+            ),
+            order_items(
+              *,
+              product(name, main_image_url),
+              product_variant(size_label)
+            )
+            ''',
           )
           .eq('buyer_account_id', accountId)
           .order('order_date', ascending: false);
 
-      return List<Map<String, dynamic>>.from(response);
-    } catch (e) {
-      try {
-        final accountId = await getCurrentAccountId();
-        if (accountId == null) return [];
-        final response = await _supabase
-            .from('orders')
-            .select(
-              '*, address(*), order_items(*, product(name, main_image_url), product_variant(size_label))',
-            )
-            .eq('buyer_account_id', accountId)
-            .order('order_date', ascending: false);
-        return List<Map<String, dynamic>>.from(response);
-      } catch (fallbackError) {
-        _logDbError('Failed to fetch buyer orders', fallbackError);
-        return [];
+      final orders = List<Map<String, dynamic>>.from(response);
+
+      final productIds = <String>{};
+      final riderIds = <String>{};
+
+      for (final order in orders) {
+        final riderId = order['rider_account_id']?.toString();
+        if (riderId != null && riderId.isNotEmpty) {
+          riderIds.add(riderId);
+        }
+
+        final items = order['order_items'];
+        if (items is List) {
+          for (final item in items.whereType<Map>()) {
+            final productId = item['product_id']?.toString();
+            if (productId != null && productId.isNotEmpty) {
+              productIds.add(productId);
+            }
+          }
+        }
       }
+
+      final productReviewsByProductId = <String, Map<String, dynamic>>{};
+      if (productIds.isNotEmpty) {
+        final productReviews = await _supabase
+            .from('product_review')
+            .select('review_id, product_id, rating, comment')
+            .eq('buyer_account_id', accountId)
+            .inFilter('product_id', productIds.toList());
+
+        for (final review in List<Map<String, dynamic>>.from(productReviews)) {
+          final productId = review['product_id']?.toString();
+          if (productId != null && productId.isNotEmpty) {
+            productReviewsByProductId[productId] = review;
+          }
+        }
+      }
+
+      final riderReviewsByRiderId = <String, Map<String, dynamic>>{};
+      if (riderIds.isNotEmpty) {
+        final riderReviews = await _supabase
+            .from('rider_review')
+            .select('review_id, rider_account_id, rating, comment')
+            .eq('buyer_account_id', accountId)
+            .inFilter('rider_account_id', riderIds.toList());
+
+        for (final review in List<Map<String, dynamic>>.from(riderReviews)) {
+          final riderId = review['rider_account_id']?.toString();
+          if (riderId != null && riderId.isNotEmpty) {
+            riderReviewsByRiderId[riderId] = review;
+          }
+        }
+      }
+
+      return orders.map((order) {
+        final orderCopy = Map<String, dynamic>.from(order);
+
+        final riderId = orderCopy['rider_account_id']?.toString();
+        if (riderId != null && riderId.isNotEmpty) {
+          final review = riderReviewsByRiderId[riderId];
+          if (review != null) {
+            orderCopy['rider_review'] = [review];
+          }
+        }
+
+        final items = orderCopy['order_items'];
+        if (items is List) {
+          orderCopy['order_items'] = items.whereType<Map>().map((item) {
+            final itemCopy = Map<String, dynamic>.from(item);
+            final productId = itemCopy['product_id']?.toString();
+
+            if (productId != null && productId.isNotEmpty) {
+              final review = productReviewsByProductId[productId];
+              if (review != null) {
+                itemCopy['product_review'] = [review];
+              }
+            }
+
+            return itemCopy;
+          }).toList();
+        }
+
+        return orderCopy;
+      }).toList();
+    } catch (e) {
+      _logDbError('Failed to fetch buyer orders', e);
+      return [];
     }
   }
 
@@ -1477,9 +1563,7 @@ class DatabaseService {
             created_at,
             account:product_review_buyer_account_id_fkey (
               firstname,
-              surname,
-              email,
-              profile_image_url
+              surname
             )
           ''')
           .eq('product_id', productId)
@@ -1525,9 +1609,7 @@ class DatabaseService {
             ),
             account:product_review_buyer_account_id_fkey (
               firstname,
-              surname,
-              email,
-              profile_image_url
+              surname
             )
           ''')
           .inFilter('product_id', productIds)
@@ -1556,7 +1638,8 @@ class DatabaseService {
         'buyer_account_id': accountId,
         'rating': rating,
         'comment': _blankToNull(comment),
-      }, onConflict: 'order_item_id');
+      }, onConflict: 'buyer_account_id,product_id');
+
       return true;
     } catch (e) {
       _logDbError('Failed to save product review', e);
@@ -2063,7 +2146,7 @@ class DatabaseService {
     final normalized = fileName.contains('/') ? fileName : 'main-picture/$fileName';
     return _supabase.storage.from('product-images').getPublicUrl(normalized);
   }
-
+  
   static Future<List<Map<String, dynamic>>> searchProducts({
     String query = '',
     String? category,
@@ -2122,6 +2205,91 @@ class DatabaseService {
     final value = fileName.trim();
     if (value.startsWith('http')) return value;
     return _supabase.storage.from('profile-images').getPublicUrl(value);
+  }
+
+  static Future<Map<String, dynamic>?> getRiderProfile(String riderAccountId) async {
+    try {
+      final rider = await _supabase
+          .from('account')
+          .select(
+            'account_id, firstname, surname, email, phone_number, profile_image_url',
+          )
+          .eq('account_id', riderAccountId)
+          .maybeSingle();
+
+      if (rider == null) return null;
+
+      final deliveredOrders = await _supabase
+          .from('orders')
+          .select('order_id')
+          .eq('rider_account_id', riderAccountId)
+          .eq('order_status', 'Delivered');
+
+      final reviews = await _supabase
+          .from('rider_review')
+          .select(
+            '''
+            review_id,
+            rating,
+            comment,
+            created_at,
+            updated_at,
+            buyer:account!rider_review_buyer_account_id_fkey(
+              firstname,
+              surname
+            )
+            ''',
+          )
+          .eq('rider_account_id', riderAccountId)
+          .order('updated_at', ascending: false);
+
+      final reviewList = List<Map<String, dynamic>>.from(reviews);
+
+      final averageRating = reviewList.isEmpty
+          ? 0.0
+          : reviewList.fold<double>(
+                0,
+                (sum, review) => sum + _toDouble(review['rating']),
+              ) /
+              reviewList.length;
+
+      return {
+        ...Map<String, dynamic>.from(rider),
+        'successful_deliveries': deliveredOrders.length,
+        'average_rating': averageRating,
+        'review_count': reviewList.length,
+        'reviews': reviewList,
+      };
+    } catch (e) {
+      _logDbError('Failed to fetch rider profile', e);
+      return null;
+    }
+  }
+
+  static Future<bool> saveRiderReview({
+    required String orderId,
+    required String riderAccountId,
+    required int rating,
+    String? comment,
+  }) async {
+    try {
+      final buyerAccountId = await getCurrentAccountId();
+      if (buyerAccountId == null) return false;
+
+      await _supabase.from('rider_review').upsert({
+        'order_id': orderId,
+        'rider_account_id': riderAccountId,
+        'buyer_account_id': buyerAccountId,
+        'rating': rating,
+        'comment': _blankToNull(comment),
+        'updated_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'buyer_account_id,rider_account_id');
+
+      return true;
+    } catch (e) {
+      _logDbError('Failed to save rider review', e);
+      return false;
+    }
   }
 
   static Future<String?> uploadProfileImage({

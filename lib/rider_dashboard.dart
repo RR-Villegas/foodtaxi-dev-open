@@ -22,6 +22,7 @@ class _RiderDashboardState extends State<RiderDashboard> {
   List<Map<String, dynamic>> _orders = [];
   List<Map<String, dynamic>> _historyOrders = [];
   Map<String, dynamic>? _account;
+  Map<String, dynamic>? _riderProfile;
   bool _isLoading = true;
   int _currentIndex = 0;
   String _overviewRange = 'Day';
@@ -70,16 +71,113 @@ class _RiderDashboardState extends State<RiderDashboard> {
 
   Future<void> _loadOrders() async {
     final account = await DatabaseService.getCurrentAccount();
+    final accountId = account?['account_id']?.toString();
+
     final orders = await DatabaseService.getAvailableDeliveryOrders();
     final historyOrders = await DatabaseService.getCurrentRiderOrders();
+    final riderProfile = accountId == null
+        ? null
+        : await DatabaseService.getRiderProfile(accountId);
+
     if (!mounted) return;
+
     setState(() {
       _account = account;
+      _riderProfile = riderProfile;
       _orders = orders;
       _historyOrders = historyOrders;
       _isLoading = false;
     });
-    _subscribeToOrders(account?['account_id']?.toString());
+
+    _subscribeToOrders(accountId);
+  }
+
+  String _ratingText(double rating) {
+    if (rating % 1 == 0) {
+      return rating.toInt().toString();
+    }
+
+    return rating.toStringAsFixed(1);
+  }
+
+  double _riderAverageRating() {
+    final value = _riderProfile?['average_rating'];
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  int _riderReviewCount() {
+    final value = _riderProfile?['review_count'];
+    if (value is int) return value;
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  Widget _stars(double rating) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(5, (index) {
+        final value = index + 1;
+        final filled = rating >= value;
+        final half = !filled && rating > index && rating < value;
+
+        return Icon(
+          filled
+              ? Icons.star
+              : half
+                  ? Icons.star_half
+                  : Icons.star_border,
+          size: 18,
+          color: Colors.amber,
+        );
+      }),
+    );
+  }
+
+  Widget _ratingSummaryCard() {
+    final rating = _riderAverageRating();
+    final count = _riderReviewCount();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: Colors.amber.withAlpha(40),
+              child: const Icon(Icons.star, color: Colors.amber),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Your Rider Rating',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      _stars(rating),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${_ratingText(rating)} / 5',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '$count review${count == 1 ? '' : 's'} from buyers',
+                    style: const TextStyle(color: Colors.black54),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _subscribeToOrders(String? accountId) {
@@ -595,19 +693,25 @@ class _RiderDashboardState extends State<RiderDashboard> {
 
   Widget _buildOverviewTab() {
     final deliveredOrders = _historyOrders.where(_isDelivered).toList();
+
     final inTransitOrders =
         _orders.where((order) => _status(order) == 'In Transit').toList();
+
     final readyOrders =
         _orders.where((order) => _status(order) == 'Ready for Pickup').toList();
+
     final earnings = deliveredOrders.fold<double>(
       0,
       (sum, order) => sum + _number(order['rider_fee'] ?? order['shipping_fee']),
     );
+
     final periodRows = _periodStats(
       orders: _historyOrders,
       range: _overviewRange,
     );
+
     final nearestReady = readyOrders.isEmpty ? null : readyOrders.first;
+
     final nextActionText = inTransitOrders.isNotEmpty
         ? 'Finish ${inTransitOrders.length} active delivery${inTransitOrders.length == 1 ? '' : 'ies'}.'
         : readyOrders.isNotEmpty
@@ -625,10 +729,11 @@ class _RiderDashboardState extends State<RiderDashboard> {
           ),
           const SizedBox(height: 4),
           const Text(
-            'Delivery queue, completed work, and earnings history',
+            'Delivery queue, completed work, earnings, and buyer ratings',
             style: TextStyle(color: Colors.black54),
           ),
           const SizedBox(height: 16),
+
           Row(
             children: [
               _metricCard(
@@ -646,7 +751,9 @@ class _RiderDashboardState extends State<RiderDashboard> {
               ),
             ],
           ),
+
           const SizedBox(height: 10),
+
           Row(
             children: [
               _metricCard(
@@ -664,7 +771,12 @@ class _RiderDashboardState extends State<RiderDashboard> {
               ),
             ],
           ),
+
+          const SizedBox(height: 16),
+          _ratingSummaryCard(),
+
           const SizedBox(height: 24),
+
           Card(
             child: Padding(
               padding: const EdgeInsets.all(14),
@@ -677,6 +789,7 @@ class _RiderDashboardState extends State<RiderDashboard> {
                   ),
                   const SizedBox(height: 6),
                   Text(nextActionText),
+
                   if (nearestReady != null) ...[
                     const SizedBox(height: 8),
                     Text(
@@ -686,7 +799,9 @@ class _RiderDashboardState extends State<RiderDashboard> {
                       style: const TextStyle(color: Colors.black54),
                     ),
                   ],
+
                   const SizedBox(height: 12),
+
                   Row(
                     children: [
                       Expanded(
@@ -710,7 +825,9 @@ class _RiderDashboardState extends State<RiderDashboard> {
               ),
             ),
           ),
+
           const SizedBox(height: 16),
+
           const Text(
             'Delivery History',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
@@ -718,6 +835,7 @@ class _RiderDashboardState extends State<RiderDashboard> {
           const SizedBox(height: 10),
           _periodSelector(),
           const SizedBox(height: 10),
+
           if (periodRows.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 32),
@@ -742,8 +860,63 @@ class _RiderDashboardState extends State<RiderDashboard> {
                 ),
               ),
             ),
+
+          const SizedBox(height: 20),
+
+          const Text(
+            'Recent Rider Reviews',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          ),
+          const SizedBox(height: 10),
+          _recentRiderReviews(),
+
+          const SizedBox(height: 24),
         ],
       ),
+    );
+  }
+
+  Widget _recentRiderReviews() {
+    final reviews = _riderProfile?['reviews'];
+
+    if (reviews is! List || reviews.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Center(child: Text('No rider reviews yet')),
+      );
+    }
+
+    return Column(
+      children: reviews.take(3).map((review) {
+        final data = review is Map ? review : <String, dynamic>{};
+        final account = data['buyer'];
+        final buyerName = account is Map
+            ? '${account['firstname'] ?? ''} ${account['surname'] ?? ''}'.trim()
+            : 'Buyer';
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 10),
+          child: ListTile(
+            leading: const CircleAvatar(
+              child: Icon(Icons.person),
+            ),
+            title: Text(buyerName.isEmpty ? 'Buyer' : buyerName),
+            subtitle: Text(
+              data['comment']?.toString().trim().isNotEmpty == true
+                  ? data['comment'].toString()
+                  : 'No comment',
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.star, color: Colors.amber, size: 18),
+                const SizedBox(width: 2),
+                Text('${data['rating'] ?? 0}'),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 

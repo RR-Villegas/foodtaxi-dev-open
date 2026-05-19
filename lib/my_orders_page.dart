@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'services/database_service.dart';
+import 'rider_profile_page.dart';
 
 class MyOrdersPage extends StatefulWidget {
   const MyOrdersPage({super.key});
@@ -195,14 +196,123 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
     if (ok) _loadOrders();
   }
 
-  Map<String, dynamic>? _existingReview(Map item) {
-    final review = item['product_review'];
+  Map<String, dynamic>? _existingRiderReview(Map<String, dynamic> order) {
+    final review = order['rider_review'];
 
     if (review is List && review.isNotEmpty && review.first is Map) {
       return Map<String, dynamic>.from(review.first as Map);
     }
 
     if (review is Map) return Map<String, dynamic>.from(review);
+
+    return null;
+  }
+
+  Future<void> _reviewRider(Map<String, dynamic> order) async {
+    final rider = order['rider'];
+    if (rider is! Map) return;
+
+    final riderId = rider['account_id']?.toString();
+    final orderId = order['order_id']?.toString();
+    if (riderId == null || orderId == null) return;
+
+    var rating = 5;
+    final existing = _existingRiderReview(order);
+
+    if (existing?['rating'] is num) {
+      rating = (existing!['rating'] as num).toInt();
+    }
+
+    final commentController = TextEditingController(
+      text: existing?['comment']?.toString() ?? '',
+    );
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Review Rider'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(5, (index) {
+                  final value = index + 1;
+
+                  return IconButton(
+                    onPressed: () => setDialogState(() => rating = value),
+                    icon: Icon(
+                      value <= rating ? Icons.star : Icons.star_border,
+                      color: Colors.amber,
+                    ),
+                  );
+                }),
+              ),
+              TextField(
+                controller: commentController,
+                decoration: const InputDecoration(
+                  labelText: 'Comment',
+                  alignLabelWithHint: true,
+                ),
+                minLines: 2,
+                maxLines: 4,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (saved != true) {
+      commentController.dispose();
+      return;
+    }
+
+    final ok = await DatabaseService.saveRiderReview(
+      orderId: orderId,
+      riderAccountId: riderId,
+      rating: rating,
+      comment: commentController.text,
+    );
+
+    commentController.dispose();
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(ok ? 'Rider review saved' : 'Rider review could not be saved'),
+      ),
+    );
+
+    if (ok) _loadOrders();
+  }
+
+  Map<String, dynamic>? _existingReview(Map item) {
+    final review = item['product_review'];
+
+    if (review is List && review.isNotEmpty) {
+      for (final entry in review) {
+        if (entry is Map) {
+          return Map<String, dynamic>.from(entry);
+        }
+      }
+    }
+
+    if (review is Map) {
+      return Map<String, dynamic>.from(review);
+    }
 
     return null;
   }
@@ -346,6 +456,97 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
     );
   }
 
+  Widget _riderTile(Map<String, dynamic> order) {
+    final scheme = Theme.of(context).colorScheme;
+    final rider = order['rider'];
+
+    if (rider is! Map) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest.withAlpha(90),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.delivery_dining, color: scheme.onSurfaceVariant),
+            const SizedBox(width: 10),
+            Text(
+              'No rider assigned yet',
+              style: TextStyle(color: scheme.onSurfaceVariant),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final riderId = rider['account_id']?.toString();
+    final first = rider['firstname']?.toString() ?? '';
+    final last = rider['surname']?.toString() ?? '';
+    final name = '$first $last'.trim().isEmpty ? 'Rider' : '$first $last'.trim();
+    final imagePath = rider['profile_image_url']?.toString() ?? '';
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: riderId == null || riderId.isEmpty
+          ? null
+          : () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => RiderProfilePage(
+                    riderAccountId: riderId,
+                  ),
+                ),
+              ),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: scheme.primaryContainer.withAlpha(90),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: scheme.primary.withAlpha(70)),
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundImage: imagePath.isNotEmpty
+                  ? NetworkImage(DatabaseService.getProfileImageUrl(imagePath))
+                  : null,
+              child: imagePath.isEmpty ? const Icon(Icons.delivery_dining) : null,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: scheme.onSurface,
+                    ),
+                  ),
+                  Text(
+                    riderId == null || riderId.isEmpty
+                        ? 'Rider profile unavailable'
+                        : 'Tap to view rider profile',
+                    style: TextStyle(
+                      color: scheme.onSurfaceVariant,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (riderId != null && riderId.isNotEmpty)
+              Icon(Icons.chevron_right, color: scheme.primary),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _orderCard(Map<String, dynamic> order) {
     final scheme = Theme.of(context).colorScheme;
     final items = order['order_items'];
@@ -384,6 +585,7 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
                 ],
               ),
               const SizedBox(height: 8),
+
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -401,7 +603,32 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
                   ),
                 ],
               ),
+
+              const SizedBox(height: 10),
+              _riderTile(order),
+
+              if (status == 'Delivered' && order['rider'] is Map) ...[
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _reviewRider(order),
+                    icon: Icon(
+                      _existingRiderReview(order) == null
+                          ? Icons.star_border
+                          : Icons.edit,
+                    ),
+                    label: Text(
+                      _existingRiderReview(order) == null
+                          ? 'Review Rider'
+                          : 'Edit Rider Review',
+                    ),
+                  ),
+                ),
+              ],
+
               const Divider(),
+
               ...orderItems.map((item) {
                 final product = item['product'];
                 final variant = item['product_variant'];
@@ -439,7 +666,9 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
                       : null,
                 );
               }),
+
               const Divider(),
+
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -457,6 +686,7 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
                 ],
               ),
               const SizedBox(height: 10),
+
               Row(
                 children: [
                   Expanded(child: _statusFlow(status)),

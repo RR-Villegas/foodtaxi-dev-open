@@ -566,7 +566,7 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  "for Specialty Foods",
+                  "for Anything Food-related",
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: subtitleColor,
@@ -579,7 +579,7 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Text(
-                    "Shop local food, specialty goods, and pantry finds delivered from nearby sellers.",
+                    "Shop ingredients and foods delivered from sellers in every angle, to your location.",
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: bodyColor,

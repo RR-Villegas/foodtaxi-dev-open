@@ -80,40 +80,29 @@ class _AdminDashboardState extends State<AdminDashboard> {
   List<Map<String, dynamic>> _productReports = [];
   Map<String, dynamic>? _account;
   bool _isLoading = false;
-  final _salesSearchController = TextEditingController();
   final _reportSearchController = TextEditingController();
-  String _salesStatusFilter = 'All';
-  String _salesDateFilter = 'All';
+  String _salesGroupFilter = 'Week';
   String _commissionRange = 'Days';
   String _sellerApplicationFilter = 'Pending Review';
   String _riderApplicationFilter = 'Pending Review';
   String _reportTypeFilter = 'All';
 
-  static const List<String> _orderStatusFilters = [
-    'All',
-    'Processing',
-    'Ready for Pickup',
-    'In Transit',
-    'Delivered',
-    'Cancelled',
-  ];
   static const List<String> _applicationStatusFilters = [
     'Pending Review',
     'Approved',
     'Rejected',
     'All',
   ];
-  static const List<String> _salesDateFilters = [
-    'All',
-    'Today',
-    '7 Days',
-    '30 Days',
-  ];
   static const List<String> _commissionRanges = ['Days', 'Weeks', 'Months'];
   static const List<String> _reportTypeFilters = [
     'All',
     'Store',
     'Product',
+  ];
+  static const List<String> _salesGroupFilters = [
+    'Week',
+    'Month',
+    'Year',
   ];
 
   List<Map<String, dynamic>> get _successfulOrders => _orders
@@ -131,64 +120,223 @@ class _AdminDashboardState extends State<AdminDashboard> {
   double get _avgCommission =>
       _totalOrders == 0 ? 0 : _totalCommission / _totalOrders;
 
-  List<Map<String, dynamic>> get _filteredSalesOrders {
-    final query = _salesSearchController.text.trim().toLowerCase();
-    final now = DateTime.now();
-
-    return _orders.where((order) {
-      final status = order['order_status']?.toString() ?? 'Processing';
-      if (_salesStatusFilter != 'All' && status != _salesStatusFilter) {
-        return false;
-      }
-
-      final date = DateTime.tryParse(order['order_date']?.toString() ?? '');
-      if (_salesDateFilter != 'All') {
-        if (date == null) return false;
-        final days = DateTime(now.year, now.month, now.day)
-            .difference(DateTime(date.year, date.month, date.day))
-            .inDays;
-        if (_salesDateFilter == 'Today' && days != 0) return false;
-        if (_salesDateFilter == '7 Days' && (days < 0 || days > 6)) {
-          return false;
-        }
-        if (_salesDateFilter == '30 Days' && (days < 0 || days > 29)) {
-          return false;
-        }
-      }
-
-      if (query.isEmpty) return true;
-      final buyer = order['account'];
-      final buyerText = buyer is Map
-          ? '${buyer['firstname'] ?? ''} ${buyer['surname'] ?? ''} ${buyer['email'] ?? ''}'
-          : '';
-      final haystack = [
-        order['order_id'],
-        order['buyer_account_id'],
-        order['seller_account_id'],
-        buyerText,
-        status,
-      ].map((value) => value?.toString().toLowerCase() ?? '').join(' ');
-      return haystack.contains(query);
-    }).toList();
-  }
-
+  
   @override
   void dispose() {
-    _salesSearchController.dispose();
     _reportSearchController.dispose();
     super.dispose();
   }
 
   @override
-void initState() {
-  super.initState();
-  _loadAdminOrders();
-  _loadSellerApplications();
-  _loadRiderApplications();
-  _loadCoupons();
-  _loadReports();
-  _loadProfile();
-}
+  void initState() {
+    super.initState();
+    _loadAdminOrders();
+    _loadSellerApplications();
+    _loadRiderApplications();
+    _loadCoupons();
+    _loadReports();
+    _loadProfile();
+  }
+
+  void _setAdminTab(int index) {
+    setState(() => _currentIndex = index);
+
+    if (index == 2) {
+      _loadSellerApplications();
+    } else if (index == 3) {
+      _loadRiderApplications();
+    } else if (index == 4) {
+      _loadCoupons();
+    } else if (index == 5) {
+      _loadReports();
+    } else {
+      _loadAdminOrders();
+    }
+  }
+
+  Widget _adminNavItem(
+    int index,
+    IconData icon,
+    IconData selectedIcon,
+    String label,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
+    final selected = _currentIndex == index;
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => _setAdminTab(index),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          width: 86,
+          height: 52,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+          decoration: BoxDecoration(
+            color: selected ? scheme.primaryContainer : Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: selected ? scheme.primary : scheme.outline.withAlpha(70),
+            ),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                selected ? selectedIcon : icon,
+                color: selected ? scheme.primary : scheme.onSurfaceVariant,
+                size: 20,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: selected ? scheme.primary : scheme.onSurfaceVariant,
+                  fontSize: 10,
+                  height: 1.0,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _dashboardActionCard({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: color.withAlpha(20),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withAlpha(70)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: color, size: 28),
+            const SizedBox(height: 10),
+            Text(
+              title,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Map<String, dynamic>> _groupedAdminGains() {
+    final grouped = <String, Map<String, dynamic>>{};
+
+    for (final order in _successfulOrders) {
+      final date = DateTime.tryParse(order['order_date']?.toString() ?? '');
+      if (date == null) continue;
+
+      final key = _salesPeriodKey(date);
+      final label = _salesPeriodLabel(date);
+
+      final row = grouped.putIfAbsent(
+        key,
+        () => {
+          'key': key,
+          'label': label,
+          'date': date,
+          'orders': 0,
+          'gross': 0.0,
+          'commission': 0.0,
+          'ordersList': <Map<String, dynamic>>[],
+        },
+      );
+
+      row['orders'] = (row['orders'] as int) + 1;
+      row['gross'] = (row['gross'] as double) + _toDouble(order['total_amount']);
+      row['commission'] =
+          (row['commission'] as double) + _toDouble(order['admin_commission']);
+
+      (row['ordersList'] as List<Map<String, dynamic>>).add(order);
+
+      final currentDate = row['date'] as DateTime;
+      if (date.isAfter(currentDate)) {
+        row['date'] = date;
+      }
+    }
+
+    final rows = grouped.values.toList()
+      ..sort((a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime));
+
+    return rows;
+  }
+
+  String _salesPeriodKey(DateTime date) {
+    if (_salesGroupFilter == 'Year') {
+      return '${date.year}';
+    }
+
+    if (_salesGroupFilter == 'Month') {
+      return '${date.year}-${date.month.toString().padLeft(2, '0')}';
+    }
+
+    final weekStart = DateTime(date.year, date.month, date.day)
+        .subtract(Duration(days: date.weekday - 1));
+
+    return '${weekStart.year}-${weekStart.month.toString().padLeft(2, '0')}-${weekStart.day.toString().padLeft(2, '0')}';
+  }
+
+  String _salesPeriodLabel(DateTime date) {
+    if (_salesGroupFilter == 'Year') {
+      return '${date.year}';
+    }
+
+    if (_salesGroupFilter == 'Month') {
+      return '${_monthName(date.month)} ${date.year}';
+    }
+
+    final weekStart = DateTime(date.year, date.month, date.day)
+        .subtract(Duration(days: date.weekday - 1));
+    final weekEnd = weekStart.add(const Duration(days: 6));
+
+    return '${_formatDate(weekStart)} - ${_formatDate(weekEnd)}';
+  }
+
+  String _monthName(int month) {
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+
+    return months[(month - 1).clamp(0, 11)];
+  }
 
   Future<void> _loadProfile() async {
     final account = await DatabaseService.getCurrentAccount();
@@ -903,71 +1051,213 @@ void initState() {
   }
 
   Widget _buildDashboardTab() {
-    return SingleChildScrollView(
-      child: Column(
+    final cancelledOrders = _orders.where((order) {
+      final status = order['order_status']?.toString().toLowerCase() ?? '';
+      return status == 'cancelled' || status == 'canceled';
+    }).length;
+
+    final pendingSellers = _sellerApplications
+        .where((app) => app['status']?.toString() == 'Pending Review')
+        .length;
+
+    final pendingRiders = _riderApplications
+        .where((app) => app['status']?.toString() == 'Pending Review')
+        .length;
+
+    final activeCoupons =
+        _coupons.where((coupon) => coupon['is_active'] != false).length;
+
+    final pendingReports = [
+      ..._storeReports,
+      ..._productReports,
+    ].where((report) {
+      final status = report['status']?.toString().toLowerCase() ?? 'pending';
+      return status == 'pending' || status == 'open';
+    }).length;
+
+    final recentOrders = [..._orders]
+      ..sort((a, b) {
+        final aDate = a['order_date']?.toString() ?? '';
+        final bDate = b['order_date']?.toString() ?? '';
+        return bDate.compareTo(aDate);
+      });
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        await _loadAdminOrders();
+        await _loadSellerApplications();
+        await _loadRiderApplications();
+        await _loadCoupons();
+        await _loadReports();
+      },
+      child: ListView(
+        padding: const EdgeInsets.all(16),
         children: [
-          _heroSection(),
-          const SizedBox(height: 20),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _metricCard(
-                    'Admin Commission',
-                    '₱${_totalCommission.toStringAsFixed(0)}',
-                    Icons.trending_up,
-                    Colors.green,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _metricCard(
-                    'Total Orders',
-                    '$_totalOrders',
-                    Icons.shopping_cart,
-                    Colors.blue,
-                  ),
-                ),
-              ],
+          Text(
+            'Admin Overview',
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Business health, commissions, applications, and reports',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
+
           const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: _metricCard(
-              'Avg Commission',
-              '₱${_avgCommission.toStringAsFixed(0)}',
-              Icons.attach_money,
-              Colors.orange,
-            ),
+
+          Row(
+            children: [
+              Expanded(
+                child: _metricCard(
+                  'Commission',
+                  '₱${_totalCommission.toStringAsFixed(2)}',
+                  Icons.trending_up,
+                  Colors.green,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _metricCard(
+                  'Orders',
+                  '$_totalOrders',
+                  Icons.receipt_long,
+                  Colors.blue,
+                ),
+              ),
+            ],
           ),
+
+          const SizedBox(height: 10),
+
+          Row(
+            children: [
+              Expanded(
+                child: _metricCard(
+                  'Avg Gain',
+                  '₱${_avgCommission.toStringAsFixed(2)}',
+                  Icons.attach_money,
+                  Colors.orange,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _metricCard(
+                  'Cancelled',
+                  '$cancelledOrders',
+                  Icons.cancel_outlined,
+                  Colors.red,
+                ),
+              ),
+            ],
+          ),
+
           const SizedBox(height: 20),
-          _sectionTitle('Commission Sales'),
+
+          _sectionTitle('Needs Attention'),
+
+          Row(
+            children: [
+              Expanded(
+                child: _dashboardActionCard(
+                  title: 'Seller Apps',
+                  value: '$pendingSellers pending',
+                  icon: Icons.storefront_outlined,
+                  color: Colors.purple,
+                  onTap: () => _setAdminTab(2),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _dashboardActionCard(
+                  title: 'Rider Apps',
+                  value: '$pendingRiders pending',
+                  icon: Icons.delivery_dining,
+                  color: Colors.teal,
+                  onTap: () => _setAdminTab(3),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 10),
+
+          Row(
+            children: [
+              Expanded(
+                child: _dashboardActionCard(
+                  title: 'Reports',
+                  value: '$pendingReports open',
+                  icon: Icons.report_outlined,
+                  color: Colors.deepOrange,
+                  onTap: () => _setAdminTab(5),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _dashboardActionCard(
+                  title: 'Coupons',
+                  value: '$activeCoupons active',
+                  icon: Icons.local_offer_outlined,
+                  color: Colors.indigo,
+                  onTap: () => _setAdminTab(4),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 20),
+
+          _sectionTitle('Commission Trend'),
+
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Wrap(
-                  spacing: 8,
-                  children: _commissionRanges
-                      .map(
-                        (range) => ChoiceChip(
-                          label: Text(range),
-                          selected: _commissionRange == range,
-                          onSelected: (_) =>
-                              setState(() => _commissionRange = range),
-                        ),
-                      )
-                      .toList(),
+                _filterChips(
+                  values: _commissionRanges,
+                  selected: _commissionRange,
+                  onSelected: (value) => setState(() => _commissionRange = value),
                 ),
                 const SizedBox(height: 12),
                 _commissionLineChart(_commissionSeries()),
               ],
             ),
           ),
-          const SizedBox(height: 40),
+
+          const SizedBox(height: 20),
+
+          _sectionTitle('Recent Orders'),
+
+          if (recentOrders.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 32),
+              child: Center(child: Text('No orders yet')),
+            )
+          else
+            ...recentOrders.take(5).map((order) {
+              return Card(
+                margin: const EdgeInsets.only(bottom: 10),
+                child: ListTile(
+                  leading: const CircleAvatar(
+                    child: Icon(Icons.receipt_long_outlined),
+                  ),
+                  title: Text(_customerName(order)),
+                  subtitle: Text(
+                    '${_formatDate(order['order_date'])} | ${_itemCount(order)} item(s)',
+                  ),
+                  trailing: Text(
+                    '₱${_toDouble(order['admin_commission']).toStringAsFixed(2)}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  onTap: () => _showOrderDetails(order),
+                ),
+              );
+            }),
+
+          const SizedBox(height: 24),
         ],
       ),
     );
@@ -978,76 +1268,134 @@ void initState() {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_orders.isEmpty) {
-      return const Center(child: Text('No orders yet'));
-    }
+    final rows = _groupedAdminGains();
+    final totalCommission = rows.fold<double>(
+      0,
+      (sum, row) => sum + (row['commission'] as double),
+    );
+    final totalGross = rows.fold<double>(
+      0,
+      (sum, row) => sum + (row['gross'] as double),
+    );
+    final totalOrders = rows.fold<int>(
+      0,
+      (sum, row) => sum + (row['orders'] as int),
+    );
 
-    final visible = _filteredSalesOrders;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return RefreshIndicator(
+      onRefresh: _loadAdminOrders,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
         children: [
-          TextField(
-            controller: _salesSearchController,
-            decoration: const InputDecoration(
-              prefixIcon: Icon(Icons.search),
-              labelText: 'Search order, buyer, account id, or status',
-              border: OutlineInputBorder(),
+          const Text(
+            'Sales Gains',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Your admin commission grouped by $_salesGroupFilter',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
-            onChanged: (_) => setState(() {}),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
+
+          Row(
+            children: [
+              Expanded(
+                child: _metricCard(
+                  'Your Gain',
+                  '₱${totalCommission.toStringAsFixed(2)}',
+                  Icons.trending_up,
+                  Colors.green,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _metricCard(
+                  'Gross Sales',
+                  '₱${totalGross.toStringAsFixed(2)}',
+                  Icons.payments_outlined,
+                  Colors.blue,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _metricCard(
+                  'Orders',
+                  '$totalOrders',
+                  Icons.receipt_long,
+                  Colors.orange,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _metricCard(
+                  'Avg Gain',
+                  totalOrders == 0
+                      ? '₱0.00'
+                      : '₱${(totalCommission / totalOrders).toStringAsFixed(2)}',
+                  Icons.attach_money,
+                  Colors.purple,
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 18),
           _filterChips(
-            values: _orderStatusFilters,
-            selected: _salesStatusFilter,
-            onSelected: (value) => setState(() => _salesStatusFilter = value),
+            values: _salesGroupFilters,
+            selected: _salesGroupFilter,
+            onSelected: (value) => setState(() => _salesGroupFilter = value),
           ),
-          const SizedBox(height: 8),
-          _filterChips(
-            values: _salesDateFilters,
-            selected: _salesDateFilter,
-            onSelected: (value) => setState(() => _salesDateFilter = value),
-          ),
-          const SizedBox(height: 12),
-          if (visible.isEmpty)
+
+          const SizedBox(height: 14),
+          if (rows.isEmpty)
             const Padding(
               padding: EdgeInsets.only(top: 120),
-              child: Center(child: Text('No orders match these filters')),
+              child: Center(child: Text('No successful sales yet')),
             )
           else
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
-          columns: const [
-            DataColumn(label: Text('Order')),
-            DataColumn(label: Text('Buyer Account')),
-            DataColumn(label: Text('Customer')),
-            DataColumn(label: Text('Date')),
-            DataColumn(label: Text('Items')),
-            DataColumn(label: Text('Status')),
-            DataColumn(label: Text('Commission')),
-          ],
-          rows: visible.map((order) {
-            final orderId = order['order_id']?.toString() ?? '';
-            return DataRow(
-              onSelectChanged: (_) => _showOrderDetails(order),
-              cells: [
-                DataCell(Text(_shortId(orderId))),
-                DataCell(Text(_shortId(order['buyer_account_id']?.toString() ?? ''))),
-                DataCell(Text(_customerName(order))),
-                DataCell(Text(_formatDate(order['order_date']))),
-                DataCell(Text(_itemCount(order).toString())),
-                DataCell(Text(order['order_status']?.toString() ?? 'N/A')),
-                DataCell(
-                  Text('₱${_toDouble(order['admin_commission']).toStringAsFixed(2)}'),
+            ...rows.map((row) {
+              final orders = row['ordersList'] as List<Map<String, dynamic>>;
+
+              return Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: ExpansionTile(
+                  title: Text(
+                    row['label'].toString(),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Text(
+                    '${row['orders']} order(s) | Gross ₱${(row['gross'] as double).toStringAsFixed(2)}',
+                  ),
+                  trailing: Text(
+                    '₱${(row['commission'] as double).toStringAsFixed(2)}',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  children: orders.map((order) {
+                    return ListTile(
+                      dense: true,
+                      title: Text(_customerName(order)),
+                      subtitle: Text(
+                        '${_formatDate(order['order_date'])} | ${_itemCount(order)} item(s)',
+                      ),
+                      trailing: Text(
+                        '₱${_toDouble(order['admin_commission']).toStringAsFixed(2)}',
+                      ),
+                      onTap: () => _showOrderDetails(order),
+                    );
+                  }).toList(),
                 ),
-              ],
-            );
-          }).toList(),
-              ),
-            ),
+              );
+            }),
         ],
       ),
     );
@@ -1627,54 +1975,6 @@ void initState() {
     );
   }
 
-  Widget _heroSection() {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      height: 200,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            scheme.primary,
-            scheme.primary.withAlpha(217),
-          ],
-        ),
-      ),
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: Opacity(
-              opacity: 0.10,
-              child: Image.asset('assets/images/pizza.jpg', fit: BoxFit.cover),
-            ),
-          ),
-          Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text(
-                  'Admin Dashboard',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Manage your FoodTaxi business',
-                  style: TextStyle(color: Colors.white, fontSize: 18),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _sectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -1791,44 +2091,44 @@ void initState() {
         ],
       ),
       body: tabs[_currentIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() => _currentIndex = index);
-          if (index == 2) {
-            _loadSellerApplications();
-          } else if (index == 3) {
-            _loadRiderApplications();
-          } else if (index == 4) {
-            _loadCoupons();
-          } else if (index == 5) {
-            _loadReports();
-          } else if (index == 0 || index == 1) {
-            _loadAdminOrders();
+        bottomNavigationBar: LayoutBuilder(
+        builder: (context, constraints) {
+          final isMobile = MediaQuery.of(context).size.width < 700;
+
+          if (!isMobile) {
+            return NavigationBar(
+              selectedIndex: _currentIndex,
+              onDestinationSelected: _setAdminTab,
+              destinations: const [
+                NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Dashboard'),
+                NavigationDestination(icon: Icon(Icons.analytics_outlined), selectedIcon: Icon(Icons.analytics), label: 'Sales'),
+                NavigationDestination(icon: Icon(Icons.people_outline), selectedIcon: Icon(Icons.people), label: 'Sellers'),
+                NavigationDestination(icon: Icon(Icons.delivery_dining_outlined), selectedIcon: Icon(Icons.delivery_dining), label: 'Riders'),
+                NavigationDestination(icon: Icon(Icons.local_offer_outlined), selectedIcon: Icon(Icons.local_offer), label: 'Coupons'),
+                NavigationDestination(icon: Icon(Icons.report_outlined), selectedIcon: Icon(Icons.report), label: 'Reports'),
+              ],
+            );
           }
+
+          return SafeArea(
+            top: false,
+            child: SizedBox(
+              height: 64,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                children: [
+                  _adminNavItem(0, Icons.dashboard_outlined, Icons.dashboard, 'Dashboard'),
+                  _adminNavItem(1, Icons.analytics_outlined, Icons.analytics, 'Sales'),
+                  _adminNavItem(2, Icons.people_outline, Icons.people, 'Sellers'),
+                  _adminNavItem(3, Icons.delivery_dining_outlined, Icons.delivery_dining, 'Riders'),
+                  _adminNavItem(4, Icons.local_offer_outlined, Icons.local_offer, 'Coupons'),
+                  _adminNavItem(5, Icons.report_outlined, Icons.report, 'Reports'),
+                ],
+              ),
+            ),
+          );
         },
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: Theme.of(context).colorScheme.primary,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard),
-            label: 'Dashboard',
-          ),
-          BottomNavigationBarItem(icon: Icon(Icons.analytics), label: 'Sales'),
-          BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Sellers'),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.delivery_dining),
-            label: 'Riders',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.local_offer),
-            label: 'Coupons',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.report_outlined),
-            label: 'Reports',
-          ),
-        ],
       ),
     );
   }

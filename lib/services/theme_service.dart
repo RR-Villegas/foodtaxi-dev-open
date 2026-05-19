@@ -350,7 +350,7 @@ class ThemeService {
       onSecondaryContainer: Color(0xFFFFDDB8),
 
       // discounted price bright mint
-      tertiary: Color(0xFF55F0C8),
+      tertiary: Color(0xFF82BEFF),
       onTertiary: Color(0xFF00382E),
       tertiaryContainer: Color(0xFF005143),
       onTertiaryContainer: Color(0xFFB6FFF0),
@@ -486,11 +486,11 @@ class ThemeService {
       secondaryContainer: Color(0xFFF3D5D2),
       onSecondaryContainer: Color(0xFF4A1F20),
 
-      // discounted price vivid green
-      tertiary: Color(0xFF00C853),
-      onTertiary: Color(0xFF00210A),
-      tertiaryContainer: Color(0xFFB6FFD0),
-      onTertiaryContainer: Color(0xFF003B14),
+      // discount / sale
+      tertiary: Color(0xFFFF6F00),
+      onTertiary: Color(0xFFFFFFFF),
+      tertiaryContainer: Color(0xFFFFCC80),
+      onTertiaryContainer: Color(0xFF3B1D00),
 
       scaffold: Color(0xFFFBF5EA),
       surface: Color(0xFFF2E7D3),

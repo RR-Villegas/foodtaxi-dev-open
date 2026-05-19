@@ -351,21 +351,23 @@ class _CheckoutPageState extends State<CheckoutPage> {
       }
 
       final freshSubtotal = orderItems.fold<double>(
-      0,
-      (sum, item) {
-        final price = double.tryParse(item['unit_price_at_sale'].toString()) ?? 0;
-        final quantity = int.tryParse(item['quantity'].toString()) ?? 1;
-        return sum + (price * quantity);
-      },
-    );
+        0,
+        (sum, item) {
+          final price = double.tryParse(item['unit_price_at_sale'].toString()) ?? 0;
+          final quantity = int.tryParse(item['quantity'].toString()) ?? 1;
+          return sum + (price * quantity);
+        },
+      );
 
-    final freshCommissionBase =
-        (freshSubtotal - _discountAmount) < 0 ? 0 : freshSubtotal - _discountAmount;
+      final freshCommissionBase =
+          (freshSubtotal - _discountAmount) < 0 ? 0 : freshSubtotal - _discountAmount;
 
-    final freshServiceFee = freshCommissionBase * _serviceFeeRate;
+      final freshServiceFee = freshCommissionBase * _serviceFeeRate;
 
-    final freshTotal =
-        freshSubtotal + _deliveryFee + freshServiceFee - _discountAmount;
+      final freshTotal =
+          freshSubtotal + _deliveryFee + freshServiceFee - _discountAmount;
+
+      
 
       final orderId = await DatabaseService.placeOrderWithItems(
         accountId: _accountId!,
