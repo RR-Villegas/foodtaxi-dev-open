@@ -31,6 +31,14 @@ class DatabaseService {
     return 'PHP ${amount.toStringAsFixed(2)}';
   }
 
+  static Future<void> deleteOldNotifications() async {
+    try {
+      await _supabase.rpc('delete_old_notifications');
+    } catch (e) {
+      _logDbError('Failed to delete old notifications', e);
+    }
+  }
+
   static Map<String, dynamic>? activeProductDiscount(
     Map<String, dynamic> product,
   ) {
@@ -66,7 +74,9 @@ class DatabaseService {
     final variants = product['product_variant'];
     if (variants is List) {
       for (final variant in variants.whereType<Map>()) {
-        if (variant['is_active'] == false) continue;
+        if (variant['is_active'] == false || variant['is_deleted'] == true) {
+          continue;
+        }
         prices.add(_toDouble(variant['price']));
       }
     }
@@ -80,7 +90,11 @@ class DatabaseService {
     final basePrice = discountedPrice(_toDouble(product['price']), discount);
     final variants = product['product_variant'];
     final hasVariants = variants is List &&
-        variants.whereType<Map>().any((variant) => variant['is_active'] != false);
+    variants.whereType<Map>().any(
+          (variant) =>
+              variant['is_active'] != false &&
+              variant['is_deleted'] != true,
+        );
     return hasVariants ? '${money(basePrice)}*' : money(basePrice);
   }
 
@@ -727,11 +741,31 @@ class DatabaseService {
     try {
       final response = await _supabase
           .from('product')
-          .select('*, product_variant(*), product_discount(*)')
+          .select('''
+            *,
+            product_image(*),
+            product_variant(*, product_variant_image(*)),
+            product_discount(*)
+          ''')
           .eq('store_id', storeId)
           .order('product_id', ascending: false);
 
-      return _withProductRatings(List<Map<String, dynamic>>.from(response));
+      final products = List<Map<String, dynamic>>.from(response).map((product) {
+        final copy = Map<String, dynamic>.from(product);
+        final variants = copy['product_variant'];
+
+        if (variants is List) {
+          copy['product_variant'] = variants
+              .whereType<Map>()
+              .where((variant) => variant['is_deleted'] != true)
+              .map((variant) => Map<String, dynamic>.from(variant))
+              .toList();
+        }
+
+        return copy;
+      }).toList();
+
+      return _withProductRatings(products);
     } catch (e) {
       _logDbError('Failed to fetch seller products', e);
       return [];
@@ -766,7 +800,7 @@ class DatabaseService {
     return getSellerProducts(storeId);
   }
 
-  static Future<bool> insertProduct({
+  static Future<String?> insertProduct({
     required String storeId,
     required String name,
     required double price,
@@ -800,11 +834,14 @@ class DatabaseService {
           .select('product_id')
           .single();
 
-      await _replaceProductVariants(response['product_id'].toString(), variants);
-      return true;
+      final productId = response['product_id'].toString();
+      if (variants.isNotEmpty) {
+        await _replaceProductVariants(productId, variants);
+      }
+      return productId;
     } catch (e) {
       _logDbError('Failed to insert product', e);
-      return false;
+      return null;
     }
   }
 
@@ -839,7 +876,9 @@ class DatabaseService {
             'is_active': isActive,
           })
           .eq('product_id', productId);
-      await _replaceProductVariants(productId, variants);
+      if (variants.isNotEmpty) {
+        await _replaceProductVariants(productId, variants);
+      }
       return true;
     } catch (e) {
       _logDbError('Failed to update product', e);
@@ -893,9 +932,11 @@ class DatabaseService {
 
   static Future<List<Map<String, dynamic>>> getCurrentNotifications({
     int? limit,
+    int? offset,
     String? type,
     Duration? age,
     bool unreadOnly = false,
+    bool readOnly = false,
   }) async {
     try {
       final accountId = await getCurrentAccountId();
@@ -913,6 +954,10 @@ class DatabaseService {
       if (unreadOnly) {
         query = query.eq('is_read', false);
       }
+      
+      if (readOnly) {
+        query = query.eq('is_read', true);
+      }
 
       if (age != null) {
         query = query.gte(
@@ -922,12 +967,54 @@ class DatabaseService {
       }
 
       final orderedQuery = query.order('created_at', ascending: false);
-      final response =
-          limit == null ? await orderedQuery : await orderedQuery.limit(limit);
+
+      if (offset != null) {
+        final pageLimit = limit ?? 20;
+        final response = await orderedQuery.range(
+          offset,
+          offset + pageLimit - 1,
+        );
+        return List<Map<String, dynamic>>.from(response);
+      }
+
+      if (limit != null) {
+        final response = await orderedQuery.limit(limit);
+        return List<Map<String, dynamic>>.from(response);
+      }
+
+      final response = await orderedQuery;
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       _logDbError('Failed to fetch notifications', e);
       return [];
+    }
+  }
+
+  static Future<int> getUnreadNotificationCount({
+    Duration? age,
+  }) async {
+    try {
+      final accountId = await getCurrentAccountId();
+      if (accountId == null) return 0;
+
+      var query = _supabase
+          .from('notification')
+          .select('notification_id')
+          .eq('account_id', accountId)
+          .eq('is_read', false);
+
+      if (age != null) {
+        query = query.gte(
+          'created_at',
+          DateTime.now().subtract(age).toIso8601String(),
+        );
+      }
+
+      final response = await query;
+      return List.from(response).length;
+    } catch (e) {
+      _logDbError('Failed to count unread notifications', e);
+      return 0;
     }
   }
 
@@ -953,38 +1040,68 @@ class DatabaseService {
     }
   }
 
+  static Future<void> saveThemePreference(String themeId) async {
+    try {
+      final authId = _supabase.auth.currentUser?.id;
+      if (authId == null) return;
+
+      await _supabase
+          .from('account')
+          .update({
+            'theme_id': themeId,
+          })
+          .eq('auth_id', authId);
+    } catch (e) {
+      _logDbError('Failed to save theme preference', e);
+    }
+  }
+
+  static Future<String?> getThemePreference() async {
+    try {
+      final authId = _supabase.auth.currentUser?.id;
+      if (authId == null) return null;
+
+      final response = await _supabase
+          .from('account')
+          .select('theme_id')
+          .eq('auth_id', authId)
+          .maybeSingle();
+
+      return response?['theme_id']?.toString();
+    } catch (e) {
+      _logDbError('Failed to load theme preference', e);
+      return null;
+    }
+  }
+
   static Future<void> _replaceProductVariants(
     String productId,
     List<Map<String, dynamic>> variants,
   ) async {
-    await _supabase.from('product_variant').delete().eq('product_id', productId);
+    await replaceProductVariantsPreserveOrders(productId, variants);
+  }
 
-    final rows = variants
-        .map(
-          (variant) => {
-            'product_id': productId,
-            'size_label': variant['size_label']?.toString().trim(),
-            'price': _toDouble(variant['price']),
-            'stock_quantity': _toInt(variant['stock_quantity']),
-            'stock_unit_quantity': _toInt(variant['stock_unit_quantity']) < 1
-                ? 1
-                : _toInt(variant['stock_unit_quantity']),
-            'sku': generateSku(
-              variant['product_name']?.toString() ?? '',
-              variant['size_label']?.toString(),
-            ),
-            'is_active': variant['is_active'] != false,
-          },
-        )
-        .where(
-          (variant) =>
-              variant['size_label'] != null &&
-              variant['size_label'].toString().isNotEmpty,
-        )
-        .toList();
+  static Future<List<Map<String, dynamic>>>
+      replaceProductVariantsPreserveOrders(
+    String productId,
+    List<Map<String, dynamic>> variants,
+  ) async {
+    try {
+      final response = await _supabase.rpc(
+        'replace_product_variants_preserve_orders',
+        params: {
+          'p_product_id': productId,
+          'p_variants': variants,
+        },
+      );
 
-    if (rows.isNotEmpty) {
-      await _supabase.from('product_variant').insert(rows);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      _logDbError(
+        'Failed to replace product variants while preserving orders',
+        e,
+      );
+      return [];
     }
   }
 
@@ -2140,6 +2257,120 @@ class DatabaseService {
       return [];
     }
   }
+
+  static Future<List<Map<String, dynamic>>> getProductImages(
+    String productId,
+  ) async {
+    try {
+      final response = await _supabase
+          .from('product_image')
+          .select()
+          .eq('product_id', productId)
+          .order('sort_order')
+          .order('created_at');
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      _logDbError('Failed to fetch product images', e);
+      return [];
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getVariantImages(
+    String variantId,
+  ) async {
+    try {
+      final response = await _supabase
+          .from('product_variant_image')
+          .select()
+          .eq('variant_id', variantId)
+          .order('sort_order')
+          .order('created_at');
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      _logDbError('Failed to fetch variant images', e);
+      return [];
+    }
+  }
+
+  static Future<void> replaceProductImages({
+    required String productId,
+    required List<String> imageUrls,
+  }) async {
+    try {
+      await _supabase
+          .from('product_image')
+          .delete()
+          .eq('product_id', productId);
+
+      final cleaned = imageUrls
+          .map((url) => url.trim())
+          .where((url) => url.isNotEmpty)
+          .toList();
+
+      if (cleaned.isEmpty) {
+        await _supabase
+            .from('product')
+            .update({'main_image_url': null})
+            .eq('product_id', productId);
+        return;
+      }
+
+      await _supabase.from('product_image').insert(
+            List.generate(cleaned.length, (index) {
+              return {
+                'product_id': productId,
+                'image_url': cleaned[index],
+                'sort_order': index,
+                'is_primary': index == 0,
+              };
+            }),
+          );
+
+      await _supabase
+          .from('product')
+          .update({'main_image_url': cleaned.first})
+          .eq('product_id', productId);
+    } catch (e) {
+      _logDbError('Failed to replace product images', e);
+    }
+  }
+
+  static Future<void> replaceVariantImages({
+    required String productId,
+    required String variantId,
+    required List<String> imageUrls,
+  }) async {
+    try {
+      await _supabase
+          .from('product_variant_image')
+          .delete()
+          .eq('variant_id', variantId);
+
+      final cleaned = imageUrls
+          .map((url) => url.trim())
+          .where((url) => url.isNotEmpty)
+          .toList();
+
+      if (cleaned.isEmpty) return;
+
+      await _supabase.from('product_variant_image').insert(
+            List.generate(cleaned.length, (index) {
+              return {
+                'product_id': productId,
+                'variant_id': variantId,
+                'image_url': cleaned[index],
+                'sort_order': index,
+                'is_primary': index == 0,
+              };
+            }),
+          );
+    } catch (e) {
+      _logDbError('Failed to replace variant images', e);
+    }
+  }
+  
 
   // Get product image URL from bucket
   static String getProductImageUrl(String fileName) {

@@ -5,6 +5,7 @@ import 'services/auth_service.dart';
 import 'services/database_service.dart';
 import 'widgets/adaptive_menu_item.dart';
 import 'widgets/notification_bell.dart';
+import 'dart:async';
 
 class SellerDashboard extends StatefulWidget {
   const SellerDashboard({super.key});
@@ -17,6 +18,7 @@ class _SellerDashboardState extends State<SellerDashboard> {
   final _supabase = Supabase.instance.client;
   RealtimeChannel? _ordersChannel;
   RealtimeChannel? _productsChannel;
+  Timer? _salesClockTimer;
 
   static const List<String> _categories = [
     'Baking Supplies & Ingredients',
@@ -50,9 +52,26 @@ class _SellerDashboardState extends State<SellerDashboard> {
   String _productCategoryFilter = 'All';
   String _productSort = 'Newest';
   int _productsPage = 0;
+  int _storeReviewsPage = 0;
+  int _productReviewsPage = 0;
+  int _discountHistoryPage = 0;
+  String _offersView = 'Product Discounts';
+  int _activeDiscountsPage = 0;
+  int _couponsPage = 0;
+  String _salesRange = 'Month';
+  DateTime _salesAnchorDate = DateTime.now();
+  int _salesPage = 0;
 
+  static const int _salesPerPage = 8;
+  static const int _offersPerPage = 5;
+  static const List<String> _offersViews = [
+    'Product Discounts',
+    'Discount History',
+    'Shop Coupons',
+  ];
   static const List<String> _overviewRanges = ['Day', 'Week', 'Month', 'Year'];
   static const int _productsPerPage = 10;
+  static const int _reviewsPerPage = 5;
   static const List<String> _productSortOptions = [
     'Newest',
     'Oldest',
@@ -70,6 +89,13 @@ class _SellerDashboardState extends State<SellerDashboard> {
     'In Transit',
     'Delivered',
     'Cancelled',
+  ];
+  static const List<String> _salesRanges = [
+    'Day',
+    'Week',
+    'Month',
+    'Year',
+    'All',
   ];
 
   Future<void> _logout() async {
@@ -99,15 +125,40 @@ class _SellerDashboardState extends State<SellerDashboard> {
   void initState() {
     super.initState();
     _loadDashboard();
+    _startSalesClock();
   }
 
   @override
   void dispose() {
+    _stopSalesClock();
+
     final ordersChannel = _ordersChannel;
     final productsChannel = _productsChannel;
     if (ordersChannel != null) _supabase.removeChannel(ordersChannel);
     if (productsChannel != null) _supabase.removeChannel(productsChannel);
     super.dispose();
+  }
+
+  void _startSalesClock() {
+    _salesClockTimer?.cancel();
+
+    _salesClockTimer = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) {
+        if (!mounted) return;
+
+        // Only refresh visual time grouping while on Sales tab.
+        // Change the index if your Sales tab is not index 3.
+        if (_currentIndex == 3) {
+          setState(() {});
+        }
+      },
+    );
+  }
+
+  void _stopSalesClock() {
+    _salesClockTimer?.cancel();
+    _salesClockTimer = null;
   }
 
   Future<void> _loadDashboard() async {
@@ -117,6 +168,7 @@ class _SellerDashboardState extends State<SellerDashboard> {
       final account = await DatabaseService.getCurrentAccount();
       final store = await DatabaseService.getCurrentSellerStore();
       final storeId = store?['store_id']?.toString();
+      await _supabase.rpc('expire_product_discounts');
 
       final products = storeId == null
           ? <Map<String, dynamic>>[]
@@ -259,6 +311,13 @@ class _SellerDashboardState extends State<SellerDashboard> {
       }
     });
     return filtered;
+  }
+
+  void _jumpSalesToToday() {
+    setState(() {
+      _salesAnchorDate = DateTime.now();
+      _salesPage = 0;
+    });
   }
 
   Widget _profileMenuHeader() {
@@ -466,6 +525,154 @@ class _SellerDashboardState extends State<SellerDashboard> {
         height: size,
         color: Colors.grey.shade200,
         child: const Icon(Icons.broken_image_outlined),
+      ),
+    );
+  }
+
+  Widget _smallPager({
+    required int page,
+    required int totalItems,
+    required int perPage,
+    required ValueChanged<int> onPageChanged,
+  }) {
+    final totalPages = totalItems == 0 ? 1 : (totalItems / perPage).ceil();
+
+    if (totalPages <= 1) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          OutlinedButton(
+            onPressed: page <= 0 ? null : () => onPageChanged(page - 1),
+            child: const Icon(Icons.chevron_left),
+          ),
+          Expanded(
+            child: Center(
+              child: Text('Page ${page + 1} of $totalPages'),
+            ),
+          ),
+          OutlinedButton(
+            onPressed: page >= totalPages - 1
+                ? null
+                : () => onPageChanged(page + 1),
+            child: const Icon(Icons.chevron_right),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Map<String, dynamic>> _pageSlice(
+    List<Map<String, dynamic>> source,
+    int page,
+    int perPage,
+  ) {
+    if (source.isEmpty) return [];
+
+    final totalPages = (source.length / perPage).ceil();
+    final safePage = page.clamp(0, totalPages - 1);
+    final start = safePage * perPage;
+    final end = (start + perPage) > source.length ? source.length : start + perPage;
+
+    return source.sublist(start, end);
+  }
+
+  Widget _reviewStars(dynamic value) {
+    final rating = value is num
+        ? value.toInt()
+        : int.tryParse(value?.toString() ?? '') ?? 0;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(5, (index) {
+        return Icon(
+          index < rating ? Icons.star : Icons.star_border,
+          size: 16,
+          color: Colors.amber,
+        );
+      }),
+    );
+  }
+
+  String _reviewBuyerName(Map<String, dynamic> review) {
+    final account = review['account'] ?? review['buyer'];
+    if (account is Map) {
+      final first = account['firstname']?.toString().trim() ?? '';
+      final last = account['surname']?.toString().trim() ?? '';
+      final name = '$first $last'.trim();
+      if (name.isNotEmpty) return name;
+
+      final email = account['email']?.toString().trim() ?? '';
+      if (email.isNotEmpty) return email;
+    }
+
+    return 'Buyer';
+  }
+
+  String _reviewProductName(Map<String, dynamic> review) {
+    final product = review['product'];
+    if (product is Map) {
+      return DatabaseService.displayProductName(product['name']);
+    }
+
+    return 'Product';
+  }
+
+  Widget _reviewCard(
+    Map<String, dynamic> review, {
+    bool showProduct = false,
+  }) {
+    final comment = review['comment']?.toString().trim() ?? '';
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: ListTile(
+        leading: const CircleAvatar(
+          child: Icon(Icons.reviews_outlined),
+        ),
+        title: Text(
+          showProduct ? _reviewProductName(review) : _reviewBuyerName(review),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (showProduct)
+              Text(
+                _reviewBuyerName(review),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            const SizedBox(height: 4),
+            _reviewStars(review['rating']),
+            const SizedBox(height: 4),
+            Text(comment.isEmpty ? 'No comment' : comment),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _offersToggle() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: _offersViews.map((view) {
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ChoiceChip(
+              label: Text(view),
+              selected: _offersView == view,
+              onSelected: (_) {
+                setState(() => _offersView = view);
+              },
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -792,6 +999,8 @@ class _SellerDashboardState extends State<SellerDashboard> {
           final active = product['is_active'] != false;
           final variants = product['product_variant'];
           final variantCount = variants is List ? variants.length : 0;
+          final images = product['product_image'];
+          final imageCount = images is List ? images.length : 0;
           final category = product['category']?.toString() ?? '';
           final discountPercent = _productDiscountPercent(product);
 
@@ -808,7 +1017,9 @@ class _SellerDashboardState extends State<SellerDashboard> {
                 children: [
                   Text(DatabaseService.displayProductPrice(product)),
                   if (category.isNotEmpty) Text(category),
-                  Text('Stock: ${_stock(product['stock_quantity'])}'),
+                    Text('Stock: ${_stock(product['stock_quantity'])}'),
+                  if (imageCount > 0)
+                    Text('$imageCount image${imageCount == 1 ? '' : 's'}'),
                   if (variantCount > 0)
                     Text('$variantCount alternate size${variantCount == 1 ? '' : 's'}'),
                   if (discountPercent > 0)
@@ -1077,65 +1288,352 @@ class _SellerDashboardState extends State<SellerDashboard> {
     );
   }
 
+  DateTime _dateOnly(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
+  }
+
+  DateTime _salesRangeStart() {
+    final anchor = _salesAnchorDate;
+
+    switch (_salesRange) {
+      case 'Day':
+        return DateTime(anchor.year, anchor.month, anchor.day);
+
+      case 'Week':
+        final day = DateTime(anchor.year, anchor.month, anchor.day);
+        return day.subtract(Duration(days: day.weekday - 1));
+
+      case 'Month':
+        return DateTime(anchor.year, anchor.month);
+
+      case 'Year':
+        return DateTime(anchor.year);
+
+      case 'All':
+      default:
+        return DateTime(0);
+    }
+  }
+
+  DateTime _salesRangeEnd() {
+    final start = _salesRangeStart();
+
+    switch (_salesRange) {
+      case 'Day':
+        return start.add(const Duration(days: 1));
+
+      case 'Week':
+        return start.add(const Duration(days: 7));
+
+      case 'Month':
+        return DateTime(start.year, start.month + 1);
+
+      case 'Year':
+        return DateTime(start.year + 1);
+
+      case 'All':
+      default:
+        return DateTime(9999);
+    }
+  }
+
+  String _salesPeriodLabel() {
+    final start = _salesRangeStart();
+    final end = _salesRangeEnd().subtract(const Duration(days: 1));
+
+    switch (_salesRange) {
+      case 'Day':
+        return _shortDate(start);
+
+      case 'Week':
+        return '${_shortDate(start)} → ${_shortDate(end)}';
+
+      case 'Month':
+        return '${start.year}-${start.month.toString().padLeft(2, '0')}';
+
+      case 'Year':
+        return '${start.year}';
+
+      case 'All':
+      default:
+        return 'All Time';
+    }
+  }
+
+  void _moveSalesPeriod(int direction) {
+    setState(() {
+      _salesPage = 0;
+
+      switch (_salesRange) {
+        case 'Day':
+          _salesAnchorDate = _salesAnchorDate.add(Duration(days: direction));
+          break;
+
+        case 'Week':
+          _salesAnchorDate = _salesAnchorDate.add(Duration(days: 7 * direction));
+          break;
+
+        case 'Month':
+          _salesAnchorDate = DateTime(
+            _salesAnchorDate.year,
+            _salesAnchorDate.month + direction,
+            1,
+          );
+          break;
+
+        case 'Year':
+          _salesAnchorDate = DateTime(
+            _salesAnchorDate.year + direction,
+            1,
+            1,
+          );
+          break;
+
+        case 'All':
+          break;
+      }
+    });
+  }
+
+  Widget _salesPeriodControls() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: _salesRanges.map((range) {
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(
+                  label: Text(range),
+                  selected: _salesRange == range,
+                  onSelected: (_) {
+                    setState(() {
+                      _salesRange = range;
+                      _salesPage = 0;
+                    });
+                  },
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            child: Row(
+              children: [
+                IconButton(
+                  onPressed: _salesRange == 'All'
+                      ? null
+                      : () => _moveSalesPeriod(-1),
+                  icon: const Icon(Icons.chevron_left),
+                ),
+                Expanded(
+                  child: InkWell(
+                    onTap: _salesRange == 'All' ? null : _pickSalesDate,
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      child: Text(
+                        _salesPeriodLabel(),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ),
+                if (_salesRange != 'All')
+                  TextButton(
+                    onPressed: _jumpSalesToToday,
+                    child: const Text('Today'),
+                  ),
+                IconButton(
+                  onPressed: _salesRange == 'All'
+                      ? null
+                      : () => _moveSalesPeriod(1),
+                  icon: const Icon(Icons.chevron_right),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _pickSalesDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _salesAnchorDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+
+    if (picked == null || !mounted) return;
+
+    setState(() {
+      _salesAnchorDate = picked;
+      _salesPage = 0;
+    });
+  }
+
+  bool _orderInsideSelectedSalesRange(Map<String, dynamic> order) {
+    if (_salesRange == 'All') return true;
+
+    final date = _orderDate(order, preferDelivered: true)?.toLocal();
+    if (date == null) return false;
+
+    final start = _salesRangeStart();
+    final end = _salesRangeEnd();
+
+    return !date.isBefore(start) && date.isBefore(end);
+  }
+
+  List<Map<String, dynamic>> _selectedSalesOrders() {
+    final filtered = _orders
+        .where(_isDelivered)
+        .where(_orderInsideSelectedSalesRange)
+        .toList();
+
+    filtered.sort((a, b) {
+      final aDate = _orderDate(a, preferDelivered: true) ?? DateTime(0);
+      final bDate = _orderDate(b, preferDelivered: true) ?? DateTime(0);
+      return bDate.compareTo(aDate);
+    });
+
+    return filtered;
+  }
+
   Widget _buildSalesTab() {
-    final summary = DatabaseService.summarizeSales(_orders);
-    final deliveredOrders = _orders.where(_isDelivered).toList();
+    final salesOrders = _selectedSalesOrders();
+    final chartRows = _salesChartRows(salesOrders);
+
+    final totalPages = salesOrders.isEmpty
+        ? 1
+        : (salesOrders.length / _salesPerPage).ceil();
+
+    if (_salesPage >= totalPages) {
+      _salesPage = totalPages - 1;
+    }
+
+    if (_salesPage < 0) {
+      _salesPage = 0;
+    }
+
+    final visibleSales = _pageSlice(
+      salesOrders,
+      _salesPage,
+      _salesPerPage,
+    );
+
+    final revenue = salesOrders.fold<double>(
+      0,
+      (sum, order) => sum + _sellerOrderValue(order),
+    );
+
+    final itemsSold = salesOrders.fold<int>(
+      0,
+      (sum, order) => sum + _itemCount(order),
+    );
+
+    final averageOrder = salesOrders.isEmpty ? 0 : revenue / salesOrders.length;
 
     return RefreshIndicator(
       onRefresh: _loadDashboard,
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          const Text(
+            'Sales',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'View gains by selected day, week, month, year, or all time',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+
+          const SizedBox(height: 16),
+          _salesPeriodControls(),
+
+          const SizedBox(height: 16),
+
           Row(
             children: [
               _metricCard(
                 'Revenue',
-                _money(summary['revenue']),
+                _money(revenue),
                 Icons.payments_outlined,
                 Theme.of(context).colorScheme.primary,
               ),
               const SizedBox(width: 10),
               _metricCard(
                 'Orders',
-                '${summary['orders']}',
+                '${salesOrders.length}',
                 Icons.receipt_long_outlined,
                 Theme.of(context).colorScheme.secondary,
               ),
             ],
           ),
+
           const SizedBox(height: 10),
+
           Row(
             children: [
               _metricCard(
                 'Items Sold',
-                '${summary['itemsSold']}',
+                '$itemsSold',
                 Icons.shopping_bag_outlined,
                 Theme.of(context).colorScheme.tertiary,
               ),
               const SizedBox(width: 10),
               _metricCard(
-                'Products',
-                '${_products.length}',
-                Icons.inventory_2_outlined,
+                'Avg Order',
+                _money(averageOrder),
+                Icons.trending_up_outlined,
                 Theme.of(context).colorScheme.outline,
               ),
             ],
           ),
-          const SizedBox(height: 24),
-          const Text(
-            'Recent Sales',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+
+          const SizedBox(height: 16),
+
+          _salesBarChart(chartRows),
+
+          const SizedBox(height: 16),
+
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${_salesPeriodLabel()} Sales',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
+              Chip(label: Text('${salesOrders.length}')),
+            ],
           ),
+
           const SizedBox(height: 8),
-          if (deliveredOrders.isEmpty)
+
+          if (visibleSales.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 32),
-              child: Center(child: Text('No delivered sales yet')),
+              child: Center(child: Text('No delivered sales for this period')),
             )
           else
-            ...deliveredOrders.map((order) {
+            ...visibleSales.map((order) {
               final buyerName = _buyerName(order);
               final itemCount = _itemCount(order);
+              final date = _orderDate(order, preferDelivered: true);
 
               return Card(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -1143,9 +1641,21 @@ class _SellerDashboardState extends State<SellerDashboard> {
                   leading: const CircleAvatar(
                     child: Icon(Icons.receipt_long_outlined),
                   ),
-                  title: Text(_money(order['total_amount'])),
-                  subtitle: Text(
-                    '$buyerName | $itemCount item${itemCount == 1 ? '' : 's'} sold',
+                  title: Text(_money(_sellerOrderValue(order))),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '$buyerName | $itemCount item${itemCount == 1 ? '' : 's'} sold',
+                      ),
+                      if (date != null)
+                        Text(
+                          _readableDateTime(date.toIso8601String()),
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                    ],
                   ),
                   trailing: Text(
                     order['payment_status']?.toString() ?? 'Pending',
@@ -1153,7 +1663,238 @@ class _SellerDashboardState extends State<SellerDashboard> {
                 ),
               );
             }),
+
+          _smallPager(
+            page: _salesPage,
+            totalItems: salesOrders.length,
+            perPage: _salesPerPage,
+            onPageChanged: (page) {
+              setState(() => _salesPage = page);
+            },
+          ),
         ],
+      ),
+    );
+  }
+
+  List<Map<String, dynamic>> _salesChartRows(List<Map<String, dynamic>> orders) {
+    final rows = <String, Map<String, dynamic>>{};
+
+    void addRow(String key, String label, DateTime sortDate) {
+      rows.putIfAbsent(
+        key,
+        () => {
+          'key': key,
+          'label': label,
+          'amount': 0.0,
+          'orders': 0,
+          'date': sortDate,
+        },
+      );
+    }
+
+    if (_salesRange == 'Day') {
+      final start = _salesRangeStart();
+
+      for (var hour = 0; hour < 24; hour++) {
+        final date = DateTime(start.year, start.month, start.day, hour);
+        final hourLabel = hour == 0
+            ? '12 AM'
+            : hour < 12
+                ? '$hour AM'
+                : hour == 12
+                    ? '12 PM'
+                    : '${hour - 12} PM';
+
+        addRow('$hour', hourLabel, date);
+      }
+    } else if (_salesRange == 'Week') {
+      final start = _salesRangeStart();
+
+      const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+      for (var i = 0; i < 7; i++) {
+        final date = start.add(Duration(days: i));
+        addRow('$i', labels[i], date);
+      }
+    } else if (_salesRange == 'Month') {
+      final start = _salesRangeStart();
+      final end = _salesRangeEnd();
+
+      var cursor = start;
+      var index = 1;
+
+      while (cursor.isBefore(end)) {
+        final weekEnd = cursor.add(const Duration(days: 6));
+        addRow(
+          '$index',
+          'W$index',
+          cursor,
+        );
+        cursor = weekEnd.add(const Duration(days: 1));
+        index++;
+      }
+    } else if (_salesRange == 'Year') {
+      final year = _salesAnchorDate.year;
+
+      const labels = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
+
+      for (var month = 1; month <= 12; month++) {
+        addRow(
+          '$month',
+          labels[month - 1],
+          DateTime(year, month),
+        );
+      }
+    } else {
+      final delivered = _orders.where(_isDelivered).toList();
+
+      for (final order in delivered) {
+        final date = _orderDate(order, preferDelivered: true)?.toLocal();
+        if (date == null) continue;
+
+        addRow(
+          '${date.year}',
+          '${date.year}',
+          DateTime(date.year),
+        );
+      }
+    }
+
+    for (final order in orders) {
+      final date = _orderDate(order, preferDelivered: true)?.toLocal();
+      if (date == null) continue;
+
+      String key;
+
+      if (_salesRange == 'Day') {
+        key = '${date.hour}';
+      } else if (_salesRange == 'Week') {
+        key = '${date.weekday - 1}';
+      } else if (_salesRange == 'Month') {
+        final start = _salesRangeStart();
+        final dayOffset = _dateOnly(date).difference(start).inDays;
+        key = '${(dayOffset ~/ 7) + 1}';
+      } else if (_salesRange == 'Year') {
+        key = '${date.month}';
+      } else {
+        key = '${date.year}';
+      }
+
+      final row = rows[key];
+      if (row == null) continue;
+
+      row['amount'] = (row['amount'] as double) + _sellerOrderValue(order);
+      row['orders'] = (row['orders'] as int) + 1;
+    }
+
+    final result = rows.values.toList()
+      ..sort(
+        (a, b) => (a['date'] as DateTime).compareTo(b['date'] as DateTime),
+      );
+
+    return result;
+  }
+
+  Widget _salesBarChart(List<Map<String, dynamic>> rows) {
+    final maxAmount = rows.fold<double>(
+      0,
+      (max, row) {
+        final value = _number(row['amount']);
+        return value > max ? value : max;
+      },
+    );
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Sales Graph',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+            const SizedBox(height: 12),
+
+            if (rows.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: Text('No graph data')),
+              )
+            else
+              ...rows.map((row) {
+                final amount = _number(row['amount']);
+                final orders = row['orders'] as int? ?? 0;
+                final fraction = maxAmount <= 0 ? 0.0 : amount / maxAmount;
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 54,
+                        child: Text(
+                          row['label'].toString(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Stack(
+                          children: [
+                            Container(
+                              height: 18,
+                              decoration: BoxDecoration(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                            ),
+                            FractionallySizedBox(
+                              widthFactor: fraction.clamp(0.0, 1.0),
+                              child: Container(
+                                height: 18,
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.primary,
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 86,
+                        child: Text(
+                          orders == 0 ? '-' : _money(amount),
+                          textAlign: TextAlign.right,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+          ],
+        ),
       ),
     );
   }
@@ -1966,6 +2707,153 @@ class _SellerDashboardState extends State<SellerDashboard> {
   }
 
   Widget _buildProductDiscountsSection() {
+    final now = DateTime.now();
+
+    final activeDiscounts = <Map<String, dynamic>>[];
+    final historyDiscounts = <Map<String, dynamic>>[];
+
+    for (final discount in _productDiscounts) {
+      final endsAt = DateTime.tryParse(discount['ends_at']?.toString() ?? '');
+      final expired = endsAt != null && !endsAt.isAfter(now);
+
+      if (expired || discount['is_active'] == false) {
+        historyDiscounts.add(discount);
+      } else {
+        activeDiscounts.add(discount);
+      }
+    }
+
+    activeDiscounts.sort((a, b) {
+      final aDate = DateTime.tryParse(a['starts_at']?.toString() ?? '');
+      final bDate = DateTime.tryParse(b['starts_at']?.toString() ?? '');
+      if (aDate == null && bDate == null) return 0;
+      if (aDate == null) return 1;
+      if (bDate == null) return -1;
+      return aDate.compareTo(bDate);
+    });
+
+    historyDiscounts.sort((a, b) {
+      final aDate = DateTime.tryParse(a['ends_at']?.toString() ?? '');
+      final bDate = DateTime.tryParse(b['ends_at']?.toString() ?? '');
+      if (aDate == null && bDate == null) return 0;
+      if (aDate == null) return 1;
+      if (bDate == null) return -1;
+      return bDate.compareTo(aDate);
+    });
+
+    Widget discountTile(
+      Map<String, dynamic> discount, {
+      required bool history,
+    }) {
+      final product = discount['product'];
+      final productName = product is Map
+          ? DatabaseService.displayProductName(product['name'])
+          : 'Product';
+
+      final type = discount['discount_type']?.toString() == 'amount'
+          ? '${DatabaseService.money(discount['discount_value'])} off'
+          : '${discount['discount_value']}% off';
+
+      return Card(
+        margin: const EdgeInsets.only(bottom: 10),
+        color: history
+            ? Theme.of(context)
+                .colorScheme
+                .surfaceContainerHighest
+                .withValues(alpha: 0.45)
+            : null,
+        child: ListTile(
+          leading: Icon(history ? Icons.history : Icons.percent),
+          title: Text(productName),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(type),
+              if (history)
+                Text('Ended ${_readableDateTime(discount['ends_at'])}')
+              else
+                Text(
+                  '${_readableDateTime(discount['starts_at'])} → ${_readableDateTime(discount['ends_at'])}',
+                ),
+            ],
+          ),
+          trailing: history
+              ? const Chip(label: Text('History'))
+              : Switch(
+                  value: discount['is_active'] != false,
+                  onChanged: (value) async {
+                    await DatabaseService.saveProductDiscount(
+                      discountId: discount['discount_id']?.toString(),
+                      storeId: discount['store_id'].toString(),
+                      productId: discount['product_id'].toString(),
+                      discountType:
+                          discount['discount_type']?.toString() ?? 'percent',
+                      discountValue: _number(discount['discount_value']),
+                      startsAt: discount['starts_at'].toString(),
+                      endsAt: discount['ends_at'].toString(),
+                      isActive: value,
+                    );
+
+                    _loadDashboard();
+                  },
+                ),
+          onTap: history ? null : () => _openProductDiscountForm(discount),
+        ),
+      );
+    }
+
+    Widget pagedDiscounts({
+      required List<Map<String, dynamic>> discounts,
+      required int page,
+      required ValueChanged<int> onPageChanged,
+      required String emptyText,
+      required bool history,
+    }) {
+      final visible = _pageSlice(discounts, page, _offersPerPage);
+
+      return Column(
+        children: [
+          if (visible.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 32),
+              child: Center(child: Text(emptyText)),
+            )
+          else
+            ...visible.map(
+              (discount) => discountTile(discount, history: history),
+            ),
+          _smallPager(
+            page: page,
+            totalItems: discounts.length,
+            perPage: _offersPerPage,
+            onPageChanged: onPageChanged,
+          ),
+        ],
+      );
+    }
+
+    if (_offersView == 'Discount History') {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Discount History',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          ),
+          const SizedBox(height: 12),
+          pagedDiscounts(
+            discounts: historyDiscounts,
+            page: _discountHistoryPage,
+            emptyText: 'No expired or disabled discounts yet',
+            history: true,
+            onPageChanged: (page) {
+              setState(() => _discountHistoryPage = page);
+            },
+          ),
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1985,106 +2873,103 @@ class _SellerDashboardState extends State<SellerDashboard> {
           ],
         ),
         const SizedBox(height: 12),
-        if (_productDiscounts.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
-            child: Center(child: Text('No scheduled product discounts yet')),
-          )
-        else
-          ..._productDiscounts.map((discount) {
-            final product = discount['product'];
-            final productName = product is Map
-                ? DatabaseService.displayProductName(product['name'])
-                : 'Product';
-            final type = discount['discount_type']?.toString() == 'amount'
-                ? '${DatabaseService.money(discount['discount_value'])} off'
-                : '${discount['discount_value']}% off';
-            return Card(
-              margin: const EdgeInsets.only(bottom: 10),
-              child: ListTile(
-                leading: const Icon(Icons.percent),
-                title: Text(productName),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(type),
-                    Text(
-                      '${_readableDateTime(discount['starts_at'])} → ${_readableDateTime(discount['ends_at'])}',
-                    ),
-                  ],
-                ),
-                trailing: Switch(
-                  value: discount['is_active'] != false,
-                  onChanged: (value) async {
-                    await DatabaseService.saveProductDiscount(
-                      discountId: discount['discount_id']?.toString(),
-                      storeId: discount['store_id'].toString(),
-                      productId: discount['product_id'].toString(),
-                      discountType:
-                          discount['discount_type']?.toString() ?? 'percent',
-                      discountValue: _number(discount['discount_value']),
-                      startsAt: discount['starts_at'].toString(),
-                      endsAt: discount['ends_at'].toString(),
-                      isActive: value,
-                    );
-                    _loadDashboard();
-                  },
-                ),
-                onTap: () => _openProductDiscountForm(discount),
-              ),
-            );
-          }),
+        pagedDiscounts(
+          discounts: activeDiscounts,
+          page: _activeDiscountsPage,
+          emptyText: 'No active product discounts',
+          history: false,
+          onPageChanged: (page) {
+            setState(() => _activeDiscountsPage = page);
+          },
+        ),
       ],
     );
   }
 
-  String _reviewerName(Map<String, dynamic> review) {
-    final account = review['account'];
+  Widget _buildShopCouponsSection() {
+    final coupons = [..._coupons];
 
-    if (account is Map) {
-      final first = account['firstname']?.toString().trim() ?? '';
-      final last = account['surname']?.toString().trim() ?? '';
-      final name = '$first $last'.trim();
+    final visibleCoupons = _pageSlice(
+      coupons,
+      _couponsPage,
+      _offersPerPage,
+    );
 
-      if (name.isNotEmpty) return name;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Shop Coupons',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+            ),
+            FilledButton.icon(
+              onPressed: () => _openCouponForm(),
+              icon: const Icon(Icons.add),
+              label: const Text('Add'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (visibleCoupons.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 32),
+            child: Center(child: Text('No shop coupons yet')),
+          )
+        else
+          ...visibleCoupons.map((coupon) {
+            final type = coupon['discount_type']?.toString() == 'amount'
+                ? 'PHP ${coupon['discount_value']} off'
+                : '${coupon['discount_value']}% off';
 
-      final email = account['email']?.toString().trim() ?? '';
-      if (email.isNotEmpty) return email;
-    }
+            return Card(
+              margin: const EdgeInsets.only(bottom: 10),
+              child: ListTile(
+                leading: const Icon(Icons.local_offer_outlined),
+                title: Text(coupon['code']?.toString() ?? 'COUPON'),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(type),
+                    Text('Used ${coupon['times_used'] ?? 0} time(s)'),
+                    if ((coupon['expires_at']?.toString() ?? '').isNotEmpty)
+                      Text('Expires ${_readableDateTime(coupon['expires_at'])}'),
+                  ],
+                ),
+                trailing: Switch(
+                  value: coupon['is_active'] != false,
+                  onChanged: (value) async {
+                    await DatabaseService.saveCoupon(
+                      code: coupon['code'].toString(),
+                      discountType:
+                          coupon['discount_type']?.toString() ?? 'percent',
+                      discountValue: _number(coupon['discount_value']),
+                      minSubtotal: _number(coupon['min_subtotal']),
+                      description: coupon['description']?.toString(),
+                      expiresAt: coupon['expires_at']?.toString(),
+                      isActive: value,
+                      storeId: _store?['store_id']?.toString(),
+                    );
 
-    return 'Buyer';
-  }
-
-  String _reviewDate(dynamic value) {
-    final date = DateTime.tryParse(value?.toString() ?? '');
-    if (date == null) return 'Unknown time';
-
-    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-  }
-
-  String _productNameFromReview(Map<String, dynamic> review) {
-    final product = review['product'];
-
-    if (product is Map) {
-      final name = product['name']?.toString().trim() ?? '';
-      if (name.isNotEmpty) return DatabaseService.displayProductName(name);
-    }
-
-    return 'Product';
-  }
-
-  Widget _reviewStars(dynamic value) {
-    final rating = int.tryParse(value?.toString() ?? '') ?? 0;
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(5, (index) {
-        return Icon(
-          index < rating ? Icons.star : Icons.star_border,
-          size: 14,
-          color: Colors.amber,
-        );
-      }),
+                    _loadDashboard();
+                  },
+                ),
+                onTap: () => _openCouponForm(coupon),
+              ),
+            );
+          }),
+        _smallPager(
+          page: _couponsPage,
+          totalItems: coupons.length,
+          perPage: _offersPerPage,
+          onPageChanged: (page) {
+            setState(() => _couponsPage = page);
+          },
+        ),
+      ],
     );
   }
 
@@ -2094,226 +2979,105 @@ class _SellerDashboardState extends State<SellerDashboard> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _buildProductDiscountsSection(),
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Shop Coupons',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                ),
-              ),
-              FilledButton.icon(
-                onPressed: () => _openCouponForm(),
-                icon: const Icon(Icons.add),
-                label: const Text('Add'),
-              ),
-            ],
+          const Text(
+            'Offers',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 12),
-          if (_coupons.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Center(child: Text('No shop coupons yet')),
-            )
-          else
-            ..._coupons.map((coupon) {
-              final type = coupon['discount_type']?.toString() == 'amount'
-                  ? 'PHP ${coupon['discount_value']} off'
-                  : '${coupon['discount_value']}% off';
-              return Card(
-                margin: const EdgeInsets.only(bottom: 10),
-                child: ListTile(
-                  leading: const Icon(Icons.local_offer_outlined),
-                  title: Text(coupon['code']?.toString() ?? 'COUPON'),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(type),
-                      Text('Used ${coupon['times_used'] ?? 0} time(s)'),
-                      if ((coupon['expires_at']?.toString() ?? '').isNotEmpty)
-                        Text('Expires ${_readableDateTime(coupon['expires_at'])}'),
-                    ],
-                  ),
-                  trailing: Switch(
-                    value: coupon['is_active'] != false,
-                    onChanged: (value) async {
-                      await DatabaseService.saveCoupon(
-                        code: coupon['code'].toString(),
-                        discountType:
-                            coupon['discount_type']?.toString() ?? 'percent',
-                        discountValue: _number(coupon['discount_value']),
-                        minSubtotal: _number(coupon['min_subtotal']),
-                        description: coupon['description']?.toString(),
-                        expiresAt: coupon['expires_at']?.toString(),
-                        isActive: value,
-                        storeId: _store?['store_id']?.toString(),
-                      );
-                      _loadDashboard();
-                    },
-                  ),
-                  onTap: () => _openCouponForm(coupon),
-                ),
-              );
-            }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildReviewCard(Map<String, dynamic> review) {
-  final comment = review['comment']?.toString().trim() ?? '';
-
-  return Padding(
-    padding: const EdgeInsets.only(left: 14, top: 8, bottom: 8),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '- ${_reviewerName(review)}',
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 3),
-        _reviewStars(review['rating']),
-        if (comment.isNotEmpty) ...[
           const SizedBox(height: 4),
-          Text(comment),
+          Text(
+            'Manage discounts, discount history, and shop coupons',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 16),
+          _offersToggle(),
+          const SizedBox(height: 16),
+          if (_offersView == 'Shop Coupons')
+            _buildShopCouponsSection()
+          else
+            _buildProductDiscountsSection(),
         ],
-      ],
-    ),
-  );
-}
-
-Widget _buildProductReviewsPanel() {
-  final grouped = <String, Map<String, List<Map<String, dynamic>>>>{};
-
-  for (final review in _productReviews) {
-    final time = _reviewDate(review['created_at']);
-    final productName = _productNameFromReview(review);
-
-    grouped.putIfAbsent(time, () => {});
-    grouped[time]!.putIfAbsent(productName, () => []);
-    grouped[time]![productName]!.add(review);
-  }
-
-  if (grouped.isEmpty) {
-    return const Card(
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Text('No product reviews yet'),
       ),
     );
   }
 
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: grouped.entries.map((timeEntry) {
-      return Card(
-        margin: const EdgeInsets.only(bottom: 12),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                timeEntry.key,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ),
-              const SizedBox(height: 10),
-              ...timeEntry.value.entries.map((productEntry) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '> ${productEntry.key}',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      ...productEntry.value.map(_buildReviewCard),
-                    ],
-                  ),
-                );
-              }),
-            ],
-          ),
-        ),
-      );
-    }).toList(),
-  );
-}
-
-Widget _buildStoreReviewsPanel() {
-  final grouped = <String, List<Map<String, dynamic>>>{};
-
-  for (final review in _storeReviews) {
-    final time = _reviewDate(review['created_at']);
-    grouped.putIfAbsent(time, () => []);
-    grouped[time]!.add(review);
-  }
-
-  if (grouped.isEmpty) {
-    return const Card(
+  Widget _reviewsPanel({
+    required String title,
+    required int count,
+    required String emptyText,
+    required List<Widget> children,
+    required Widget pager,
+  }) {
+    return Card(
       child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Text('No store reviews yet'),
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
+                ),
+                Chip(label: Text('$count')),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (children.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 32),
+                child: Center(child: Text(emptyText)),
+              )
+            else
+              ...children,
+            pager,
+          ],
+        ),
       ),
     );
   }
-
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: grouped.entries.map((entry) {
-      return Card(
-        margin: const EdgeInsets.only(bottom: 12),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                entry.key,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ),
-              const SizedBox(height: 10),
-              ...entry.value.map((review) {
-                final comment = review['comment']?.toString().trim() ?? '';
-
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _reviewerName(review),
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 3),
-                      _reviewStars(review['rating']),
-                      if (comment.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(comment),
-                      ],
-                    ],
-                  ),
-                );
-              }),
-            ],
-          ),
-        ),
-      );
-    }).toList(),
-  );
-}
 
   Widget _buildReviewsTab() {
+    final storeReviews = [..._storeReviews];
+    final productReviews = [..._productReviews];
+
+    final storeTotalPages =
+        storeReviews.isEmpty ? 1 : (storeReviews.length / _reviewsPerPage).ceil();
+
+    final productTotalPages = productReviews.isEmpty
+        ? 1
+        : (productReviews.length / _reviewsPerPage).ceil();
+
+    if (_storeReviewsPage >= storeTotalPages) {
+      _storeReviewsPage = storeTotalPages - 1;
+    }
+
+    if (_productReviewsPage >= productTotalPages) {
+      _productReviewsPage = productTotalPages - 1;
+    }
+
+    if (_storeReviewsPage < 0) _storeReviewsPage = 0;
+    if (_productReviewsPage < 0) _productReviewsPage = 0;
+
+    final visibleStoreReviews = _pageSlice(
+      storeReviews,
+      _storeReviewsPage,
+      _reviewsPerPage,
+    );
+
+    final visibleProductReviews = _pageSlice(
+      productReviews,
+      _productReviewsPage,
+      _reviewsPerPage,
+    );
+
     return RefreshIndicator(
       onRefresh: _loadDashboard,
       child: ListView(
@@ -2321,32 +3085,79 @@ Widget _buildStoreReviewsPanel() {
         children: [
           const Text(
             'Reviews',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22),
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
           Text(
-            'Product reviews and store reviews from buyers',
+            'Store and product feedback from buyers',
             style: TextStyle(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 16),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final sideBySide = constraints.maxWidth >= 760;
 
-          const Text(
-            'Product Reviews',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              final storePanel = _reviewsPanel(
+                title: 'Store Reviews',
+                count: storeReviews.length,
+                emptyText: 'No store reviews yet',
+                children: visibleStoreReviews
+                    .map((review) => _reviewCard(review))
+                    .toList(),
+                pager: _smallPager(
+                  page: _storeReviewsPage,
+                  totalItems: storeReviews.length,
+                  perPage: _reviewsPerPage,
+                  onPageChanged: (page) {
+                    setState(() => _storeReviewsPage = page);
+                  },
+                ),
+              );
+
+              final productPanel = _reviewsPanel(
+                title: 'Product Reviews',
+                count: productReviews.length,
+                emptyText: 'No product reviews yet',
+                children: visibleProductReviews
+                    .map(
+                      (review) => _reviewCard(
+                        review,
+                        showProduct: true,
+                      ),
+                    )
+                    .toList(),
+                pager: _smallPager(
+                  page: _productReviewsPage,
+                  totalItems: productReviews.length,
+                  perPage: _reviewsPerPage,
+                  onPageChanged: (page) {
+                    setState(() => _productReviewsPage = page);
+                  },
+                ),
+              );
+
+              if (!sideBySide) {
+                return Column(
+                  children: [
+                    storePanel,
+                    const SizedBox(height: 12),
+                    productPanel,
+                  ],
+                );
+              }
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: storePanel),
+                  const SizedBox(width: 12),
+                  Expanded(child: productPanel),
+                ],
+              );
+            },
           ),
-          const SizedBox(height: 10),
-          _buildProductReviewsPanel(),
-
-          const SizedBox(height: 24),
-
-          const Text(
-            'Store Reviews',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-          ),
-          const SizedBox(height: 10),
-          _buildStoreReviewsPanel(),
         ],
       ),
     );

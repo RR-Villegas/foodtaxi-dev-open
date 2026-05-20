@@ -22,6 +22,9 @@ class _ProductPageState extends State<ProductPage> {
   List<Map<String, dynamic>> _reviews = [];
   List<Map<String, dynamic>> _priceHistory = [];
   List<Map<String, dynamic>> _discountPriceHistory = [];
+  List<Map<String, dynamic>> _productImages = [];
+  Map<String, List<Map<String, dynamic>>> _variantImages = {};
+  int _selectedImageIndex = 0;
   bool _isLoading = true;
   bool _hasError = false;
   int _quantity = 1;
@@ -183,6 +186,26 @@ class _ProductPageState extends State<ProductPage> {
           await DatabaseService.getProductPriceHistory(widget.productId);
       final discountPriceHistory =
           await DatabaseService.getProductDiscountPriceHistory(widget.productId);
+      final productImages = response == null
+          ? <Map<String, dynamic>>[]
+          : await DatabaseService.getProductImages(widget.productId);
+
+      final variantImageMap = <String, List<Map<String, dynamic>>>{};
+
+      if (response != null) {
+        final variants = response['product_variant'];
+
+        if (variants is List) {
+          for (final variant in variants.whereType<Map>()) {
+            final variantId = variant['variant_id']?.toString();
+
+            if (variantId == null || variantId.isEmpty) continue;
+
+            variantImageMap[variantId] =
+                await DatabaseService.getVariantImages(variantId);
+          }
+        }
+      }
 
       if (!mounted) return;
 
@@ -194,6 +217,9 @@ class _ProductPageState extends State<ProductPage> {
         _reviews = reviews;
         _priceHistory = priceHistory;
         _discountPriceHistory = discountPriceHistory;
+        _productImages = productImages;
+        _variantImages = variantImageMap;
+        _selectedImageIndex = 0;
         _hasError = response == null;
         _isLoading = false;
       });
@@ -207,7 +233,8 @@ class _ProductPageState extends State<ProductPage> {
       });
     }
   }
-    Future<void> _refreshDiscountPriceHistory() async {
+
+  Future<void> _refreshDiscountPriceHistory() async {
     try {
       final discountPriceHistory =
           await DatabaseService.getProductDiscountPriceHistory(widget.productId);
@@ -678,6 +705,104 @@ class _ProductPageState extends State<ProductPage> {
     );
   }
 
+  List<String> _activeGalleryImages() {
+    final product = _product;
+    if (product == null) return [];
+
+    final selectedVariantId = _selectedVariant?['variant_id']?.toString();
+
+    if (selectedVariantId != null && selectedVariantId.isNotEmpty) {
+      final variantRows = _variantImages[selectedVariantId] ?? [];
+
+      final variantUrls = variantRows
+          .map((row) => row['image_url']?.toString().trim() ?? '')
+          .where((url) => url.isNotEmpty)
+          .toList();
+
+      if (variantUrls.isNotEmpty) {
+        return variantUrls;
+      }
+    }
+
+    final productUrls = _productImages
+        .map((row) => row['image_url']?.toString().trim() ?? '')
+        .where((url) => url.isNotEmpty)
+        .toList();
+
+    if (productUrls.isNotEmpty) {
+      return productUrls;
+    }
+
+    final fallback = product['main_image_url']?.toString().trim() ?? '';
+    if (fallback.isNotEmpty) return [fallback];
+
+    return [];
+  }
+
+  String? _activeGalleryImage() {
+    final images = _activeGalleryImages();
+
+    if (images.isEmpty) return null;
+
+    final safeIndex = _selectedImageIndex.clamp(0, images.length - 1);
+    return _resolveImagePath(images[safeIndex]);
+  }
+
+  Widget _buildProductGallery() {
+    final scheme = Theme.of(context).colorScheme;
+    final images = _activeGalleryImages();
+
+    final activeImage = _activeGalleryImage();
+
+    return Column(
+      children: [
+        AspectRatio(
+          aspectRatio: 1,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: _buildImage(activeImage),
+          ),
+        ),
+        if (images.length > 1) ...[
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 72,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: images.length,
+              itemBuilder: (context, index) {
+                final resolved = _resolveImagePath(images[index]);
+                final selected = index == _selectedImageIndex;
+
+                return GestureDetector(
+                  onTap: () {
+                    setState(() => _selectedImageIndex = index);
+                  },
+                  child: Container(
+                    width: 72,
+                    height: 72,
+                    margin: const EdgeInsets.only(right: 8),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: selected ? scheme.primary : scheme.outline,
+                        width: selected ? 2 : 1,
+                      ),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(9),
+                      child: _buildImage(resolved),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   Widget _buildImage(String? imagePath) {
     if (imagePath == null) {
       return Container(
@@ -737,7 +862,6 @@ class _ProductPageState extends State<ProductPage> {
     }
 
     final product = _product!;
-    final imagePath = _resolveImagePath(product['main_image_url']);
     final price = _toDouble(product['price']);
     final baseSizeLabel =
         product['base_size_label']?.toString().trim().isNotEmpty == true
@@ -802,15 +926,9 @@ class _ProductPageState extends State<ProductPage> {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox.square(
-                      dimension: imageSize.clamp(140, 320),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: ColoredBox(
-                          color: Colors.grey.shade200,
-                          child: _buildImage(imagePath),
-                        ),
-                      ),
+                    SizedBox(
+                      width: imageSize.clamp(160, 320),
+                      child: _buildProductGallery(),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
@@ -908,6 +1026,7 @@ class _ProductPageState extends State<ProductPage> {
                                       : (_) {
                                           setState(() {
                                             _selectedVariant = variant;
+                                            _selectedImageIndex = 0;
                                             _quantity = 1;
                                           });
                                         },

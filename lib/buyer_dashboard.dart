@@ -5,6 +5,7 @@ import 'services/database_service.dart';
 import 'cart_model.dart';
 import 'widgets/adaptive_menu_item.dart';
 import 'services/theme_service.dart';
+import 'widgets/notification_bell.dart';
 
 class BuyerDashboard extends StatefulWidget {
   const BuyerDashboard({super.key});
@@ -41,18 +42,19 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
   static const Map<String, String> categoryNames = {
     'Baking Supplies & Ingredients': '🧁 Baking',
     'Coffee, Tea & Beverages': '☕ Beverages',
+    'Condiments, Sauces & Spices': '🌶️ Sauces & Spices',
+    'Dairy, Eggs & Chilled Goods': '🥚 Dairy & Eggs',
+    'Fresh Produce': '🥬 Fresh Produce',
+    'Frozen Foods': '❄️ Frozen',
+    'Local Delicacies': '🏡 Local Delicacies',
+    'Meal Kits & Prepped Foods': '🍱 Meal Kits',
+    'Meat, Seafood & Poultry': '🥩 Meat & Seafood',
+    'Organic and Health Foods': '🥗 Health Foods',
+    'Other': '📦 Other',
+    'Ready-to-Eat Meals': '🍽️ Ready Meals',
+    'Rice, Grains & Pasta': '🍚 Grains',
     'Snacks & Candy': '🍬 Snacks',
     'Specialty Foods & International Cuisine': '🌍 Specialty',
-    'Organic and Health Foods': '🥗 Health Foods',
-    'Meal Kits & Prepped Foods': '🍱 Meal Kits',
-    'Fresh Produce': '🥬 Fresh Produce',
-    'Meat, Seafood & Poultry': '🥩 Meat & Seafood',
-    'Dairy, Eggs & Chilled Goods': '🥚 Dairy & Eggs',
-    'Frozen Foods': '❄️ Frozen',
-    'Condiments, Sauces & Spices': '🌶️ Sauces & Spices',
-    'Rice, Grains & Pasta': '🍚 Grains',
-    'Ready-to-Eat Meals': '🍽️ Ready Meals',
-    'Local Delicacies': '🏡 Local Delicacies',
   };
 
 @override
@@ -181,11 +183,14 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
       // Group by category with display names
       Map<String, List<Map<String, dynamic>>> grouped = {};
       if (trending.isNotEmpty) {
-        grouped['Trending'] = trending;
+        grouped['🔥 Trending'] = trending;
       }
       for (var product in _products) {
-        final category = product['category'] ?? 'Other';
-        final displayName = categoryNames[category] ?? category;
+        final category = product['category']?.toString().trim();
+        final displayName = categoryNames[
+              category == null || category.isEmpty ? 'Other' : category
+            ] ??
+            '📦 Other';
 
         if (!grouped.containsKey(displayName)) {
           grouped[displayName] = [];
@@ -233,6 +238,26 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
     final value = product['review_count'];
     if (value is int) return value;
     return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  Widget _productImage(dynamic imageValue) {
+    final path = imageValue?.toString().trim() ?? '';
+
+    if (path.isEmpty) {
+      return Image.asset(
+        'assets/images/burger.jpg',
+        fit: BoxFit.cover,
+      );
+    }
+
+    return Image.network(
+      DatabaseService.getProductImageUrl(path),
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) => Image.asset(
+        'assets/images/burger.jpg',
+        fit: BoxFit.cover,
+      ),
+    );
   }
 
   Widget _stars(double rating) {
@@ -327,7 +352,7 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
         itemCount: items.length,
         itemBuilder: (context, index) {
           final item = items[index];
-          final productId = item['product_id'] as String?;
+          final productId = item['product_id']?.toString();
           final rating = _rating(item);
           final reviewCount = _reviewCount(item);
 
@@ -358,16 +383,7 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
                         borderRadius: const BorderRadius.vertical(
                           top: Radius.circular(16),
                         ),
-                        child: Image.network(
-                          DatabaseService.getProductImageUrl(
-                            item['main_image_url'],
-                          ),
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => Image.asset(
-                            'assets/images/burger.jpg',
-                            fit: BoxFit.cover,
-                          ),
-                        ),
+                        child: _productImage(item['main_image_url']),
                       ),
                     ),
                     Expanded(
@@ -623,6 +639,7 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
           ],
         ),
         actions: [
+          const NotificationBell(),
           Center(
             child: ValueListenableBuilder<int>(
               valueListenable: CartModel.itemCountNotifier,

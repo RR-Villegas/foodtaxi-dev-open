@@ -30,6 +30,7 @@ class _EditProductPageState extends State<EditProductPage> {
   final _descriptionController = TextEditingController();
   final _picker = ImagePicker();
   final List<_VariantDraft> _variants = [];
+  final List<String> _productImagePaths = [];
 
   String? _category;
   String? _imagePath;
@@ -53,6 +54,18 @@ class _EditProductPageState extends State<EditProductPage> {
     _descriptionController.text = product?['description']?.toString() ?? '';
     _category = product?['category']?.toString();
     _imagePath = product?['main_image_url']?.toString();
+    if (_imagePath != null && _imagePath!.trim().isNotEmpty) {
+      _productImagePaths.add(_imagePath!.trim());
+    }
+    final rawProductImages = product?['product_image'];
+    if (rawProductImages is List) {
+      for (final row in rawProductImages.whereType<Map>()) {
+        final path = row['image_url']?.toString().trim() ?? '';
+        if (path.isNotEmpty && !_productImagePaths.contains(path)) {
+          _productImagePaths.add(path);
+        }
+      }
+    }
     _stockMode = product?['stock_mode']?.toString() == 'shared'
         ? 'shared'
         : 'independent';
@@ -62,12 +75,26 @@ class _EditProductPageState extends State<EditProductPage> {
     if (rawVariants is List) {
       for (final variant in rawVariants) {
         if (variant is! Map) continue;
+        if (variant['is_deleted'] == true) continue;
+        final variantImages = <String>[];
+        final rawVariantImages = variant['product_variant_image'];
+        if (rawVariantImages is List) {
+          for (final row in rawVariantImages.whereType<Map>()) {
+            final path = row['image_url']?.toString().trim() ?? '';
+            if (path.isNotEmpty && !variantImages.contains(path)) {
+              variantImages.add(path);
+            }
+          }
+        }
+
         _variants.add(
           _VariantDraft(
+            variantId: variant['variant_id']?.toString(),
             size: variant['size_label']?.toString() ?? '',
             price: variant['price']?.toString() ?? '',
             stock: variant['stock_quantity']?.toString() ?? '0',
             unitQuantity: variant['stock_unit_quantity']?.toString() ?? '1',
+            imagePaths: variantImages,
             isActive: variant['is_active'] != false,
           ),
         );
@@ -89,29 +116,354 @@ class _EditProductPageState extends State<EditProductPage> {
     super.dispose();
   }
 
-  Future<void> _pickImage() async {
-    final image = await _picker.pickImage(
-      source: ImageSource.gallery,
+  String _imageUrl(String path) {
+    final trimmed = path.trim();
+
+    if (trimmed.startsWith('http')) {
+      return trimmed;
+    }
+
+    return DatabaseService.getProductImageUrl(trimmed);
+  }
+
+  Widget _galleryImage(String path) {
+    return Image.network(
+      _imageUrl(path),
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => Container(
+        color: Colors.grey.shade200,
+        alignment: Alignment.center,
+        child: const Icon(Icons.broken_image_outlined),
+      ),
+    );
+  }
+
+  void _removeProductImage(String path) {
+    setState(() {
+      _productImagePaths.remove(path);
+      _imagePath = _productImagePaths.isEmpty ? null : _productImagePaths.first;
+    });
+  }
+
+  void _makePrimaryProductImage(String path) {
+    setState(() {
+      _productImagePaths.remove(path);
+      _productImagePaths.insert(0, path);
+      _imagePath = path;
+    });
+  }
+
+  Widget _productGalleryEditor() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Product Images',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'First image becomes the main thumbnail.',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            if (_productImagePaths.isEmpty)
+              Container(
+                height: 180,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                alignment: Alignment.center,
+                child: const Icon(Icons.add_photo_alternate_outlined, size: 56),
+              )
+            else
+              SizedBox(
+                height: 140,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _productImagePaths.length,
+                  itemBuilder: (context, index) {
+                    final path = _productImagePaths[index];
+                    final isPrimary = index == 0;
+
+                    return Container(
+                      width: 130,
+                      margin: const EdgeInsets.only(right: 10),
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: _galleryImage(path),
+                            ),
+                          ),
+                          Positioned(
+                            top: 6,
+                            left: 6,
+                            child: Chip(
+                              label: Text(isPrimary ? 'Main' : '${index + 1}'),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ),
+                          Positioned(
+                            right: 4,
+                            top: 4,
+                            child: IconButton.filledTonal(
+                              tooltip: 'Remove',
+                              onPressed: () => _removeProductImage(path),
+                              icon: const Icon(Icons.close, size: 18),
+                            ),
+                          ),
+                          if (!isPrimary)
+                            Positioned(
+                              left: 6,
+                              bottom: 6,
+                              child: FilledButton.tonal(
+                                onPressed: () => _makePrimaryProductImage(path),
+                                child: const Text('Set main'),
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+            const SizedBox(height: 12),
+
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _isUploading ? null : _pickProductImages,
+                icon: _isUploading
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.upload),
+                label: Text(
+                  _isUploading ? 'Uploading...' : 'Upload Product Images',
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickVariantImages(_VariantDraft variant) async {
+    final images = await _picker.pickMultiImage(
       imageQuality: 85,
       maxWidth: 1600,
     );
-    if (image == null) return;
+
+    if (images.isEmpty) return;
 
     setState(() => _isUploading = true);
-    final path = await DatabaseService.uploadProductImage(
-      bytes: await image.readAsBytes(),
-      fileName: image.name,
-    );
+
+    final uploadedPaths = <String>[];
+
+    for (final image in images) {
+      final path = await DatabaseService.uploadProductImage(
+        bytes: await image.readAsBytes(),
+        fileName: image.name,
+      );
+
+      if (path != null && path.trim().isNotEmpty) {
+        uploadedPaths.add(path);
+      }
+    }
 
     if (!mounted) return;
+
     setState(() {
       _isUploading = false;
-      if (path != null) _imagePath = path;
+
+      for (final path in uploadedPaths) {
+        if (!variant.imagePaths.contains(path)) {
+          variant.imagePaths.add(path);
+        }
+      }
     });
 
-    if (path == null) {
+    if (uploadedPaths.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Image could not be uploaded')),
+        const SnackBar(content: Text('Variant images could not be uploaded')),
+      );
+    }
+  }
+
+  void _removeVariantImage(_VariantDraft variant, String path) {
+    setState(() => variant.imagePaths.remove(path));
+  }
+
+  void _makePrimaryVariantImage(_VariantDraft variant, String path) {
+    setState(() {
+      variant.imagePaths.remove(path);
+      variant.imagePaths.insert(0, path);
+    });
+  }
+
+  Widget _variantGalleryEditor(_VariantDraft variant) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        Text(
+          'Variant Images',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Optional. These images show only when this size is selected.',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: 10),
+
+        if (variant.imagePaths.isEmpty)
+          Container(
+            height: 110,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            alignment: Alignment.center,
+            child: const Icon(Icons.add_photo_alternate_outlined, size: 38),
+          )
+        else
+          SizedBox(
+            height: 118,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: variant.imagePaths.length,
+              itemBuilder: (context, index) {
+                final path = variant.imagePaths[index];
+                final isPrimary = index == 0;
+
+                return Container(
+                  width: 112,
+                  margin: const EdgeInsets.only(right: 10),
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: _galleryImage(path),
+                        ),
+                      ),
+                      Positioned(
+                        top: 5,
+                        left: 5,
+                        child: Chip(
+                          label: Text(isPrimary ? 'Main' : '${index + 1}'),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                      Positioned(
+                        right: 3,
+                        top: 3,
+                        child: IconButton.filledTonal(
+                          tooltip: 'Remove',
+                          onPressed: () => _removeVariantImage(variant, path),
+                          icon: const Icon(Icons.close, size: 16),
+                        ),
+                      ),
+                      if (!isPrimary)
+                        Positioned(
+                          left: 5,
+                          bottom: 5,
+                          child: FilledButton.tonal(
+                            onPressed: () => _makePrimaryVariantImage(variant, path),
+                            child: const Text('Main'),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+
+        const SizedBox(height: 10),
+
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _isUploading ? null : () => _pickVariantImages(variant),
+            icon: _isUploading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.upload),
+            label: Text(
+              _isUploading ? 'Uploading...' : 'Upload Variant Images',
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _pickProductImages() async {
+    final images = await _picker.pickMultiImage(
+      imageQuality: 85,
+      maxWidth: 1600,
+    );
+
+    if (images.isEmpty) return;
+
+    setState(() => _isUploading = true);
+
+    final uploadedPaths = <String>[];
+
+    for (final image in images) {
+      final path = await DatabaseService.uploadProductImage(
+        bytes: await image.readAsBytes(),
+        fileName: image.name,
+      );
+
+      if (path != null && path.trim().isNotEmpty) {
+        uploadedPaths.add(path);
+      }
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _isUploading = false;
+
+      for (final path in uploadedPaths) {
+        if (!_productImagePaths.contains(path)) {
+          _productImagePaths.add(path);
+        }
+      }
+
+      _imagePath = _productImagePaths.isEmpty ? null : _productImagePaths.first;
+    });
+
+    if (uploadedPaths.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Images could not be uploaded')),
       );
     }
   }
@@ -140,15 +492,18 @@ class _EditProductPageState extends State<EditProductPage> {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isSaving = true);
+
     final productName = InputValidator.cleanProductTitle(_nameController.text);
     final baseSize = InputValidator.cleanDisplayText(
       _baseSizeController.text,
       fallback: 'Default',
     );
+
     final variants = _variants
         .where((variant) => variant.sizeController.text.trim().isNotEmpty)
         .map(
           (variant) => {
+            'variant_id': variant.variantId,
             'product_name': productName,
             'size_label': InputValidator.cleanDisplayText(
               variant.sizeController.text,
@@ -159,79 +514,85 @@ class _EditProductPageState extends State<EditProductPage> {
               variant.unitQuantityController.text.trim(),
             ),
             'is_active': variant.isActive,
+            'image_paths': variant.imagePaths,
           },
         )
         .toList();
 
-    final ok = _isEditing
-        ? await DatabaseService.updateProduct(
-            productId: widget.product!['product_id'].toString(),
-            name: productName,
-            category: _category,
-            price: double.parse(_priceController.text.trim()),
-            stockQuantity: int.parse(_stockController.text.trim()),
-            stockMode: _stockMode,
-            baseSizeLabel: baseSize,
-            baseUnitQuantity: int.parse(_baseUnitQuantityController.text.trim()),
-            mainImageUrl: _imagePath,
-            description: _descriptionController.text,
-            isActive: _isActive,
-            variants: variants,
-          )
-        : await DatabaseService.insertProduct(
-            storeId: widget.storeId,
-            name: productName,
-            category: _category,
-            price: double.parse(_priceController.text.trim()),
-            stockQuantity: int.parse(_stockController.text.trim()),
-            stockMode: _stockMode,
-            baseSizeLabel: baseSize,
-            baseUnitQuantity: int.parse(_baseUnitQuantityController.text.trim()),
-            mainImageUrl: _imagePath,
-            description: _descriptionController.text,
-            isActive: _isActive,
-            variants: variants,
-          );
+    String? productId;
+
+    if (_isEditing) {
+      productId = widget.product!['product_id'].toString();
+
+      final ok = await DatabaseService.updateProduct(
+        productId: productId,
+        name: productName,
+        category: _category,
+        price: double.parse(_priceController.text.trim()),
+        stockQuantity: int.parse(_stockController.text.trim()),
+        stockMode: _stockMode,
+        baseSizeLabel: baseSize,
+        baseUnitQuantity: int.parse(_baseUnitQuantityController.text.trim()),
+        mainImageUrl: _productImagePaths.isEmpty ? null : _productImagePaths.first,
+        description: _descriptionController.text,
+        isActive: _isActive,
+        variants: const [],
+      );
+
+      if (!ok) productId = null;
+    } else {
+      productId = await DatabaseService.insertProduct(
+        storeId: widget.storeId,
+        name: productName,
+        category: _category,
+        price: double.parse(_priceController.text.trim()),
+        stockQuantity: int.parse(_stockController.text.trim()),
+        stockMode: _stockMode,
+        baseSizeLabel: baseSize,
+        baseUnitQuantity: int.parse(_baseUnitQuantityController.text.trim()),
+        mainImageUrl: _productImagePaths.isEmpty ? null : _productImagePaths.first,
+        description: _descriptionController.text,
+        isActive: _isActive,
+        variants: const [],
+      );
+    }
+
+    if (productId != null) {
+      await DatabaseService.replaceProductImages(
+        productId: productId,
+        imageUrls: _productImagePaths,
+      );
+
+      final savedVariants = await DatabaseService.replaceProductVariantsPreserveOrders(
+        productId,
+        variants,
+      );
+
+      for (var i = 0; i < savedVariants.length && i < variants.length; i++) {
+        final variantId = savedVariants[i]['variant_id']?.toString();
+        if (variantId == null || variantId.isEmpty) continue;
+
+        final imagePaths = variants[i]['image_paths'];
+        if (imagePaths is! List) continue;
+
+        await DatabaseService.replaceVariantImages(
+          productId: productId,
+          variantId: variantId,
+          imageUrls: imagePaths.map((item) => item.toString()).toList(),
+        );
+      }
+    }
 
     if (!mounted) return;
     setState(() => _isSaving = false);
 
-    if (ok) {
+    if (productId != null) {
       Navigator.pop(context, true);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Product could not be saved')),
       );
     }
-  }
-
-  Widget _imagePreview() {
-    final imagePath = _imagePath;
-    if (imagePath == null || imagePath.trim().isEmpty) {
-      return Container(
-        height: 220,
-        color: Colors.grey.shade200,
-        alignment: Alignment.center,
-        child: const Icon(Icons.add_photo_alternate_outlined, size: 56),
-      );
-    }
-
-    final url = imagePath.startsWith('http')
-        ? imagePath
-        : DatabaseService.getProductImageUrl(imagePath);
-
-    return Image.network(
-      url,
-      height: 220,
-      width: double.infinity,
-      fit: BoxFit.cover,
-      errorBuilder: (_, _, _) => Container(
-        height: 220,
-        color: Colors.grey.shade200,
-        alignment: Alignment.center,
-        child: const Icon(Icons.broken_image_outlined, size: 56),
-      ),
-    );
   }
 
   String? _requiredText(String? value) {
@@ -287,19 +648,7 @@ class _EditProductPageState extends State<EditProductPage> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            ClipRRect(borderRadius: BorderRadius.circular(8), child: _imagePreview()),
-            const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed: _isUploading ? null : _pickImage,
-              icon: _isUploading
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.upload),
-              label: Text(_isUploading ? 'Uploading...' : 'Upload Product Image'),
-            ),
+            _productGalleryEditor(),
             const SizedBox(height: 20),
             TextFormField(
               controller: _nameController,
@@ -507,6 +856,7 @@ class _EditProductPageState extends State<EditProductPage> {
                             setState(() => variant.isActive = value);
                           },
                         ),
+                        _variantGalleryEditor(variant),
                       ],
                     ),
                   ),
@@ -530,20 +880,25 @@ class _EditProductPageState extends State<EditProductPage> {
 
 class _VariantDraft {
   _VariantDraft({
+    this.variantId,
     required String size,
     required String price,
     required String stock,
     required String unitQuantity,
+    List<String> imagePaths = const [],
     this.isActive = true,
   })  : sizeController = TextEditingController(text: size),
         priceController = TextEditingController(text: price),
         stockController = TextEditingController(text: stock),
-        unitQuantityController = TextEditingController(text: unitQuantity);
+        unitQuantityController = TextEditingController(text: unitQuantity),
+        imagePaths = List<String>.from(imagePaths);
 
+  final String? variantId;
   final TextEditingController sizeController;
   final TextEditingController priceController;
   final TextEditingController stockController;
   final TextEditingController unitQuantityController;
+  final List<String> imagePaths;
   bool isActive;
 
   void dispose() {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'database_service.dart';
 
 class FoodTaxiTheme {
   final String id;
@@ -590,22 +591,33 @@ class ThemeService {
 
   static Future<void> load() async {
     final userId = Supabase.instance.client.auth.currentUser?.id;
+
     if (userId == null) {
       selectedThemeId.value = 'default';
       return;
     }
 
     final prefs = await SharedPreferences.getInstance();
-    final id = prefs.getString('$_keyPrefix$userId');
 
-    if (id == null) {
-      selectedThemeId.value = 'default';
+    final localId = prefs.getString('$_keyPrefix$userId');
+    if (localId != null && themes.any((theme) => theme.id == localId)) {
+      selectedThemeId.value = localId;
+    }
+
+    final remoteId = await DatabaseService.getThemePreference();
+
+    if (remoteId != null && themes.any((theme) => theme.id == remoteId)) {
+      selectedThemeId.value = remoteId;
+      await prefs.setString('$_keyPrefix$userId', remoteId);
       return;
     }
 
-    if (themes.any((theme) => theme.id == id)) {
-      selectedThemeId.value = id;
+    if (localId != null && themes.any((theme) => theme.id == localId)) {
+      await DatabaseService.saveThemePreference(localId);
+      return;
     }
+
+    selectedThemeId.value = 'default';
   }
 
   static Future<void> setTheme(String id) async {
@@ -619,9 +631,20 @@ class ThemeService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_legacyKey);
     await prefs.setString('$_keyPrefix$userId', id);
+
+    await DatabaseService.saveThemePreference(id);
   }
 
   static Future<void> resetToDefault() async {
     selectedThemeId.value = 'default';
+
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_legacyKey);
+    await prefs.setString('$_keyPrefix$userId', 'default');
+
+    await DatabaseService.saveThemePreference('default');
   }
 }
