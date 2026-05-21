@@ -11,7 +11,7 @@ class WebRadioPlayer {
   void Function()? _onPause;
   void Function(String error)? _onError;
 
-  double _volume = 0.8;
+  double _volume = 0.5;
 
   bool get isPlaying {
     final audio = _audio;
@@ -25,13 +25,13 @@ class WebRadioPlayer {
     required void Function() onPlay,
     required void Function() onPause,
     required void Function(String error) onError,
-    double initialVolume = 0.8,
+    double initialVolume = 0.5,
   }) {
     _streamUrl = streamUrl;
     _onPlay = onPlay;
     _onPause = onPause;
     _onError = onError;
-    _volume = initialVolume.clamp(0.0, 1.0);
+    _volume = initialVolume.clamp(0.0, 1.0).toDouble();
   }
 
   web.HTMLAudioElement _createAudio() {
@@ -108,7 +108,7 @@ class WebRadioPlayer {
   }
 
   void setVolume(double value) {
-    _volume = value.clamp(0.0, 1.0);
+    _volume = value.clamp(0.0, 1.0).toDouble();
 
     final audio = _audio;
     if (audio != null) {
