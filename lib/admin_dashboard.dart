@@ -49,7 +49,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   String _reportTypeFilter = 'All';
   bool _loadingTerms = false;
   bool _savingTerms = false;
-  List<Map<String, dynamic>> _termsSections = [];
+  final List<Map<String, dynamic>> _termsSections = [];
   final _termsSummaryController = TextEditingController();
   final List<TextEditingController> _termsTitleControllers = [];
   final List<TextEditingController> _termsBodyControllers = [];

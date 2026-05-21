@@ -20,6 +20,8 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Settings'),
@@ -36,6 +38,17 @@ class _SettingsPageState extends State<SettingsPage> {
               onTap: () => Navigator.pushNamed(context, '/notifications'),
             ),
           ),
+
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.description_outlined),
+              title: const Text('Terms and Conditions'),
+              subtitle: const Text('Read the rules for buyers, sellers, and riders'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.pushNamed(context, '/terms'),
+            ),
+          ),
+
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -46,6 +59,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   prefixIcon: Icon(Icons.palette_outlined),
                   border: OutlineInputBorder(),
                 ),
+                dropdownColor: scheme.surface,
                 items: ThemeService.themes
                     .map(
                       (theme) => DropdownMenuItem(
@@ -56,6 +70,17 @@ class _SettingsPageState extends State<SettingsPage> {
                     .toList(),
                 onChanged: _setTheme,
               ),
+            ),
+          ),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.radio_outlined),
+              title: const Text('Gensokyo Radio'),
+              subtitle: const Text(
+                'Members-only listening room with live chat',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.pushNamed(context, '/radio'),
             ),
           ),
         ],

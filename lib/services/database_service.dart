@@ -930,6 +930,135 @@ class DatabaseService {
     }
   }
 
+  static Future<Map<String, dynamic>?> getGensokyoRadioStatus() async {
+    try {
+      final response = await _supabase.functions.invoke(
+        'gensokyo-radio',
+        method: HttpMethod.get,
+      );
+
+      final data = response.data;
+
+      if (data is Map<String, dynamic>) {
+        return data;
+      }
+
+      if (data is Map) {
+        return Map<String, dynamic>.from(data);
+      }
+
+      return null;
+    } catch (e) {
+      _logDbError('Failed to fetch Gensokyo Radio status', e);
+      return null;
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getRadioMessages({
+    int limit = 50,
+  }) async {
+    try {
+      final messages = await _supabase
+          .from('radio_message')
+          .select()
+          .order('created_at', ascending: false)
+          .limit(limit);
+
+      final list = List<Map<String, dynamic>>.from(messages);
+
+      final accountIds = list
+          .map((m) => m['account_id']?.toString())
+          .whereType<String>()
+          .where((id) => id.isNotEmpty)
+          .toSet()
+          .toList();
+
+      if (accountIds.isEmpty) {
+        return list;
+      }
+
+      final accounts = await _supabase
+          .from('account')
+          .select(
+            'account_id, firstname, surname, profile_image_url',
+          )
+          .inFilter('account_id', accountIds);
+
+      final accountMap = {
+        for (final account in List<Map<String, dynamic>>.from(accounts))
+          account['account_id']?.toString(): account,
+      };
+
+      return list.map((message) {
+        final item = Map<String, dynamic>.from(message);
+        item['account'] = accountMap[item['account_id']?.toString()];
+        return item;
+      }).toList();
+    } catch (e) {
+      _logDbError('Failed to fetch radio messages', e);
+      return [];
+    }
+  }
+
+  static Stream<List<Map<String, dynamic>>> radioMessages() {
+    return _supabase
+        .from('radio_message')
+        .stream(primaryKey: ['message_id'])
+        .order('created_at', ascending: false)
+        .asyncMap((messages) async {
+          final accountIds = messages
+              .map((m) => m['account_id']?.toString())
+              .whereType<String>()
+              .where((id) => id.isNotEmpty)
+              .toSet()
+              .toList();
+
+          if (accountIds.isEmpty) {
+            return messages
+                .map((message) => Map<String, dynamic>.from(message))
+                .toList();
+          }
+
+          final accounts = await _supabase
+              .from('account')
+              .select(
+                'account_id, firstname, surname, profile_image_url',
+              )
+              .inFilter('account_id', accountIds);
+
+          final accountMap = {
+            for (final account in List<Map<String, dynamic>>.from(accounts))
+              account['account_id']?.toString(): account,
+          };
+
+          return messages.map((message) {
+            final item = Map<String, dynamic>.from(message);
+            item['account'] = accountMap[item['account_id']?.toString()];
+            return item;
+          }).toList();
+        });
+  }
+
+  static Future<bool> sendRadioMessage(
+    String message,
+  ) async {
+    try {
+      final account = await getCurrentAccount();
+
+      if (account == null) return false;
+
+      await _supabase.from('radio_message').insert({
+        'account_id': account['account_id'],
+        'message': message.trim(),
+      });
+
+      return true;
+    } catch (e) {
+      _logDbError('Failed to send radio message', e);
+      return false;
+    }
+  }
+
   static Future<List<Map<String, dynamic>>> getCurrentNotifications({
     int? limit,
     int? offset,

@@ -1,73 +1,108 @@
-# FoodTaxi Omega
+# Food Taxi Mobile
 
-FoodTaxi Omega is a Flutter marketplace app for local food sellers, buyers, riders, and admins. It uses Supabase for authentication, Postgres data, storage, realtime updates, and edge functions.
+Food Taxi Mobile is a Flutter + Supabase food ordering and delivery app with separate flows for buyers, sellers, riders, and admins.
 
-## Current Features
+The app supports marketplace ordering, seller product management, rider applications, admin approval workflows, reports, coupons, commissions, Terms & Conditions versioning, and basic marketplace moderation tools.
 
-- Buyer marketplace dashboard with category rows, trending products, product search, cart, checkout, delivery address handling, order history, reviews, and shop/product reports.
-- Seller registration with location verification and document uploads, store management, product/variant management, seller coupons, order state controls, and seller dashboard analytics.
-- Rider registration with location verification and document uploads, ready-for-pickup queue, pickup code scanning, in-transit flow, proof-of-delivery upload, and delivery history.
-- Admin dashboard for seller/rider applications, review notes, reports, coupons, sales filtering, and Brevo-backed application email notifications.
-- Per-account themes, including Default, Dark Mode, Koishi Komeiji, Satori Komeiji, Rin Kaenbyou, and Utsuho Reiuji.
-- Supabase Realtime listeners for order, product, and notification refreshes in critical workflows.
+---
 
-## Backend
+## Features
 
-The app is connected to Supabase:
+### Buyer
+- Sign up and log in with Supabase Auth
+- Manage delivery address
+- Browse stores and products
+- Add items to cart
+- Checkout orders
+- Apply discount coupons
+- Track order status
+- View order history
+- Review products, stores, and riders
+- Report stores or products
 
-- Auth: email/password accounts mapped to `account` rows.
-- Database: Postgres tables for accounts, stores, products, variants, orders, addresses, applications, notifications, coupons, reviews, reports, and click tracking.
-- Storage: product images, profile images, application documents, and delivery proof images.
-- Edge Functions: Brevo email delivery for application approval/rejection messages.
-- RLS: enabled on public application tables, with role and ownership policies expected to enforce access.
+### Seller
+- Register as seller through an application flow
+- Upload business permit documents
+- Wait for admin approval
+- Manage store profile
+- Manage products and product variants
+- Upload product/store images
+- Manage product discounts
+- View seller orders
+- Update order status
+- View product and store reviews
 
-## Setup
+### Rider
+- Register as rider through an application flow
+- Upload rider/license/vehicle documents
+- Wait for admin approval
+- View available delivery orders
+- Accept delivery orders
+- Enter pickup code
+- Mark orders as in transit or delivered
+- View delivery history
+- Receive rider ratings
 
-Install Flutter dependencies:
+### Admin
+- Dashboard overview
+- View admin commission/gains
+- Filter sales by day, week, month, year, or custom range
+- Review seller applications
+- Review rider applications
+- Approve or reject applications
+- Manage coupons
+- View reports
+- Review marketplace flags
+- Run unfair market scan
+- Warn, suspend, dismiss, hide products, or ban sellers
+- Manage Terms & Conditions versions
 
-```bash
-flutter pub get
-```
+---
 
-Configure Supabase in `lib/main.dart` or your environment-specific config:
+## Tech Stack
 
-- Supabase URL
-- Supabase anon key
+- Flutter
+- Dart
+- Supabase Auth
+- Supabase Database / PostgreSQL
+- Supabase Storage
+- Supabase Edge Functions
+- Row Level Security policies
+- Shared Preferences
+- Image Picker
+- File Picker
+- Dropdown Search
 
-Configure Brevo secrets in Supabase:
+---
 
-```txt
-BREVO_API_KEY
-BREVO_SENDER_EMAIL
-BREVO_SENDER_NAME
-```
-
-Deploy the email function after changing it:
-
-```bash
-supabase functions deploy send-application-email
-```
-
-## Project Layout
+## Project Structure
 
 ```txt
 lib/
   models/
+    application_data.dart
+    address_model.dart
+    picked_document.dart
+    user_model.dart
+
   services/
+    auth_service.dart
+    database_service.dart
+    input_validator.dart
+    local_storage_service.dart
+    location_service.dart
+    theme_service.dart
+
   widgets/
-  *_page.dart
-supabase/
-  functions/
-  migrations/
-```
+    adaptive_menu_item.dart
+    notification_bell.dart
 
-## Development Notes
-
-- Keep service-role keys out of Flutter/client code.
-- Use Supabase RLS and ownership checks for any table exposed through the Data API.
-- Product click records are retained for one week for trending calculations.
-- Theme choices are saved per logged-in account and reset to Default on logout.
-
-## Status
-
-This project is under active development. Database policies, app flows, and UI polish are still being tightened as features are added.
+  admin_dashboard.dart
+  buyer_dashboard.dart
+  seller_dashboard.dart
+  rider_dashboard.dart
+  login_page.dart
+  signup_page.dart
+  seller_registration_page.dart
+  rider_registration_page.dart
+  terms_page.dart

@@ -29,6 +29,7 @@ import 'services/auth_service.dart';
 import 'services/protected_route.dart';
 import 'services/theme_service.dart';
 import 'terms_page.dart';
+import 'pages/radio_pages.dart';
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -170,6 +171,10 @@ class _MyAppState extends State<MyApp> {
         '/checkout': (context) => ProtectedRoute(
           protection: RouteProtection.buyerOnly,
           child: const CheckoutPage(),
+        ),
+        '/radio': (context) => ProtectedRoute(
+          protection: RouteProtection.authenticated,
+          child: const RadioPage(),
         ),
         '/seller-registration': (context) => const SellerRegistrationPage(),
         '/rider-registration': (context) => const RiderRegistrationPage(),
