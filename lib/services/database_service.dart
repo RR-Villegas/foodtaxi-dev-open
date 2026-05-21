@@ -876,9 +876,12 @@ class DatabaseService {
             'is_active': isActive,
           })
           .eq('product_id', productId);
-      if (variants.isNotEmpty) {
-        await _replaceProductVariants(productId, variants);
-      }
+
+      // IMPORTANT:
+      // Always call this, even when variants is empty.
+      // Empty list means "remove/soft-delete all variants".
+      await _replaceProductVariants(productId, variants);
+
       return true;
     } catch (e) {
       _logDbError('Failed to update product', e);
@@ -980,7 +983,7 @@ class DatabaseService {
       final accounts = await _supabase
           .from('account')
           .select(
-            'account_id, firstname, surname, profile_image_url',
+            'account_id, firstname, surname, profile_image_url, account_type',
           )
           .inFilter('account_id', accountIds);
 
@@ -1022,7 +1025,7 @@ class DatabaseService {
           final accounts = await _supabase
               .from('account')
               .select(
-                'account_id, firstname, surname, profile_image_url',
+                'account_id, firstname, surname, profile_image_url, account_type',
               )
               .inFilter('account_id', accountIds);
 
@@ -1037,6 +1040,23 @@ class DatabaseService {
             return item;
           }).toList();
         });
+  }
+
+  static Future<Map<String, dynamic>?> getStoreByOwnerAccountId(
+    String ownerAccountId,
+  ) async {
+    try {
+      final response = await _supabase
+          .from('store')
+          .select('store_id')
+          .eq('owner_account_id', ownerAccountId)
+          .maybeSingle();
+
+      return response == null ? null : Map<String, dynamic>.from(response);
+    } catch (e) {
+      _logDbError('Failed to fetch store by owner account ID', e);
+      return null;
+    }
   }
 
   static Future<bool> sendRadioMessage(
@@ -1799,21 +1819,23 @@ class DatabaseService {
   ) async {
     try {
       final response = await _supabase
-          .from('product_review')
-          .select('''
-            review_id,
-            product_id,
-            buyer_account_id,
-            rating,
-            comment,
-            created_at,
-            account:product_review_buyer_account_id_fkey (
-              firstname,
-              surname
-            )
-          ''')
-          .eq('product_id', productId)
-          .order('created_at', ascending: false);
+        .from('product_review')
+        .select('''
+          review_id,
+          product_id,
+          buyer_account_id,
+          rating,
+          comment,
+          created_at,
+          account:product_review_buyer_account_id_fkey (
+            account_id,
+            firstname,
+            surname,
+            profile_image_url
+          )
+        ''')
+        .eq('product_id', productId)
+        .order('created_at', ascending: false);
 
       debugPrint('Product Reviews: $response');
 
@@ -2242,6 +2264,87 @@ class DatabaseService {
       return true;
     } catch (e) {
       _logDbError('Failed to apply market flag action', e);
+      return false;
+    }
+  }
+
+  static Future<Map<String, dynamic>?> getBuyerPublicProfile(
+    String buyerAccountId,
+  ) async {
+    try {
+      final response = await _supabase.rpc(
+        'get_buyer_public_profile',
+        params: {
+          'p_buyer_account_id': buyerAccountId,
+        },
+      );
+
+      if (response is Map<String, dynamic>) return response;
+      if (response is Map) return Map<String, dynamic>.from(response);
+
+      return null;
+    } catch (e) {
+      _logDbError('Failed to fetch buyer public profile', e);
+      return null;
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getAdminBuyerReports() async {
+    try {
+      final response = await _supabase.rpc(
+        'get_admin_buyer_reports',
+      );
+
+      return List<Map<String, dynamic>>.from(response as List);
+    } catch (e) {
+      debugPrint('DB Error getAdminBuyerReports: $e');
+      return [];
+    }
+  }
+
+  static Future<bool> adminUpdateBuyerReport({
+    required String reportId,
+    required String status,
+    String? adminNotes,
+  }) async {
+    try {
+      await _supabase.rpc(
+        'admin_update_buyer_report',
+        params: {
+          'p_report_id': reportId,
+          'p_status': status,
+          'p_admin_notes': adminNotes,
+        },
+      );
+
+      return true;
+    } catch (e) {
+      debugPrint('DB Error adminUpdateBuyerReport: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> reportBuyer({
+    required String buyerAccountId,
+    String? orderId,
+    required String reason,
+    String? details,
+  }) async {
+    try {
+      final reporterAccountId = await getCurrentAccountId();
+      if (reporterAccountId == null) return false;
+
+      await _supabase.from('buyer_report').insert({
+        'buyer_account_id': buyerAccountId,
+        'reporter_account_id': reporterAccountId,
+        'order_id': _blankToNull(orderId),
+        'reason': reason.trim(),
+        'details': _blankToNull(details),
+      });
+
+      return true;
+    } catch (e) {
+      _logDbError('Failed to report buyer', e);
       return false;
     }
   }

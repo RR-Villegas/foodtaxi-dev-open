@@ -27,6 +27,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   List<Map<String, dynamic>> _coupons = [];
   List<Map<String, dynamic>> _storeReports = [];
   List<Map<String, dynamic>> _productReports = [];
+  List<Map<String, dynamic>> _buyerReports = [];
   List<Map<String, dynamic>> _marketFlags = [];
   String _marketFlagStatusFilter = 'open';
   int _marketFlagPage = 0;
@@ -65,6 +66,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     'All',
     'Store',
     'Product',
+    'Buyer',
   ];
   static const List<String> _salesGroupFilters = [
     'Day',
@@ -485,12 +487,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Future<void> _loadReports() async {
+    final buyerReports = await DatabaseService.getAdminBuyerReports();
     final storeReports = await DatabaseService.getAdminStoreReports();
     final productReports = await DatabaseService.getAdminProductReports();
     if (!mounted) return;
     setState(() {
       _storeReports = storeReports;
       _productReports = productReports;
+      _buyerReports = buyerReports;
     });
   }
 
@@ -1485,6 +1489,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     final pendingReports = [
       ..._storeReports,
       ..._productReports,
+      ..._buyerReports,
     ].where((report) {
       final status = report['status']?.toString().toLowerCase() ?? 'pending';
       return status == 'pending' || status == 'open';
@@ -2141,43 +2146,79 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   List<Map<String, dynamic>> get _filteredReports {
     final query = _reportSearchController.text.trim().toLowerCase();
+
     final reports = <Map<String, dynamic>>[
       ..._storeReports.map((report) => {'type': 'Store', 'data': report}),
       ..._productReports.map((report) => {'type': 'Product', 'data': report}),
+      ..._buyerReports.map((report) => {'type': 'Buyer', 'data': report}),
     ];
 
     return reports.where((entry) {
       final type = entry['type']?.toString() ?? '';
+
       if (_reportTypeFilter != 'All' && type != _reportTypeFilter) {
         return false;
       }
+
       if (query.isEmpty) return true;
+
       final report = entry['data'];
       if (report is! Map) return false;
+
       final store = report['store'];
       final product = report['product'];
-      final reporter = report['account'];
-      final reporterText = reporter is Map
-          ? '${reporter['firstname'] ?? ''} ${reporter['surname'] ?? ''} ${reporter['email'] ?? ''}'
+      final buyer = report['buyer'];
+      final reporter = report['account'] ?? report['reporter'];
+      final order = report['order_summary'];
+
+      final storeText = store is Map
+          ? '${store['store_name'] ?? ''} ${store['store_id'] ?? ''}'
           : '';
+
+      final productText = product is Map
+          ? '${product['name'] ?? ''} ${product['product_id'] ?? ''}'
+          : '';
+
+      final buyerText = buyer is Map
+          ? '${buyer['firstname'] ?? ''} ${buyer['surname'] ?? ''} ${buyer['email'] ?? ''} ${buyer['phone_number'] ?? ''} ${buyer['account_id'] ?? ''}'
+          : '';
+
+      final reporterText = reporter is Map
+          ? '${reporter['firstname'] ?? ''} ${reporter['surname'] ?? ''} ${reporter['email'] ?? ''} ${reporter['phone_number'] ?? ''} ${reporter['account_id'] ?? ''}'
+          : '';
+
+      final orderText = order is Map
+          ? '${order['order_id'] ?? ''} ${order['order_status'] ?? ''} ${order['payment_status'] ?? ''} ${order['payment_method'] ?? ''}'
+          : '';
+
       final haystack = [
         type,
+        report['report_id'],
         report['reason'],
         report['details'],
         report['status'],
+        report['admin_notes'],
         report['store_id'],
         report['product_id'],
-        store is Map ? store['store_name'] : '',
-        product is Map ? product['name'] : '',
+        report['buyer_account_id'],
+        report['reporter_account_id'],
+        report['order_id'],
+        storeText,
+        productText,
+        buyerText,
         reporterText,
+        orderText,
       ].map((value) => value?.toString().toLowerCase() ?? '').join(' ');
+
       return haystack.contains(query);
     }).toList()
       ..sort((a, b) {
         final aData = a['data'];
         final bData = b['data'];
+
         final aDate = aData is Map ? aData['created_at']?.toString() ?? '' : '';
         final bDate = bData is Map ? bData['created_at']?.toString() ?? '' : '';
+
         return bDate.compareTo(aDate);
       });
   }
@@ -2186,6 +2227,15 @@ class _AdminDashboardState extends State<AdminDashboard> {
     final type = entry['type']?.toString() ?? '';
     final report = entry['data'];
     if (report is! Map) return 'Unknown';
+    if (type == 'Buyer') {
+      final buyer = report['buyer'];
+
+      if (buyer is Map) {
+        return '${buyer['firstname'] ?? ''} ${buyer['surname'] ?? ''}'.trim();
+      }
+
+      return 'Buyer';
+    }
     if (type == 'Product') {
       final product = report['product'];
       if (product is Map) return product['name']?.toString() ?? 'Product';
@@ -2196,12 +2246,126 @@ class _AdminDashboardState extends State<AdminDashboard> {
     return report['store_id']?.toString() ?? 'Store';
   }
 
+  Widget _buyerReportCard(Map<String, dynamic> report) {
+    final buyer = report['buyer'] as Map<String, dynamic>?;
+    final reporter = report['reporter'] as Map<String, dynamic>?;
+
+    final buyerName =
+        '${buyer?['firstname'] ?? ''} ${buyer?['surname'] ?? ''}'.trim();
+
+    final reporterName =
+        '${reporter?['firstname'] ?? ''} ${reporter?['surname'] ?? ''}'.trim();
+
+    final status = report['status']?.toString() ?? 'open';
+
+    final statusColor = switch (status) {
+      'resolved' => Colors.green,
+      'dismissed' => Colors.grey,
+      'reviewing' => Colors.orange,
+      _ => Colors.red,
+    };
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ExpansionTile(
+        leading: CircleAvatar(
+          backgroundImage: buyer?['profile_image_url']?.toString().trim().isNotEmpty == true
+            ? NetworkImage(
+                buyer!['profile_image_url'].toString().startsWith('http')
+                    ? buyer['profile_image_url'].toString()
+                    : DatabaseService.getProfileImageUrl(
+                        buyer['profile_image_url'].toString(),
+                      ),
+              )
+            : null,
+          child: buyer?['profile_image_url']?.toString().trim().isNotEmpty == true
+            ? null
+            : const Icon(Icons.person),
+        ),
+        title: Text(
+          buyerName.isEmpty ? 'Buyer Report' : buyerName,
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Reporter: $reporterName'),
+            Text(report['reason']?.toString() ?? ''),
+            const SizedBox(height: 4),
+            Chip(
+              label: Text(status),
+              backgroundColor: statusColor.withAlpha(40),
+              labelStyle: TextStyle(color: statusColor),
+            ),
+          ],
+        ),
+        childrenPadding: const EdgeInsets.all(16),
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              report['details']?.toString().trim().isEmpty ?? true
+                  ? 'No details provided'
+                  : report['details'].toString(),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton(
+                onPressed: () async {
+                  await DatabaseService.adminUpdateBuyerReport(
+                    reportId: report['report_id'].toString(),
+                    status: 'reviewing',
+                  );
+
+                  _loadReports();
+                },
+                child: const Text('Reviewing'),
+              ),
+
+              FilledButton(
+                onPressed: () async {
+                  await DatabaseService.adminUpdateBuyerReport(
+                    reportId: report['report_id'].toString(),
+                    status: 'resolved',
+                  );
+
+                  _loadReports();
+                },
+                child: const Text('Resolve'),
+              ),
+
+              OutlinedButton(
+                onPressed: () async {
+                  await DatabaseService.adminUpdateBuyerReport(
+                    reportId: report['report_id'].toString(),
+                    status: 'dismissed',
+                  );
+
+                  _loadReports();
+                },
+                child: const Text('Dismiss'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   String _reporterName(Map<String, dynamic> report) {
-    final account = report['account'];
+    final account = report['account'] ?? report['reporter'];
+
     if (account is! Map) return 'Unknown reporter';
+
     final first = account['firstname']?.toString() ?? '';
     final last = account['surname']?.toString() ?? '';
     final name = '$first $last'.trim();
+
     return name.isEmpty ? account['email']?.toString() ?? 'Unknown reporter' : name;
   }
 

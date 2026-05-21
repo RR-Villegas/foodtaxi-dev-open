@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'edit_product_page.dart';
+import '../buyer_profile_page.dart';
 import 'services/auth_service.dart';
 import 'services/database_service.dart';
 import 'widgets/adaptive_menu_item.dart';
@@ -648,12 +649,24 @@ class _SellerDashboardState extends State<SellerDashboard> {
     bool showProduct = false,
   }) {
     final comment = review['comment']?.toString().trim() ?? '';
+    final buyerImagePath = _buyerImagePath(review);
+    final buyerId = _buyerAccountIdFromReview(review);
+    final product = _productFromReview(review);
+
+    final imageProvider = buyerImagePath.isNotEmpty
+        ? NetworkImage(DatabaseService.getProfileImageUrl(buyerImagePath))
+        : null;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
-        leading: const CircleAvatar(
-          child: Icon(Icons.reviews_outlined),
+        leading: InkWell(
+          onTap: buyerId == null ? null : () => _openBuyerProfileFromReview(review),
+          borderRadius: BorderRadius.circular(999),
+          child: CircleAvatar(
+            backgroundImage: imageProvider,
+            child: buyerImagePath.isEmpty ? const Icon(Icons.person) : null,
+          ),
         ),
         title: Text(
           showProduct ? _reviewProductName(review) : _reviewBuyerName(review),
@@ -664,17 +677,35 @@ class _SellerDashboardState extends State<SellerDashboard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (showProduct)
-              Text(
-                _reviewBuyerName(review),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              InkWell(
+                onTap: buyerId == null ? null : () => _openBuyerProfileFromReview(review),
+                child: Text(
+                  _reviewBuyerName(review),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             const SizedBox(height: 4),
             _reviewStars(review['rating']),
             const SizedBox(height: 4),
             Text(comment.isEmpty ? 'No comment' : comment),
+            if (showProduct && product != null) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => _openProductForm(product),
+                    icon: const Icon(Icons.edit),
+                    label: const Text('Edit Product'),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
+        onTap: buyerId == null ? null : () => _openBuyerProfileFromReview(review),
       ),
     );
   }
@@ -807,6 +838,54 @@ class _SellerDashboardState extends State<SellerDashboard> {
       SnackBar(content: Text(ok ? 'Product hidden' : 'Product could not be hidden')),
     );
     if (ok) _loadDashboard();
+  }
+
+  String _buyerImagePath(Map<String, dynamic> review) {
+    final account = review['account'] ?? review['buyer'];
+    if (account is Map) {
+      return account['profile_image_url']?.toString().trim() ?? '';
+    }
+    return '';
+  }
+
+  String? _buyerAccountIdFromReview(Map<String, dynamic> review) {
+    final account = review['account'] ?? review['buyer'];
+    if (account is Map) {
+      return account['account_id']?.toString();
+    }
+
+    return review['buyer_account_id']?.toString();
+  }
+
+  Map<String, dynamic>? _productFromReview(Map<String, dynamic> review) {
+    final product = review['product'];
+    if (product is Map) return Map<String, dynamic>.from(product);
+
+    final productId = review['product_id']?.toString();
+    if (productId == null || productId.isEmpty) return null;
+
+    for (final item in _products) {
+      if (item['product_id']?.toString() == productId) {
+        return item;
+      }
+    }
+
+    return null;
+  }
+
+  void _openBuyerProfileFromReview(Map<String, dynamic> review) {
+    final buyerId = _buyerAccountIdFromReview(review);
+    if (buyerId == null || buyerId.isEmpty) return;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BuyerProfilePage(
+          buyerAccountId: buyerId,
+          allowReport: true,
+        ),
+      ),
+    );
   }
 
   Widget _buildProductFilters(int visibleCount) {

@@ -129,33 +129,42 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: const Text('Review Product'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(5, (index) {
-                  final value = index + 1;
+          content: SizedBox(
+            width: 420,
+            height: 210,
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(5, (index) {
+                    final value = index + 1;
 
-                  return IconButton(
-                    onPressed: () => setDialogState(() => rating = value),
-                    icon: Icon(
-                      value <= rating ? Icons.star : Icons.star_border,
-                      color: Colors.amber,
-                    ),
-                  );
-                }),
-              ),
-              TextField(
-                controller: commentController,
-                decoration: const InputDecoration(
-                  labelText: 'Comment',
-                  alignLabelWithHint: true,
+                    return IconButton(
+                      onPressed: () => setDialogState(() => rating = value),
+                      icon: Icon(
+                        value <= rating ? Icons.star : Icons.star_border,
+                        color: Colors.amber,
+                      ),
+                    );
+                  }),
                 ),
-                minLines: 2,
-                maxLines: 4,
-              ),
-            ],
+                const SizedBox(height: 8),
+                Expanded(
+                  child: TextField(
+                    controller: commentController,
+                    expands: true,
+                    minLines: null,
+                    maxLines: null,
+                    textAlignVertical: TextAlignVertical.top,
+                    decoration: const InputDecoration(
+                      labelText: 'Comment',
+                      alignLabelWithHint: true,
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -232,33 +241,42 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: const Text('Review Rider'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(5, (index) {
-                  final value = index + 1;
+          content: SizedBox(
+            width: 420,
+            height: 210,
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(5, (index) {
+                    final value = index + 1;
 
-                  return IconButton(
-                    onPressed: () => setDialogState(() => rating = value),
-                    icon: Icon(
-                      value <= rating ? Icons.star : Icons.star_border,
-                      color: Colors.amber,
-                    ),
-                  );
-                }),
-              ),
-              TextField(
-                controller: commentController,
-                decoration: const InputDecoration(
-                  labelText: 'Comment',
-                  alignLabelWithHint: true,
+                    return IconButton(
+                      onPressed: () => setDialogState(() => rating = value),
+                      icon: Icon(
+                        value <= rating ? Icons.star : Icons.star_border,
+                        color: Colors.amber,
+                      ),
+                    );
+                  }),
                 ),
-                minLines: 2,
-                maxLines: 4,
-              ),
-            ],
+                const SizedBox(height: 8),
+                Expanded(
+                  child: TextField(
+                    controller: commentController,
+                    expands: true,
+                    minLines: null,
+                    maxLines: null,
+                    textAlignVertical: TextAlignVertical.top,
+                    decoration: const InputDecoration(
+                      labelText: 'Comment',
+                      alignLabelWithHint: true,
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(

@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
 import 'cart_model.dart';
 import 'services/database_service.dart';
+import 'buyer_profile_page.dart';
 
 class ProductPage extends StatefulWidget {
   final String productId;
@@ -1011,6 +1012,58 @@ class _ProductPageState extends State<ProductPage> {
     );
   }
 
+  String _reviewBuyerName(Map<String, dynamic> review) {
+    final account = review['account'];
+
+    if (account is Map) {
+      final first = account['firstname']?.toString().trim() ?? '';
+      final last = account['surname']?.toString().trim() ?? '';
+      final name = '$first $last'.trim();
+
+      if (name.isNotEmpty) return name;
+    }
+
+    return 'Buyer';
+  }
+
+  String? _reviewBuyerId(Map<String, dynamic> review) {
+    final account = review['account'];
+
+    if (account is Map) {
+      final id = account['account_id']?.toString().trim();
+      if (id != null && id.isNotEmpty) return id;
+    }
+
+    final fallback = review['buyer_account_id']?.toString().trim();
+    return fallback == null || fallback.isEmpty ? null : fallback;
+  }
+
+  String _reviewBuyerImage(Map<String, dynamic> review) {
+    final account = review['account'];
+
+    if (account is Map) {
+      return account['profile_image_url']?.toString().trim() ?? '';
+    }
+
+    return '';
+  }
+
+  void _openBuyerProfileFromReview(Map<String, dynamic> review) {
+    final buyerId = _reviewBuyerId(review);
+
+    if (buyerId == null || buyerId.isEmpty) return;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BuyerProfilePage(
+          buyerAccountId: buyerId,
+          allowReport: false,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -1353,18 +1406,31 @@ class _ProductPageState extends State<ProductPage> {
               const Text('No reviews yet.')
             else
               ..._reviews.map((review) {
-                final account = review['account'];
-                final name = account is Map
-                    ? '${account['firstname'] ?? 'Buyer'} ${account['surname'] ?? ''}'
-                        .trim()
-                    : 'Buyer';
-                final rating = _toInt(review['rating']);
+                final item = Map<String, dynamic>.from(review);
+                final name = _reviewBuyerName(item);
+                final buyerId = _reviewBuyerId(item);
+                final imagePath = _reviewBuyerImage(item);
+                final rating = _toInt(item['rating']);
+
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(
+                    onTap: buyerId == null ? null : () => _openBuyerProfileFromReview(item),
+                    leading: CircleAvatar(
+                      backgroundImage: imagePath.isNotEmpty
+                          ? NetworkImage(DatabaseService.getProfileImageUrl(imagePath))
+                          : null,
+                      child: imagePath.isEmpty ? const Icon(Icons.person) : null,
+                    ),
                     title: Row(
                       children: [
-                        Expanded(child: Text(name.isEmpty ? 'Buyer' : name)),
+                        Expanded(
+                          child: Text(
+                            name.isEmpty ? 'Buyer' : name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                         ...List.generate(5, (index) {
                           return Icon(
                             index < rating ? Icons.star : Icons.star_border,
@@ -1375,10 +1441,11 @@ class _ProductPageState extends State<ProductPage> {
                       ],
                     ),
                     subtitle: Text(
-                      review['comment']?.toString().trim().isEmpty ?? true
+                      item['comment']?.toString().trim().isEmpty ?? true
                           ? 'No comment.'
-                          : review['comment'].toString(),
+                          : item['comment'].toString(),
                     ),
+                    trailing: buyerId == null ? null : const Icon(Icons.chevron_right),
                   ),
                 );
               }),
