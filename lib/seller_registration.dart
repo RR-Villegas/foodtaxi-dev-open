@@ -36,6 +36,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
   final _passwordFocusNode = FocusNode();
   bool _showPassword = false;
   bool _showConfirmPassword = false;
+  bool _acceptedTerms = false;
   PasswordStrength _passwordStrength = PasswordStrength.weak;
   String? _passwordCharError;
 
@@ -197,7 +198,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
     setState(() => _zipCodeController.text = zipCode);
   }
 
-  bool _validateStep1() {
+  Future<bool> _validateStep1() async {
     setState(() => _step1Error = null);
 
     final firstName = _firstNameController.text.trim();
@@ -254,6 +255,12 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
       return false;
     }
 
+    final emailExists = await DatabaseService.isEmailAlreadyUsed(email);
+    if (emailExists) {
+      setState(() => _step1Error = 'Email is already registered');
+      return false;
+    }
+
     if (password.isEmpty) {
       setState(() => _step1Error = 'Password is required');
       return false;
@@ -291,7 +298,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
     return true;
   }
 
-  bool _validateStep2() {
+  Future<bool> _validateStep2() async {
     setState(() => _step2Error = null);
 
     final storeName = _storeNameController.text.trim();
@@ -328,6 +335,13 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
 
     if (!InputValidator.isValidPhoneNumber(phone)) {
       setState(() => _step2Error = 'Invalid Philippine phone number format');
+      return false;
+    }
+
+    final phoneExists = await DatabaseService.isPhoneAlreadyUsed(phone);
+
+    if (phoneExists) {
+      setState(() => _step2Error = 'Phone number is already registered');
       return false;
     }
 
@@ -479,10 +493,10 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
     return true;
   }
 
-  void _nextStep() {
-    if (_currentStep == 1 && _validateStep1()) {
+  Future<void> _nextStep() async {
+    if (_currentStep == 1 && await _validateStep1()) {
       setState(() => _currentStep = 2);
-    } else if (_currentStep == 2 && _validateStep2()) {
+    } else if (_currentStep == 2 && await _validateStep2()) {
       setState(() => _currentStep = 3);
     }
   }
@@ -493,7 +507,45 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
     }
   }
 
+  Widget _termsCheckbox() {
+    return CheckboxListTile(
+      value: _acceptedTerms,
+      contentPadding: EdgeInsets.zero,
+      controlAffinity: ListTileControlAffinity.leading,
+      title: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          const Text('I agree to the '),
+          InkWell(
+            onTap: () => Navigator.pushNamed(context, '/terms'),
+            child: Text(
+              'Terms and Conditions',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.primary,
+                fontWeight: FontWeight.bold,
+                decoration: TextDecoration.underline,
+              ),
+            ),
+          ),
+        ],
+      ),
+      onChanged: (value) {
+        setState(() => _acceptedTerms = value ?? false);
+      },
+    );
+  }
+
   Future<void> _submitApplication() async {
+    if (!_acceptedTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please accept the Terms and Conditions first.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     if (!_validateStep3()) return;
 
     setState(() => _isLoading = true);
@@ -709,9 +761,13 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
               _currentStep == 1
                   ? _buildStep1Form()
                   : _currentStep == 2
-                  ? _buildStep2Form()
-                  : _buildStep3Form(),
+                      ? _buildStep2Form()
+                      : _buildStep3Form(),
               const SizedBox(height: 24),
+              if (_currentStep == 3) ...[
+                _termsCheckbox(),
+                const SizedBox(height: 12),
+              ],
               _buildButtonRow(),
             ],
           ),
@@ -735,9 +791,13 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
                   _currentStep == 1
                       ? _buildStep1Form()
                       : _currentStep == 2
-                      ? _buildStep2Form()
-                      : _buildStep3Form(),
+                          ? _buildStep2Form()
+                          : _buildStep3Form(),
                   const SizedBox(height: 32),
+                  if (_currentStep == 3) ...[
+                    _termsCheckbox(),
+                    const SizedBox(height: 12),
+                  ],
                   _buildButtonRow(),
                 ],
               ),

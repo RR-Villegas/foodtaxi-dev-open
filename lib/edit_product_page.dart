@@ -557,6 +557,8 @@ class _EditProductPageState extends State<EditProductPage> {
       );
     }
 
+    bool variantsSaved = true;
+
     if (productId != null) {
       await DatabaseService.replaceProductImages(
         productId: productId,
@@ -568,31 +570,65 @@ class _EditProductPageState extends State<EditProductPage> {
         variants,
       );
 
-      for (var i = 0; i < savedVariants.length && i < variants.length; i++) {
-        final variantId = savedVariants[i]['variant_id']?.toString();
-        if (variantId == null || variantId.isEmpty) continue;
+      if (variants.isNotEmpty && savedVariants.isEmpty) {
+        variantsSaved = false;
+      }
 
-        final imagePaths = variants[i]['image_paths'];
-        if (imagePaths is! List) continue;
+      if (variantsSaved) {
+        for (var i = 0; i < savedVariants.length && i < variants.length; i++) {
+          final variantId = savedVariants[i]['variant_id']?.toString();
+          if (variantId == null || variantId.isEmpty) continue;
 
-        await DatabaseService.replaceVariantImages(
-          productId: productId,
-          variantId: variantId,
-          imageUrls: imagePaths.map((item) => item.toString()).toList(),
-        );
+          final imagePaths = variants[i]['image_paths'];
+          if (imagePaths is! List) continue;
+
+          await DatabaseService.replaceVariantImages(
+            productId: productId,
+            variantId: variantId,
+            imageUrls: imagePaths.map((item) => item.toString()).toList(),
+          );
+        }
       }
     }
 
     if (!mounted) return;
     setState(() => _isSaving = false);
 
-    if (productId != null) {
-      Navigator.pop(context, true);
-    } else {
+    if (productId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Product could not be saved')),
+        const SnackBar(
+          content: Text('Product could not be saved'),
+          backgroundColor: Colors.red,
+        ),
       );
+      return;
     }
+
+    if (!variantsSaved) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Product saved, but variants could not be saved'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          _isEditing
+              ? 'Product updated successfully'
+              : 'Product added successfully',
+        ),
+        backgroundColor: Colors.green,
+      ),
+    );
+
+    await Future.delayed(const Duration(milliseconds: 450));
+
+    if (!mounted) return;
+    Navigator.pop(context, true);
   }
 
   String? _requiredText(String? value) {

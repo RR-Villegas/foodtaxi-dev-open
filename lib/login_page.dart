@@ -220,14 +220,20 @@ class _LoginPageState extends State<LoginPage> {
         }
 
         account = await DatabaseService.getCurrentAccount();
+        account ??= {
+          'account_id': accountId,
+          'account_type': accountType,
+        };
       }
 
       // Save login session for persistent login
       await AuthService.saveLoginSession(user);
       await ThemeService.load();
 
-      final role = (account?['account_type'] as String? ?? 'Buyer')
-          .toLowerCase();
+      final role = account['account_type']?.toString().toLowerCase();
+        if (role == null || role.isEmpty) {
+          throw Exception('Account role could not be loaded');
+        }
       if (mounted) {
         if (role == 'admin') {
           Navigator.pushReplacementNamed(context, '/admin-dashboard');

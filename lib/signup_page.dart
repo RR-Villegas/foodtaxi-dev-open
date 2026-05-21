@@ -40,6 +40,7 @@ class _SignupPageState extends State<SignupPage> {
   bool _loadingProvinces = true;
   bool _loadingCities = false;
   bool _loadingBarangays = false;
+  bool _acceptedTerms = false;
   int _currentStep = 1;
   late UserSignupData _signupData;
   List<Map<String, dynamic>> _provinces = [];
@@ -181,7 +182,7 @@ class _SignupPageState extends State<SignupPage> {
     }
   }
 
-  bool _validateStep1() {
+  Future<bool> _validateStep1() async {
     setState(() => _step1Error = null);
 
     final email = _emailController.text.trim();
@@ -201,6 +202,12 @@ class _SignupPageState extends State<SignupPage> {
 
     if (!InputValidator.isValidEmail(email)) {
       setState(() => _step1Error = 'Please enter a valid email');
+      return false;
+    }
+
+    final emailExists = await DatabaseService.isEmailAlreadyUsed(email);
+    if (emailExists) {
+      setState(() => _step1Error = 'Email is already registered');
       return false;
     }
 
@@ -233,7 +240,7 @@ class _SignupPageState extends State<SignupPage> {
     return true;
   }
 
-  bool _validateStep2() {
+  Future<bool> _validateStep2() async {
     setState(() => _step2Error = null);
 
     final firstName = _firstNameController.text.trim();
@@ -271,7 +278,12 @@ class _SignupPageState extends State<SignupPage> {
       setState(() => _step2Error = 'Please enter a valid Philippine phone number');
       return false;
     }
+    final phoneExists = await DatabaseService.isPhoneAlreadyUsed(phone);
 
+    if (phoneExists) {
+      setState(() => _step2Error = 'Phone number is already registered');
+      return false;
+    }
     return true;
   }
 
@@ -303,7 +315,7 @@ class _SignupPageState extends State<SignupPage> {
 
   Future<void> _nextStep() async {
     if (_currentStep == 1) {
-      if (_validateStep1()) {
+      if (await _validateStep1()) {
         _signupData.email = _emailController.text.trim();
         _signupData.password = _passwordController.text.trim();
         await LocalStorageService.saveSignupData(_signupData);
@@ -313,7 +325,7 @@ class _SignupPageState extends State<SignupPage> {
         }
       }
     } else if (_currentStep == 2) {
-      if (_validateStep2()) {
+      if (await _validateStep2()) {
         _signupData.firstName = _firstNameController.text.trim();
         _signupData.surname = _surnameController.text.trim();
         _signupData.phoneNumber = _phoneNumberController.text.trim();
@@ -332,7 +344,44 @@ class _SignupPageState extends State<SignupPage> {
     }
   }
 
+  Widget _termsCheckbox() {
+    return CheckboxListTile(
+      value: _acceptedTerms,
+      contentPadding: EdgeInsets.zero,
+      controlAffinity: ListTileControlAffinity.leading,
+      title: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          const Text('I agree to the '),
+          InkWell(
+            onTap: () => Navigator.pushNamed(context, '/terms'),
+            child: Text(
+              'Terms and Conditions',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.primary,
+                fontWeight: FontWeight.bold,
+                decoration: TextDecoration.underline,
+              ),
+            ),
+          ),
+        ],
+      ),
+      onChanged: (value) {
+        setState(() => _acceptedTerms = value ?? false);
+      },
+    );
+  }
+
   Future<void> _submitSignup() async {
+    if (!_acceptedTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please accept the Terms and Conditions first.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
     if (!_validateStep3()) {
       return;
     }
@@ -641,6 +690,12 @@ class _SignupPageState extends State<SignupPage> {
                 style: const TextStyle(color: Colors.red, fontSize: 14),
               ),
             ),
+          const SizedBox(height: 24),
+          
+          if (_currentStep == 3) ...[
+            const SizedBox(height: 12),
+            _termsCheckbox(),
+          ],
           const SizedBox(height: 24),
           _buildButtonRow(),
         ],

@@ -52,6 +52,7 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
   bool _loadingBarangays = false;
   bool _showPassword = false;
   bool _showConfirmPassword = false;
+  bool _acceptedTerms = false;
   PasswordStrength _passwordStrength = PasswordStrength.weak;
   String? _passwordCharError;
 
@@ -172,7 +173,7 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
     setState(() => _zipCodeController.text = zipCode);
   }
 
-  bool _validateStep1() {
+  Future<bool> _validateStep1() async {
     setState(() => _step1Error = null);
     final firstName = _firstNameController.text.trim();
     final surname = _surnameController.text.trim();
@@ -198,6 +199,22 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
       setState(() => _step1Error = 'Invalid Philippine phone number format');
       return false;
     }
+
+    final emailExists = await DatabaseService.isEmailAlreadyUsed(email);
+
+    if (emailExists) {
+      setState(() => _step1Error = 'Email is already registered');
+      return false;
+    }
+
+    final phoneExists =
+        await DatabaseService.isPhoneAlreadyUsed(phone);
+
+    if (phoneExists) {
+      setState(() => _step1Error = 'Phone number is already registered');
+      return false;
+    }
+
     if (password.length < 8 || !InputValidator.isValidPassword(password)) {
       setState(
         () => _step1Error =
@@ -370,8 +387,8 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
         .toList();
   }
 
-  void _nextStep() {
-    if (_currentStep == 1 && _validateStep1()) {
+  Future<void> _nextStep() async {
+    if (_currentStep == 1 && await _validateStep1()) {
       setState(() => _currentStep = 2);
     } else if (_currentStep == 2 && _validateStep2()) {
       setState(() => _currentStep = 3);
@@ -380,7 +397,44 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
     }
   }
 
+  Widget _termsCheckbox() {
+    return CheckboxListTile(
+      value: _acceptedTerms,
+      contentPadding: EdgeInsets.zero,
+      controlAffinity: ListTileControlAffinity.leading,
+      title: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          const Text('I agree to the '),
+          InkWell(
+            onTap: () => Navigator.pushNamed(context, '/terms'),
+            child: Text(
+              'Terms and Conditions',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.primary,
+                fontWeight: FontWeight.bold,
+                decoration: TextDecoration.underline,
+              ),
+            ),
+          ),
+        ],
+      ),
+      onChanged: (value) {
+        setState(() => _acceptedTerms = value ?? false);
+      },
+    );
+  }
+
   Future<void> _submitApplication() async {
+    if (!_acceptedTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please accept the Terms and Conditions first.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
     if (!_validateStep4()) return;
     setState(() => _isLoading = true);
 
@@ -446,6 +500,10 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
           phoneNumber: data.phoneNumber,
           accountType: 'Rider',
         );
+        final updatedAccount = await DatabaseService.getCurrentAccount();
+        if (updatedAccount?['account_type']?.toString().toLowerCase() != 'rider') {
+          throw Exception('Account was created but role did not update to Rider');
+        }
         if (accountId == null) {
           throw Exception('Failed to create rider account profile');
         }
@@ -584,6 +642,10 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
             const SizedBox(height: 32),
             _currentForm(),
             const SizedBox(height: 24),
+            if (_currentStep == 4) ...[
+              _termsCheckbox(),
+              const SizedBox(height: 12),
+            ],
             _buttons(),
           ],
         ),
@@ -604,6 +666,10 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
               children: [
                 _currentForm(),
                 const SizedBox(height: 32),
+                if (_currentStep == 4) ...[
+                  _termsCheckbox(),
+                  const SizedBox(height: 12),
+                ],
                 _buttons(),
               ],
             ),

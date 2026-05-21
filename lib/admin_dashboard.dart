@@ -3,6 +3,8 @@ import 'services/auth_service.dart';
 import 'services/database_service.dart';
 import 'widgets/adaptive_menu_item.dart';
 import 'widgets/notification_bell.dart';
+import 'dart:async';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -11,81 +13,46 @@ class AdminDashboard extends StatefulWidget {
   State<AdminDashboard> createState() => _AdminDashboardState();
 }
 
-class _CommissionLinePainter extends CustomPainter {
-  final List<double> values;
-  final Color color;
-
-  const _CommissionLinePainter({
-    required this.values,
-    required this.color,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (values.isEmpty) return;
-    final maxValue = values.fold<double>(
-      0,
-      (max, value) => value > max ? value : max,
-    );
-    final denominator = maxValue <= 0 ? 1 : maxValue;
-    final step = values.length == 1 ? 0.0 : size.width / (values.length - 1);
-    final points = <Offset>[];
-
-    for (var index = 0; index < values.length; index++) {
-      final x = values.length == 1 ? size.width / 2 : step * index;
-      final y = size.height - ((values[index] / denominator) * size.height);
-      points.add(Offset(x, y.clamp(0.0, size.height)));
-    }
-
-    final gridPaint = Paint()
-      ..color = Colors.black12
-      ..strokeWidth = 1;
-    for (var i = 0; i <= 3; i++) {
-      final y = size.height * (i / 3);
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
-    }
-
-    final linePaint = Paint()
-      ..color = color
-      ..strokeWidth = 3
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-    final path = Path()..moveTo(points.first.dx, points.first.dy);
-    for (final point in points.skip(1)) {
-      path.lineTo(point.dx, point.dy);
-    }
-    canvas.drawPath(path, linePaint);
-
-    final dotPaint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-    for (final point in points) {
-      canvas.drawCircle(point, 4, dotPaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _CommissionLinePainter oldDelegate) {
-    return oldDelegate.values != values || oldDelegate.color != color;
-  }
-}
-
 class _AdminDashboardState extends State<AdminDashboard> {
+  Timer? _timeRolloverTimer;
+  DateTime _lastTimeTick = DateTime.now();
+  DateTimeRange? _customSalesRange;
+  DateTime _salesAnchorDate = DateTime.now();
   int _currentIndex = 0;
+  int _recentOrdersPage = 0;
+  static const int _recentOrdersPerPage = 5;
   List<Map<String, dynamic>> _sellerApplications = [];
   List<Map<String, dynamic>> _riderApplications = [];
   List<Map<String, dynamic>> _orders = [];
   List<Map<String, dynamic>> _coupons = [];
   List<Map<String, dynamic>> _storeReports = [];
   List<Map<String, dynamic>> _productReports = [];
+  List<Map<String, dynamic>> _marketFlags = [];
+  String _marketFlagStatusFilter = 'open';
+  int _marketFlagPage = 0;
+  static const int _marketFlagsPerPage = 10;
+  static const List<String> _marketFlagStatusFilters = [
+    'open',
+    'reviewing',
+    'resolved',
+    'dismissed',
+    'All',
+  ];
   Map<String, dynamic>? _account;
   bool _isLoading = false;
   final _reportSearchController = TextEditingController();
   String _salesGroupFilter = 'Week';
   String _commissionRange = 'Days';
+  static const String _commissionRangePrefKey = 'admin_commission_range';
   String _sellerApplicationFilter = 'Pending Review';
   String _riderApplicationFilter = 'Pending Review';
   String _reportTypeFilter = 'All';
+  bool _loadingTerms = false;
+  bool _savingTerms = false;
+  List<Map<String, dynamic>> _termsSections = [];
+  final _termsSummaryController = TextEditingController();
+  final List<TextEditingController> _termsTitleControllers = [];
+  final List<TextEditingController> _termsBodyControllers = [];
 
   static const List<String> _applicationStatusFilters = [
     'Pending Review',
@@ -100,10 +67,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
     'Product',
   ];
   static const List<String> _salesGroupFilters = [
+    'Day',
     'Week',
     'Month',
     'Year',
+    'Custom',
   ];
+  
 
   List<Map<String, dynamic>> get _successfulOrders => _orders
       .where((order) {
@@ -120,21 +90,69 @@ class _AdminDashboardState extends State<AdminDashboard> {
   double get _avgCommission =>
       _totalOrders == 0 ? 0 : _totalCommission / _totalOrders;
 
-  
+  int _weekNumber(DateTime date) {
+    final firstDayOfYear = DateTime(date.year, 1, 1);
+    final daysOffset = firstDayOfYear.weekday - 1;
+    final firstMonday = firstDayOfYear.subtract(Duration(days: daysOffset));
+    return ((date.difference(firstMonday).inDays) ~/ 7) + 1;
+  }
+
   @override
   void dispose() {
     _reportSearchController.dispose();
+    _timeRolloverTimer?.cancel();
+    _termsSummaryController.dispose();
+    for (final controller in _termsTitleControllers) {
+      controller.dispose();
+    }
+    for (final controller in _termsBodyControllers) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
   @override
   void initState() {
     super.initState();
+
+    _loadAdminPreferences();
+
+    _timeRolloverTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      final now = DateTime.now();
+
+      final dayChanged = now.day != _lastTimeTick.day ||
+          now.month != _lastTimeTick.month ||
+          now.year != _lastTimeTick.year;
+
+      final monthChanged = now.month != _lastTimeTick.month ||
+          now.year != _lastTimeTick.year;
+
+      final yearChanged = now.year != _lastTimeTick.year;
+
+      final weekChanged = now.weekday < _lastTimeTick.weekday ||
+          now.difference(_lastTimeTick).inDays >= 7;
+
+      if (!mounted) return;
+
+      if (_salesGroupFilter == 'Day' && dayChanged) {
+        setState(() => _salesAnchorDate = now);
+      } else if (_salesGroupFilter == 'Week' && weekChanged) {
+        setState(() => _salesAnchorDate = now);
+      } else if (_salesGroupFilter == 'Month' && monthChanged) {
+        setState(() => _salesAnchorDate = now);
+      } else if (_salesGroupFilter == 'Year' && yearChanged) {
+        setState(() => _salesAnchorDate = now);
+      }
+
+      _lastTimeTick = now;
+    });
+
     _loadAdminOrders();
     _loadSellerApplications();
     _loadRiderApplications();
     _loadCoupons();
     _loadReports();
+    _loadMarketFlags();
     _loadProfile();
   }
 
@@ -149,6 +167,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
       _loadCoupons();
     } else if (index == 5) {
       _loadReports();
+    } else if (index == 6) {
+      _loadMarketFlags();
+    } else if (index == 7) {
+      _loadTermsEditor();
     } else {
       _loadAdminOrders();
     }
@@ -246,12 +268,73 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
+  Future<void> _loadAdminPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedCommissionRange = prefs.getString(_commissionRangePrefKey);
+
+    if (!mounted) return;
+
+    if (savedCommissionRange != null &&
+        _commissionRanges.contains(savedCommissionRange)) {
+      setState(() {
+        _commissionRange = savedCommissionRange;
+      });
+    }
+  }
+
+  Future<void> _saveCommissionRangePreference(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_commissionRangePrefKey, value);
+  }
+
   List<Map<String, dynamic>> _groupedAdminGains() {
     final grouped = <String, Map<String, dynamic>>{};
 
+    DateTime? startFilter;
+    DateTime? endFilter;
+
+    final anchor = _salesAnchorDate;
+
+    if (_salesGroupFilter == 'Day') {
+      startFilter = DateTime(anchor.year, anchor.month, anchor.day);
+      endFilter = startFilter.add(const Duration(days: 1));
+      
+    } else if (_salesGroupFilter == 'Week') {
+      startFilter = DateTime(anchor.year, anchor.month, anchor.day)
+          .subtract(Duration(days: anchor.weekday - 1));
+
+      endFilter = startFilter.add(const Duration(days: 7));
+    } else if (_salesGroupFilter == 'Month') {
+      startFilter = DateTime(anchor.year, anchor.month, 1);
+
+      endFilter = DateTime(anchor.year, anchor.month + 1, 1);
+    } else if (_salesGroupFilter == 'Year') {
+      startFilter = DateTime(anchor.year, 1, 1);
+
+      endFilter = DateTime(anchor.year + 1, 1, 1);
+    } else if (_salesGroupFilter == 'Custom' &&
+        _customSalesRange != null) {
+      startFilter = _customSalesRange!.start;
+
+      endFilter = _customSalesRange!.end.add(
+        const Duration(days: 1),
+      );
+    }
+
     for (final order in _successfulOrders) {
-      final date = DateTime.tryParse(order['order_date']?.toString() ?? '');
+      final date = DateTime.tryParse(
+        order['order_date']?.toString() ?? '',
+      );
+
       if (date == null) continue;
+
+      if (startFilter != null && date.isBefore(startFilter)) {
+        continue;
+      }
+
+      if (endFilter != null && !date.isBefore(endFilter)) {
+        continue;
+      }
 
       final key = _salesPeriodKey(date);
       final label = _salesPeriodLabel(date);
@@ -270,57 +353,60 @@ class _AdminDashboardState extends State<AdminDashboard> {
       );
 
       row['orders'] = (row['orders'] as int) + 1;
-      row['gross'] = (row['gross'] as double) + _toDouble(order['total_amount']);
-      row['commission'] =
-          (row['commission'] as double) + _toDouble(order['admin_commission']);
 
-      (row['ordersList'] as List<Map<String, dynamic>>).add(order);
+      row['gross'] =
+          (row['gross'] as double) +
+          _toDouble(order['total_amount']);
+
+      row['commission'] =
+          (row['commission'] as double) +
+          _toDouble(order['admin_commission']);
+
+      (row['ordersList'] as List<Map<String, dynamic>>)
+          .add(order);
 
       final currentDate = row['date'] as DateTime;
+
       if (date.isAfter(currentDate)) {
         row['date'] = date;
       }
     }
 
     final rows = grouped.values.toList()
-      ..sort((a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime));
+      ..sort(
+        (a, b) => (b['date'] as DateTime).compareTo(
+          a['date'] as DateTime,
+        ),
+      );
 
     return rows;
   }
 
-  String _salesPeriodKey(DateTime date) {
-    if (_salesGroupFilter == 'Year') {
-      return '${date.year}';
+  Future<void> _pickSalesDateRange() async {
+    final now = DateTime.now();
+
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 10),
+      lastDate: DateTime(now.year + 1),
+      initialDateRange:
+          _customSalesRange ??
+          DateTimeRange(
+            start: now.subtract(const Duration(days: 30)),
+            end: now,
+          ),
+    );
+
+    if (picked != null) {
+      setState(() {
+        _customSalesRange = picked;
+        _salesGroupFilter = 'Custom';
+      });
     }
-
-    if (_salesGroupFilter == 'Month') {
-      return '${date.year}-${date.month.toString().padLeft(2, '0')}';
-    }
-
-    final weekStart = DateTime(date.year, date.month, date.day)
-        .subtract(Duration(days: date.weekday - 1));
-
-    return '${weekStart.year}-${weekStart.month.toString().padLeft(2, '0')}-${weekStart.day.toString().padLeft(2, '0')}';
-  }
-
-  String _salesPeriodLabel(DateTime date) {
-    if (_salesGroupFilter == 'Year') {
-      return '${date.year}';
-    }
-
-    if (_salesGroupFilter == 'Month') {
-      return '${_monthName(date.month)} ${date.year}';
-    }
-
-    final weekStart = DateTime(date.year, date.month, date.day)
-        .subtract(Duration(days: date.weekday - 1));
-    final weekEnd = weekStart.add(const Duration(days: 6));
-
-    return '${_formatDate(weekStart)} - ${_formatDate(weekEnd)}';
   }
 
   String _monthName(int month) {
-    const months = [
+    const names = [
       'January',
       'February',
       'March',
@@ -335,7 +421,55 @@ class _AdminDashboardState extends State<AdminDashboard> {
       'December',
     ];
 
-    return months[(month - 1).clamp(0, 11)];
+    if (month < 1 || month > 12) return '';
+    return names[month - 1];
+  }
+
+  String _salesPeriodKey(DateTime date) {
+    if (_salesGroupFilter == 'Day') {
+      return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}-${date.hour.toString().padLeft(2, '0')}';
+    }
+
+    if (_salesGroupFilter == 'Week') {
+      return '${date.year}-W${_weekNumber(date).toString().padLeft(2, '0')}';
+    }
+
+    if (_salesGroupFilter == 'Month') {
+      return '${date.year}-${date.month.toString().padLeft(2, '0')}';
+    }
+
+    if (_salesGroupFilter == 'Year') {
+      return '${date.year}';
+    }
+
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  String _salesPeriodLabel(DateTime date) {
+    if (_salesGroupFilter == 'Day') {
+      final hour = date.hour;
+      final nextHour = (hour + 1) % 24;
+
+      return '${hour.toString().padLeft(2, '0')}:00 - ${nextHour.toString().padLeft(2, '0')}:00';
+    }
+
+    if (_salesGroupFilter == 'Week') {
+      return _formatDate(date);
+    }
+
+    if (_salesGroupFilter == 'Month') {
+      final weekStart = DateTime(date.year, date.month, date.day)
+          .subtract(Duration(days: date.weekday - 1));
+      final weekEnd = weekStart.add(const Duration(days: 6));
+
+      return '${_formatDate(weekStart)} - ${_formatDate(weekEnd)}';
+    }
+
+    if (_salesGroupFilter == 'Year') {
+      return '${_monthName(date.month)} ${date.year}';
+    }
+
+    return _formatDate(date);
   }
 
   Future<void> _loadProfile() async {
@@ -358,6 +492,113 @@ class _AdminDashboardState extends State<AdminDashboard> {
       _storeReports = storeReports;
       _productReports = productReports;
     });
+  }
+
+  Future<void> _loadMarketFlags() async {
+    final flags = await DatabaseService.getAdminMarketFlags(
+      status: _marketFlagStatusFilter,
+      limit: 100,
+      offset: 0,
+    );
+
+    if (!mounted) return;
+    setState(() => _marketFlags = flags);
+  }
+
+  Future<void> _runMarketScan() async {
+    setState(() => _isLoading = true);
+
+    final count = await DatabaseService.runUnfairMarketScan();
+    await _loadMarketFlags();
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Market scan finished. $count flag(s) refreshed.')),
+    );
+  }
+
+  Future<void> _applyMarketFlagAction(
+    Map<String, dynamic> flag,
+    String actionType,
+  ) async {
+    final reasonController = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        final actionLabel = _marketActionLabel(actionType);
+
+        return AlertDialog(
+          title: Text(actionLabel),
+          content: SizedBox(
+            width: 520,
+            child: TextField(
+              controller: reasonController,
+              decoration: InputDecoration(
+                labelText: actionType == 'dismiss'
+                    ? 'Dismiss note'
+                    : 'Reason shown to seller',
+                border: const OutlineInputBorder(),
+              ),
+              maxLines: 4,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(actionLabel),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) {
+      reasonController.dispose();
+      return;
+    }
+
+    final ok = await DatabaseService.applyMarketFlagAction(
+      flagId: flag['flag_id'].toString(),
+      actionType: actionType,
+      reason: reasonController.text,
+    );
+
+    reasonController.dispose();
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(ok ? 'Action applied' : 'Action could not be applied'),
+        backgroundColor: ok ? Colors.green : Colors.red,
+      ),
+    );
+
+    if (ok) _loadMarketFlags();
+  }
+
+  String _marketActionLabel(String actionType) {
+    switch (actionType) {
+      case 'warn':
+        return 'Warn Seller';
+      case 'hide_product':
+        return 'Hide Product';
+      case 'suspend_store':
+        return 'Suspend Store';
+      case 'ban_seller':
+        return 'Ban Seller';
+      case 'dismiss':
+        return 'Dismiss Flag';
+      default:
+        return 'Apply Action';
+    }
   }
 
   Future<void> _loadAdminOrders() async {
@@ -1050,6 +1291,180 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
+  Widget _miniStat({
+    required String label,
+    required String value,
+    required IconData icon,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: scheme.outline.withAlpha(60)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: scheme.primary),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: TextStyle(
+              color: scheme.onSurfaceVariant,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _commissionSummarySelector() {
+    final series = _commissionSeries().map((item) {
+      return {
+        ...item,
+        'label': item['label']?.toString() ?? 'Unknown',
+        'commission': _toDouble(item['commission']),
+        'orders': _safeInt(item['orders']),
+      };
+    }).toList();
+
+    final total = series.fold<double>(
+      0.0,
+      (sum, item) => sum + _toDouble(item['commission']),
+    );
+
+    final nonZeroItems = series
+        .where((item) => _toDouble(item['commission']) > 0)
+        .toList();
+
+    final bestItem = nonZeroItems.isEmpty
+        ? null
+        : nonZeroItems.reduce(
+            (a, b) => _toDouble(a['commission']) >= _toDouble(b['commission'])
+                ? a
+                : b,
+          );
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            DropdownButtonFormField<String>(
+              initialValue: _commissionRanges.contains(_commissionRange)
+                  ? _commissionRange
+                  : _commissionRanges.first,
+              decoration: const InputDecoration(
+                labelText: 'Range',
+                border: OutlineInputBorder(),
+              ),
+              items: _commissionRanges.map((range) {
+                return DropdownMenuItem<String>(
+                  value: range,
+                  child: Text(range),
+                );
+              }).toList(),
+              onChanged: (value) {
+                if (value == null) return;
+
+                setState(() {
+                  _commissionRange = value;
+                });
+
+                _saveCommissionRangePreference(value);
+              },
+            ),
+
+            const SizedBox(height: 14),
+
+            Row(
+              children: [
+                Expanded(
+                  child: _miniStat(
+                    label: 'Total',
+                    value: '₱${total.toStringAsFixed(2)}',
+                    icon: Icons.payments_outlined,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _miniStat(
+                    label: 'Periods',
+                    value: '${series.length}',
+                    icon: Icons.calendar_month_outlined,
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 10),
+
+            Row(
+              children: [
+                Expanded(
+                  child: _miniStat(
+                    label: 'Best',
+                    value: bestItem == null
+                        ? '₱0.00'
+                        : '₱${_toDouble(bestItem['commission']).toStringAsFixed(2)}',
+                    icon: Icons.trending_up,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _miniStat(
+                    label: 'Best Period',
+                    value: bestItem == null
+                        ? 'None'
+                        : bestItem['label']?.toString() ?? 'Unknown',
+                    icon: Icons.star_outline,
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 14),
+
+            if (series.isEmpty)
+              const Text('No commission data yet.')
+            else
+              ...series.map((item) {
+                final label = item['label']?.toString() ?? 'Unknown';
+                final commission = _toDouble(item['commission']);
+                final orders = _safeInt(item['orders']);
+
+                return ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(label),
+                  subtitle: Text('$orders order(s)'),
+                  trailing: Text(
+                    '₱${commission.toStringAsFixed(2)}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                );
+              }),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildDashboardTab() {
     final cancelledOrders = _orders.where((order) {
       final status = order['order_status']?.toString().toLowerCase() ?? '';
@@ -1093,9 +1508,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text(
+          const Text(
             'Admin Overview',
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
           Text(
@@ -1209,23 +1624,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
           const SizedBox(height: 20),
 
-          _sectionTitle('Commission Trend'),
+          _sectionTitle('Commission Summary'),
 
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _filterChips(
-                  values: _commissionRanges,
-                  selected: _commissionRange,
-                  onSelected: (value) => setState(() => _commissionRange = value),
-                ),
-                const SizedBox(height: 12),
-                _commissionLineChart(_commissionSeries()),
-              ],
-            ),
-          ),
+          _commissionSummarySelector(),
 
           const SizedBox(height: 20),
 
@@ -1237,25 +1638,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
               child: Center(child: Text('No orders yet')),
             )
           else
-            ...recentOrders.take(5).map((order) {
-              return Card(
-                margin: const EdgeInsets.only(bottom: 10),
-                child: ListTile(
-                  leading: const CircleAvatar(
-                    child: Icon(Icons.receipt_long_outlined),
-                  ),
-                  title: Text(_customerName(order)),
-                  subtitle: Text(
-                    '${_formatDate(order['order_date'])} | ${_itemCount(order)} item(s)',
-                  ),
-                  trailing: Text(
-                    '₱${_toDouble(order['admin_commission']).toStringAsFixed(2)}',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  onTap: () => _showOrderDetails(order),
-                ),
-              );
-            }),
+            _recentOrdersPager(recentOrders),
 
           const SizedBox(height: 24),
         ],
@@ -1282,6 +1665,70 @@ class _AdminDashboardState extends State<AdminDashboard> {
       (sum, row) => sum + (row['orders'] as int),
     );
 
+    String selectedRangeLabel() {
+      if (_salesGroupFilter == 'Custom') {
+        if (_customSalesRange == null) {
+          return 'No custom range selected';
+        }
+
+        return '${_formatDate(_customSalesRange!.start)} → ${_formatDate(_customSalesRange!.end)}';
+      }
+      if (_salesGroupFilter == 'Day') {
+        return _formatDate(_salesAnchorDate);
+      }
+      if (_salesGroupFilter == 'Week') {
+        final start = DateTime(
+          _salesAnchorDate.year,
+          _salesAnchorDate.month,
+          _salesAnchorDate.day,
+        ).subtract(Duration(days: _salesAnchorDate.weekday - 1));
+        final end = start.add(const Duration(days: 6));
+        return '${_formatDate(start)} → ${_formatDate(end)}';
+      }
+
+      if (_salesGroupFilter == 'Month') {
+        return '${_monthName(_salesAnchorDate.month)} ${_salesAnchorDate.year}';
+      }
+
+      return '${_salesAnchorDate.year}';
+    }
+
+    void goPreviousPeriod() {
+      setState(() {
+        if (_salesGroupFilter == 'Day') {
+          _salesAnchorDate = _salesAnchorDate.subtract(const Duration(days: 1));
+        } else if (_salesGroupFilter == 'Week') {
+          _salesAnchorDate = _salesAnchorDate.subtract(const Duration(days: 7));
+        } else if (_salesGroupFilter == 'Month') {
+          _salesAnchorDate = DateTime(
+            _salesAnchorDate.year,
+            _salesAnchorDate.month - 1,
+            1,
+          );
+        } else if (_salesGroupFilter == 'Year') {
+          _salesAnchorDate = DateTime(_salesAnchorDate.year - 1, 1, 1);
+        }
+      });
+    }
+
+    void goNextPeriod() {
+      setState(() {
+        if (_salesGroupFilter == 'Day') {
+          _salesAnchorDate = _salesAnchorDate.add(const Duration(days: 1));
+        } else if (_salesGroupFilter == 'Week') {
+          _salesAnchorDate = _salesAnchorDate.add(const Duration(days: 7));
+        } else if (_salesGroupFilter == 'Month') {
+          _salesAnchorDate = DateTime(
+            _salesAnchorDate.year,
+            _salesAnchorDate.month + 1,
+            1,
+          );
+        } else if (_salesGroupFilter == 'Year') {
+          _salesAnchorDate = DateTime(_salesAnchorDate.year + 1, 1, 1);
+        }
+      });
+    }
+
     return RefreshIndicator(
       onRefresh: _loadAdminOrders,
       child: ListView(
@@ -1300,6 +1747,69 @@ class _AdminDashboardState extends State<AdminDashboard> {
           ),
           const SizedBox(height: 16),
 
+          _filterChips(
+            values: _salesGroupFilters,
+            selected: _salesGroupFilter,
+            onSelected: (value) {
+              setState(() {
+                _salesGroupFilter = value;
+              });
+
+              if (value == 'Custom' && _customSalesRange == null) {
+                _pickSalesDateRange();
+              }
+            },
+          ),
+
+          const SizedBox(height: 12),
+
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+              child: Row(
+                children: [
+                  IconButton(
+                    tooltip: 'Previous period',
+                    onPressed: _salesGroupFilter == 'Custom'
+                        ? null
+                        : goPreviousPeriod,
+                    icon: const Icon(Icons.chevron_left),
+                  ),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        Text(
+                          selectedRangeLabel(),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
+                        if (_salesGroupFilter == 'Custom') ...[
+                          const SizedBox(height: 8),
+                          OutlinedButton.icon(
+                            onPressed: _pickSalesDateRange,
+                            icon: const Icon(Icons.date_range),
+                            label: const Text('Select Date Range'),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Next period',
+                    onPressed: _salesGroupFilter == 'Custom'
+                        ? null
+                        : goNextPeriod,
+                    icon: const Icon(Icons.chevron_right),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
@@ -1346,18 +1856,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
             ],
           ),
 
-          const SizedBox(height: 18),
-          _filterChips(
-            values: _salesGroupFilters,
-            selected: _salesGroupFilter,
-            onSelected: (value) => setState(() => _salesGroupFilter = value),
-          ),
-
           const SizedBox(height: 14),
+
           if (rows.isEmpty)
             const Padding(
               padding: EdgeInsets.only(top: 120),
-              child: Center(child: Text('No successful sales yet')),
+              child: Center(child: Text('No successful sales for this period')),
             )
           else
             ...rows.map((row) {
@@ -1518,6 +2022,65 @@ class _AdminDashboardState extends State<AdminDashboard> {
     expiryController.dispose();
   }
 
+  Widget _recentOrdersPager(List<Map<String, dynamic>> recentOrders) {
+    final totalPages =
+        ((recentOrders.length + _recentOrdersPerPage - 1) ~/
+            _recentOrdersPerPage)
+            .clamp(1, 999999);
+
+    if (_recentOrdersPage >= totalPages) {
+      _recentOrdersPage = 0;
+    }
+
+    final start = _recentOrdersPage * _recentOrdersPerPage;
+    final pageOrders = recentOrders
+        .skip(start)
+        .take(_recentOrdersPerPage)
+        .toList();
+
+    return Column(
+      children: [
+        ...pageOrders.map((order) {
+          return Card(
+            margin: const EdgeInsets.only(bottom: 10),
+            child: ListTile(
+              leading: const CircleAvatar(
+                child: Icon(Icons.receipt_long_outlined),
+              ),
+              title: Text(_customerName(order)),
+              subtitle: Text(
+                '${_formatDate(order['order_date'])} | ${_itemCount(order)} item(s)',
+              ),
+              trailing: Text(
+                '₱${_toDouble(order['admin_commission']).toStringAsFixed(2)}',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              onTap: () => _showOrderDetails(order),
+            ),
+          );
+        }),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            IconButton(
+              onPressed: _recentOrdersPage <= 0
+                  ? null
+                  : () => setState(() => _recentOrdersPage--),
+              icon: const Icon(Icons.chevron_left),
+            ),
+            Text('Page ${_recentOrdersPage + 1} of $totalPages'),
+            IconButton(
+              onPressed: _recentOrdersPage >= totalPages - 1
+                  ? null
+                  : () => setState(() => _recentOrdersPage++),
+              icon: const Icon(Icons.chevron_right),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   Widget _buildCouponsTab() {
     return RefreshIndicator(
       onRefresh: _loadCoupons,
@@ -1642,6 +2205,249 @@ class _AdminDashboardState extends State<AdminDashboard> {
     return name.isEmpty ? account['email']?.toString() ?? 'Unknown reporter' : name;
   }
 
+  String _marketFlagTitle(String type) {
+    switch (type) {
+      case 'price_spike':
+        return 'Price spike';
+      case 'fake_discount_baseline':
+        return 'Possible fake discount';
+      case 'high_cancellation_rate':
+        return 'High cancellation rate';
+      case 'duplicate_listing_spam':
+        return 'Duplicate listing spam';
+      default:
+        return 'Market flag';
+    }
+  }
+
+  Color _marketFlagColor(String severity) {
+    switch (severity) {
+      case 'critical':
+        return Colors.deepPurple;
+      case 'high':
+        return Colors.red;
+      case 'medium':
+        return Colors.orange;
+      default:
+        return Colors.blueGrey;
+    }
+  }
+
+  List<Map<String, dynamic>> _pageMarketFlags(List<Map<String, dynamic>> flags) {
+    final start = _marketFlagPage * _marketFlagsPerPage;
+    if (start >= flags.length) return [];
+
+    final end = start + _marketFlagsPerPage > flags.length
+        ? flags.length
+        : start + _marketFlagsPerPage;
+
+    return flags.sublist(start, end);
+  }
+
+  Widget _marketFlagPager(int totalItems) {
+    final totalPages = totalItems == 0
+        ? 1
+        : ((totalItems + _marketFlagsPerPage - 1) ~/ _marketFlagsPerPage);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          IconButton(
+            onPressed: _marketFlagPage <= 0
+                ? null
+                : () => setState(() => _marketFlagPage--),
+            icon: const Icon(Icons.chevron_left),
+          ),
+          Text('Page ${_marketFlagPage + 1} of $totalPages'),
+          IconButton(
+            onPressed: _marketFlagPage >= totalPages - 1
+                ? null
+                : () => setState(() => _marketFlagPage++),
+            icon: const Icon(Icons.chevron_right),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMarketFlagsTab() {
+    final visible = _marketFlags.where((flag) {
+      if (_marketFlagStatusFilter == 'All') return true;
+      return flag['status']?.toString() == _marketFlagStatusFilter;
+    }).toList();
+
+    final pageItems = _pageMarketFlags(visible);
+
+    return RefreshIndicator(
+      onRefresh: _loadMarketFlags,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Market Flags',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: _runMarketScan,
+                icon: const Icon(Icons.search),
+                label: const Text('Run Scan'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Review automated marketplace flags, then decide whether to dismiss, warn, hide, suspend, or ban.',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _filterChips(
+            values: _marketFlagStatusFilters,
+            selected: _marketFlagStatusFilter,
+            onSelected: (value) {
+              setState(() {
+                _marketFlagStatusFilter = value;
+                _marketFlagPage = 0;
+              });
+              _loadMarketFlags();
+            },
+          ),
+          const SizedBox(height: 12),
+          if (visible.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 120),
+              child: Center(child: Text('No market flags found')),
+            )
+          else
+            ...pageItems.map(_marketFlagAdminCard),
+          _marketFlagPager(visible.length),
+        ],
+      ),
+    );
+  }
+
+  Widget _marketFlagAdminCard(Map<String, dynamic> flag) {
+    final type = flag['flag_type']?.toString() ?? '';
+    final severity = flag['severity']?.toString() ?? 'medium';
+    final status = flag['status']?.toString() ?? 'open';
+    final reason = flag['reason']?.toString() ?? '';
+    final evidence = flag['evidence'];
+    final storeName = flag['store_name']?.toString() ?? '';
+    final productName = flag['product_name']?.toString() ?? '';
+    final sellerName = flag['seller_name']?.toString() ?? '';
+    final color = _marketFlagColor(severity);
+
+    final canAct = status == 'open' || status == 'reviewing';
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ExpansionTile(
+        leading: CircleAvatar(
+          backgroundColor: color.withAlpha(35),
+          child: Icon(Icons.policy_outlined, color: color),
+        ),
+        title: Text(
+          _marketFlagTitle(type),
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (sellerName.isNotEmpty) Text('Seller: $sellerName'),
+              if (storeName.isNotEmpty) Text('Store: $storeName'),
+              if (productName.isNotEmpty) Text('Product: $productName'),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  Chip(
+                    label: Text(severity.toUpperCase()),
+                    backgroundColor: color.withAlpha(35),
+                    labelStyle: TextStyle(color: color),
+                  ),
+                  Chip(label: Text(status)),
+                ],
+              ),
+            ],
+          ),
+        ),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(reason),
+          ),
+          if (evidence != null) ...[
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SelectableText(
+                evidence.toString(),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          if (canAct)
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () => _applyMarketFlagAction(flag, 'dismiss'),
+                  icon: const Icon(Icons.close),
+                  label: const Text('Dismiss'),
+                ),
+                FilledButton.icon(
+                  onPressed: () => _applyMarketFlagAction(flag, 'warn'),
+                  icon: const Icon(Icons.warning_amber),
+                  label: const Text('Warn'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: productName.isEmpty
+                      ? null
+                      : () => _applyMarketFlagAction(flag, 'hide_product'),
+                  icon: const Icon(Icons.visibility_off_outlined),
+                  label: const Text('Hide Product'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => _applyMarketFlagAction(flag, 'suspend_store'),
+                  icon: const Icon(Icons.store_mall_directory_outlined),
+                  label: const Text('Suspend Store'),
+                ),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                  onPressed: () => _applyMarketFlagAction(flag, 'ban_seller'),
+                  icon: const Icon(Icons.block),
+                  label: const Text('Ban Seller'),
+                ),
+              ],
+            )
+          else
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Action: ${flag['action_type'] ?? 'none'}\nNote: ${flag['admin_note'] ?? ''}',
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildReportsTab() {
     final reports = _filteredReports;
     return RefreshIndicator(
@@ -1730,14 +2536,17 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Widget _metricCard(String title, String value, IconData icon, Color color) {
+    final scheme = Theme.of(context).colorScheme;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: scheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(26),
+            color: Colors.black.withAlpha(18),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -1747,14 +2556,20 @@ class _AdminDashboardState extends State<AdminDashboard> {
         children: [
           Icon(icon, size: 32, color: color),
           const SizedBox(height: 8),
-          Text(title, style: const TextStyle(fontSize: 14, color: Colors.grey)),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 14,
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
           const SizedBox(height: 4),
           Text(
             value,
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: Theme.of(context).colorScheme.primary,
+              color: scheme.onSurface,
             ),
           ),
         ],
@@ -1807,108 +2622,110 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   List<Map<String, dynamic>> _commissionSeries() {
-    final today = DateTime.now();
-    final todayOnly = DateTime(today.year, today.month, today.day);
-    final buckets = <Map<String, dynamic>>[];
+    final now = DateTime.now();
+    final grouped = <String, Map<String, dynamic>>{};
 
-    if (_commissionRange == 'Weeks') {
-      for (var index = 3; index >= 0; index--) {
-        final day = todayOnly.subtract(Duration(days: index * 7));
-        final start = day.subtract(Duration(days: day.weekday - 1));
-        buckets.add({
-          'start': start,
-          'end': start.add(const Duration(days: 7)),
-          'label': index == 0 ? 'This wk' : '-${index}w',
-          'value': 0.0,
-        });
+    DateTime start;
+    DateTime end;
+
+    if (_commissionRange == 'Days') {
+      final today = DateTime(now.year, now.month, now.day);
+      start = today.subtract(const Duration(days: 6));
+      end = today.add(const Duration(days: 1));
+
+      for (var i = 0; i < 7; i++) {
+        final date = start.add(Duration(days: i));
+        final key = '${date.year}-${date.month}-${date.day}';
+
+        grouped[key] = {
+          'key': key,
+          'label': _formatDate(date),
+          'date': date,
+          'commission': 0.0,
+          'orders': 0,
+        };
       }
-    } else if (_commissionRange == 'Months') {
-      for (var index = 5; index >= 0; index--) {
-        final start = DateTime(today.year, today.month - index, 1);
-        buckets.add({
-          'start': start,
-          'end': DateTime(start.year, start.month + 1, 1),
-          'label': '${start.month}/${start.year.toString().substring(2)}',
-          'value': 0.0,
-        });
+    } else if (_commissionRange == 'Weeks') {
+      final today = DateTime(now.year, now.month, now.day);
+      final currentWeekStart =
+          today.subtract(Duration(days: today.weekday - 1));
+      start = currentWeekStart.subtract(const Duration(days: 21));
+      end = currentWeekStart.add(const Duration(days: 7));
+
+      for (var i = 0; i < 4; i++) {
+        final weekStart = start.add(Duration(days: i * 7));
+        final weekEnd = weekStart.add(const Duration(days: 6));
+        final key = '${weekStart.year}-W${_weekNumber(weekStart)}';
+
+        grouped[key] = {
+          'key': key,
+          'label': '${_formatDate(weekStart)} - ${_formatDate(weekEnd)}',
+          'date': weekStart,
+          'commission': 0.0,
+          'orders': 0,
+        };
       }
     } else {
-      for (var index = 6; index >= 0; index--) {
-        final start = todayOnly.subtract(Duration(days: index));
-        buckets.add({
-          'start': start,
-          'end': start.add(const Duration(days: 1)),
-          'label': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-              [start.weekday - 1],
-          'value': 0.0,
-        });
+      start = DateTime(now.year, now.month - 5, 1);
+      end = DateTime(now.year, now.month + 1, 1);
+
+      for (var i = 0; i < 6; i++) {
+        final date = DateTime(start.year, start.month + i, 1);
+        final key = '${date.year}-${date.month}';
+
+        grouped[key] = {
+          'key': key,
+          'label': '${_monthName(date.month)} ${date.year}',
+          'date': date,
+          'commission': 0.0,
+          'orders': 0,
+        };
       }
     }
 
-    for (final order in _orders) {
+    for (final order in _successfulOrders) {
       final date = DateTime.tryParse(order['order_date']?.toString() ?? '');
       if (date == null) continue;
-      final dateOnly = DateTime(date.year, date.month, date.day);
-      final status = order['order_status']?.toString().toLowerCase() ?? '';
-      if (status == 'cancelled' || status == 'canceled') continue;
 
-      for (final bucket in buckets) {
-        final start = bucket['start'] as DateTime;
-        final end = bucket['end'] as DateTime;
-        if (!dateOnly.isBefore(start) && dateOnly.isBefore(end)) {
-          bucket['value'] =
-              _toDouble(bucket['value']) + _toDouble(order['admin_commission']);
-          break;
-        }
+      if (date.isBefore(start) || !date.isBefore(end)) continue;
+
+      late String key;
+
+      if (_commissionRange == 'Days') {
+        key = '${date.year}-${date.month}-${date.day}';
+      } else if (_commissionRange == 'Weeks') {
+        final weekStart = DateTime(date.year, date.month, date.day)
+            .subtract(Duration(days: date.weekday - 1));
+        key = '${weekStart.year}-W${_weekNumber(weekStart)}';
+      } else {
+        key = '${date.year}-${date.month}';
       }
+
+      final row = grouped[key];
+      if (row == null) continue;
+
+      row['commission'] =
+          _toDouble(row['commission']) + _toDouble(order['admin_commission']);
+      row['orders'] = (row['orders'] as int) + 1;
     }
 
-    return buckets;
-  }
+    final rows = grouped.values.toList()
+      ..sort(
+        (a, b) => (a['date'] as DateTime).compareTo(b['date'] as DateTime),
+      );
 
-  Widget _commissionLineChart(List<Map<String, dynamic>> rows) {
-    return Container(
-      height: 220,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.black12),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        children: [
-          Expanded(
-            child: CustomPaint(
-              painter: _CommissionLinePainter(
-                values: rows.map((row) => _toDouble(row['value'])).toList(),
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              child: const SizedBox.expand(),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: rows
-                .map(
-                  (row) => Expanded(
-                    child: Text(
-                      row['label'].toString(),
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                )
-                .toList(),
-          ),
-        ],
-      ),
-    );
+    return rows;
   }
 
   double _toDouble(dynamic value) {
     if (value is num) return value.toDouble();
     return double.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  int _safeInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
   int _itemCount(Map<String, dynamic> order) {
@@ -1938,6 +2755,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     if (date == null) return 'N/A';
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
+  
 
   String _shortId(String id) {
     if (id.length <= 8) return id;
@@ -1970,6 +2788,320 @@ class _AdminDashboardState extends State<AdminDashboard> {
             onPressed: () => Navigator.pop(context),
             child: const Text('Close'),
           ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _loadTermsEditor() async {
+    setState(() => _loadingTerms = true);
+
+    try {
+      final sections = await DatabaseService.getTermsVersion();
+
+      _clearTermsControllers();
+
+      for (final section in sections) {
+        _termsSections.add(Map<String, dynamic>.from(section));
+
+        _termsTitleControllers.add(
+          TextEditingController(
+            text: section['section_title']?.toString() ?? '',
+          ),
+        );
+
+        _termsBodyControllers.add(
+          TextEditingController(
+            text: section['section_body']?.toString() ?? '',
+          ),
+        );
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _loadingTerms = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() => _loadingTerms = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to load Terms editor: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _clearTermsControllers() {
+    for (final controller in _termsTitleControllers) {
+      controller.dispose();
+    }
+
+    for (final controller in _termsBodyControllers) {
+      controller.dispose();
+    }
+
+    _termsSections.clear();
+    _termsTitleControllers.clear();
+    _termsBodyControllers.clear();
+  }
+
+  void _addTermsSection() {
+    setState(() {
+      _termsSections.add({
+        'icon_name': 'description',
+      });
+
+      _termsTitleControllers.add(TextEditingController());
+      _termsBodyControllers.add(TextEditingController());
+    });
+  }
+
+  void _removeTermsSection(int index) {
+    setState(() {
+      _termsSections.removeAt(index);
+
+      final titleController = _termsTitleControllers.removeAt(index);
+      final bodyController = _termsBodyControllers.removeAt(index);
+
+      titleController.dispose();
+      bodyController.dispose();
+    });
+  }
+
+  void _moveTermsSection(int from, int to) {
+    setState(() {
+      final section = _termsSections.removeAt(from);
+      final titleController = _termsTitleControllers.removeAt(from);
+      final bodyController = _termsBodyControllers.removeAt(from);
+
+      _termsSections.insert(to, section);
+      _termsTitleControllers.insert(to, titleController);
+      _termsBodyControllers.insert(to, bodyController);
+    });
+  }
+
+  Future<void> _saveTermsVersion() async {
+    final summary = _termsSummaryController.text.trim();
+
+    if (summary.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter an update summary.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final sections = <Map<String, dynamic>>[];
+
+    for (var i = 0; i < _termsTitleControllers.length; i++) {
+      final title = _termsTitleControllers[i].text.trim();
+      final body = _termsBodyControllers[i].text.trim();
+
+      if (title.isEmpty || body.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Section ${i + 1} needs both title and body.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      sections.add({
+        'icon_name': _termsSections[i]['icon_name']?.toString() ?? 'description',
+        'title': title,
+        'body': body,
+      });
+    }
+
+    if (sections.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Add at least one Terms section.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _savingTerms = true);
+
+    final version = await DatabaseService.createTermsVersion(
+      summary: summary,
+      sections: sections,
+    );
+
+    if (!mounted) return;
+
+    setState(() => _savingTerms = false);
+
+    if (version == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Terms update could not be published.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    _termsSummaryController.clear();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Published Terms update as version t$version'),
+        backgroundColor: Colors.green,
+      ),
+    );
+
+    await _loadTermsEditor();
+  }
+
+  Widget _buildTermsAdminTab() {
+    if (_loadingTerms) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadTermsEditor,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Text(
+            'Terms & Conditions Editor',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+
+          const SizedBox(height: 4),
+
+          Text(
+            'Update the current Terms. Publishing creates a new saved version automatically.',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          TextField(
+            controller: _termsSummaryController,
+            decoration: const InputDecoration(
+              labelText: 'Update Summary',
+              hintText: 'Example: Updated refund and marketplace abuse rules',
+              border: OutlineInputBorder(),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          if (_termsTitleControllers.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 80),
+              child: Center(
+                child: Text('No Terms sections found. Add one below.'),
+              ),
+            )
+          else
+            ...List.generate(_termsTitleControllers.length, (index) {
+              return Card(
+                margin: const EdgeInsets.only(bottom: 14),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Section ${index + 1}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Move Up',
+                            onPressed: index == 0
+                                ? null
+                                : () => _moveTermsSection(index, index - 1),
+                            icon: const Icon(Icons.arrow_upward),
+                          ),
+                          IconButton(
+                            tooltip: 'Move Down',
+                            onPressed: index == _termsTitleControllers.length - 1
+                                ? null
+                                : () => _moveTermsSection(index, index + 1),
+                            icon: const Icon(Icons.arrow_downward),
+                          ),
+                          IconButton(
+                            tooltip: 'Delete Section',
+                            onPressed: () => _removeTermsSection(index),
+                            icon: const Icon(Icons.delete_outline),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      TextField(
+                        controller: _termsTitleControllers[index],
+                        decoration: const InputDecoration(
+                          labelText: 'Section Title',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      TextField(
+                        controller: _termsBodyControllers[index],
+                        minLines: 5,
+                        maxLines: 14,
+                        decoration: const InputDecoration(
+                          labelText: 'Section Body',
+                          alignLabelWithHint: true,
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+
+          OutlinedButton.icon(
+            onPressed: _addTermsSection,
+            icon: const Icon(Icons.add),
+            label: const Text('Add Section'),
+          ),
+
+          const SizedBox(height: 12),
+
+          FilledButton.icon(
+            onPressed: _savingTerms ? null : _saveTermsVersion,
+            icon: _savingTerms
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.publish),
+            label: Text(_savingTerms ? 'Publishing...' : 'Publish Update'),
+          ),
+
+          const SizedBox(height: 40),
         ],
       ),
     );
@@ -2033,13 +3165,15 @@ class _AdminDashboardState extends State<AdminDashboard> {
   @override
   Widget build(BuildContext context) {
     final tabs = [
-      _buildDashboardTab(),
-      _buildSalesReportTab(),
-      _buildSellerApplicationsTab(),
-      _buildRiderApplicationsTab(),
-      _buildCouponsTab(),
-      _buildReportsTab(),
-    ];
+    _buildDashboardTab(),
+    _buildSalesReportTab(),
+    _buildSellerApplicationsTab(),
+    _buildRiderApplicationsTab(),
+    _buildCouponsTab(),
+    _buildReportsTab(),
+    _buildMarketFlagsTab(),
+    _buildTermsAdminTab(),
+  ];
 
     return Scaffold(
       appBar: AppBar(
@@ -2059,6 +3193,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 _loadCoupons();
               } else if (_currentIndex == 5) {
                 _loadReports();
+              } else if (_currentIndex == 6) {
+                _loadMarketFlags();
+              } else if (_currentIndex == 7) {
+                _loadTermsEditor();
               } else {
                 _loadAdminOrders();
               }
@@ -2106,6 +3244,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 NavigationDestination(icon: Icon(Icons.delivery_dining_outlined), selectedIcon: Icon(Icons.delivery_dining), label: 'Riders'),
                 NavigationDestination(icon: Icon(Icons.local_offer_outlined), selectedIcon: Icon(Icons.local_offer), label: 'Coupons'),
                 NavigationDestination(icon: Icon(Icons.report_outlined), selectedIcon: Icon(Icons.report), label: 'Reports'),
+                NavigationDestination(
+                  icon: Icon(Icons.policy_outlined),
+                  selectedIcon: Icon(Icons.policy),
+                  label: 'Flags',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.description_outlined),
+                  selectedIcon: Icon(Icons.description),
+                  label: 'Terms',
+                ),
               ],
             );
           }
@@ -2124,6 +3272,18 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   _adminNavItem(3, Icons.delivery_dining_outlined, Icons.delivery_dining, 'Riders'),
                   _adminNavItem(4, Icons.local_offer_outlined, Icons.local_offer, 'Coupons'),
                   _adminNavItem(5, Icons.report_outlined, Icons.report, 'Reports'),
+                  _adminNavItem(
+                    6,
+                    Icons.policy_outlined,
+                    Icons.policy,
+                    'Flags',
+                  ),
+                  _adminNavItem(
+                    7,
+                    Icons.description_outlined,
+                    Icons.description,
+                    'Terms',
+                  ),
                 ],
               ),
             ),

@@ -354,67 +354,141 @@ class _ProductPageState extends State<ProductPage> {
   Future<void> _reportProduct() async {
     final product = _product;
     if (product == null) return;
+
     if (Supabase.instance.client.auth.currentUser == null) {
       Navigator.pushNamed(context, '/login');
       return;
     }
 
-    final reasonController = TextEditingController();
+    String reason = 'Misleading product information';
     final detailsController = TextEditingController();
+
     final saved = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Report Product'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: reasonController,
-              decoration: const InputDecoration(labelText: 'Reason'),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Report Product'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  initialValue: reason,
+                  decoration: const InputDecoration(
+                    labelText: 'Reason',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'Misleading product information',
+                      child: Text('Misleading product information'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Fake or deceptive discount',
+                      child: Text('Fake or deceptive discount'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Wrong price or suspicious pricing',
+                      child: Text('Wrong price or suspicious pricing'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Prohibited or unsafe item',
+                      child: Text('Prohibited or unsafe item'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Offensive or inappropriate content',
+                      child: Text('Offensive or inappropriate content'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Duplicate or spam product',
+                      child: Text('Duplicate or spam product'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Other',
+                      child: Text('Other'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setDialogState(() => reason = value);
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: detailsController,
+                  decoration: const InputDecoration(
+                    labelText: 'Details',
+                    hintText: 'Explain what is wrong with this product.',
+                    border: OutlineInputBorder(),
+                  ),
+                  minLines: 3,
+                  maxLines: 5,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Reports are reviewed by admin. False or abusive reports may be ignored.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: detailsController,
-              decoration: const InputDecoration(labelText: 'Details'),
-              minLines: 2,
-              maxLines: 4,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(context, true),
+              icon: const Icon(Icons.flag_outlined),
+              label: const Text('Submit Report'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Submit'),
-          ),
-        ],
       ),
     );
 
     if (saved == true) {
-      final store = product['store'];
-      final ok = reasonController.text.trim().isNotEmpty &&
-          await DatabaseService.reportProduct(
-            productId: widget.productId,
-            storeId: store is Map ? store['store_id']?.toString() : null,
-            reason: reasonController.text,
-            details: detailsController.text,
+      final details = detailsController.text.trim();
+
+      if (details.length < 10) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please add at least 10 characters of details.'),
+              backgroundColor: Colors.orange,
+            ),
           );
+        }
+        detailsController.dispose();
+        return;
+      }
+
+      final store = product['store'];
+
+      final ok = await DatabaseService.reportProduct(
+        productId: widget.productId,
+        storeId: store is Map ? store['store_id']?.toString() : null,
+        reason: reason,
+        details: details,
+      );
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              ok ? 'Product report submitted' : 'Product report could not be submitted',
+              ok
+                  ? 'Product report submitted for admin review'
+                  : 'Product report could not be submitted',
             ),
+            backgroundColor: ok ? Colors.green : Colors.red,
           ),
         );
       }
     }
 
-    reasonController.dispose();
     detailsController.dispose();
   }
 
@@ -705,38 +779,85 @@ class _ProductPageState extends State<ProductPage> {
     );
   }
 
+  void _previousImage() {
+    final images = _activeGalleryImages();
+    if (images.isEmpty) return;
+
+    setState(() {
+      _selectedImageIndex =
+          (_selectedImageIndex - 1 + images.length) % images.length;
+    });
+  }
+
+  void _nextImage() {
+    final images = _activeGalleryImages();
+    if (images.isEmpty) return;
+
+    setState(() {
+      _selectedImageIndex = (_selectedImageIndex + 1) % images.length;
+    });
+  }
+
   List<String> _activeGalleryImages() {
     final product = _product;
     if (product == null) return [];
+
+    List<String> cleanOrderedImages(List<Map<String, dynamic>> rows) {
+      final sorted = List<Map<String, dynamic>>.from(rows);
+
+      sorted.sort((a, b) {
+        final aPrimary = a['is_primary'] == true ? 0 : 1;
+        final bPrimary = b['is_primary'] == true ? 0 : 1;
+        if (aPrimary != bPrimary) return aPrimary.compareTo(bPrimary);
+
+        final aSort = _toInt(a['sort_order']);
+        final bSort = _toInt(b['sort_order']);
+        if (aSort != bSort) return aSort.compareTo(bSort);
+
+        final aDate = DateTime.tryParse(a['created_at']?.toString() ?? '') ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        final bDate = DateTime.tryParse(b['created_at']?.toString() ?? '') ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+
+        return aDate.compareTo(bDate);
+      });
+
+      final urls = <String>[];
+
+      for (final row in sorted) {
+        final url = row['image_url']?.toString().trim() ?? '';
+        if (url.isNotEmpty && !urls.contains(url)) {
+          urls.add(url);
+        }
+      }
+
+      return urls;
+    }
 
     final selectedVariantId = _selectedVariant?['variant_id']?.toString();
 
     if (selectedVariantId != null && selectedVariantId.isNotEmpty) {
       final variantRows = _variantImages[selectedVariantId] ?? [];
-
-      final variantUrls = variantRows
-          .map((row) => row['image_url']?.toString().trim() ?? '')
-          .where((url) => url.isNotEmpty)
-          .toList();
+      final variantUrls = cleanOrderedImages(variantRows);
 
       if (variantUrls.isNotEmpty) {
         return variantUrls;
       }
     }
 
-    final productUrls = _productImages
-        .map((row) => row['image_url']?.toString().trim() ?? '')
-        .where((url) => url.isNotEmpty)
-        .toList();
+    final productUrls = cleanOrderedImages(_productImages);
+
+    final fallback = product['main_image_url']?.toString().trim() ?? '';
+    if (fallback.isNotEmpty) {
+      productUrls.remove(fallback);
+      productUrls.insert(0, fallback);
+    }
 
     if (productUrls.isNotEmpty) {
       return productUrls;
     }
 
-    final fallback = product['main_image_url']?.toString().trim() ?? '';
-    if (fallback.isNotEmpty) return [fallback];
-
-    return [];
+    return fallback.isNotEmpty ? [fallback] : [];
   }
 
   String? _activeGalleryImage() {
@@ -751,8 +872,20 @@ class _ProductPageState extends State<ProductPage> {
   Widget _buildProductGallery() {
     final scheme = Theme.of(context).colorScheme;
     final images = _activeGalleryImages();
-
     final activeImage = _activeGalleryImage();
+
+    final safeSelectedIndex = images.isEmpty
+        ? 0
+        : _selectedImageIndex.clamp(0, images.length - 1);
+
+    final thumbnailStartIndex = images.length <= 4
+        ? 0
+        : (() {
+            var start = safeSelectedIndex - 1;
+            if (start < 0) start = 0;
+            if (start > images.length - 4) start = images.length - 4;
+            return start;
+          })();
 
     return Column(
       children: [
@@ -763,40 +896,86 @@ class _ProductPageState extends State<ProductPage> {
             child: _buildImage(activeImage),
           ),
         ),
+
         if (images.length > 1) ...[
           const SizedBox(height: 10),
-          SizedBox(
-            height: 72,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: images.length,
-              itemBuilder: (context, index) {
-                final resolved = _resolveImagePath(images[index]);
-                final selected = index == _selectedImageIndex;
 
-                return GestureDetector(
-                  onTap: () {
-                    setState(() => _selectedImageIndex = index);
-                  },
-                  child: Container(
-                    width: 72,
-                    height: 72,
-                    margin: const EdgeInsets.only(right: 8),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: selected ? scheme.primary : scheme.outline,
-                        width: selected ? 2 : 1,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton.filledTonal(
+                tooltip: 'Previous image',
+                onPressed: _previousImage,
+                icon: const Icon(Icons.chevron_left),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                '${safeSelectedIndex + 1}/${images.length}',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(width: 12),
+              IconButton.filledTonal(
+                tooltip: 'Next image',
+                onPressed: _nextImage,
+                icon: const Icon(Icons.chevron_right),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 10),
+
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final gap = 8.0;
+              final itemSize = (constraints.maxWidth - (gap * 3)) / 4;
+
+              return Row(
+                children: List.generate(4, (localIndex) {
+                  final realIndex = thumbnailStartIndex + localIndex;
+
+                  if (realIndex >= images.length) {
+                    return Padding(
+                      padding: EdgeInsets.only(
+                        right: localIndex == 3 ? 0 : gap,
+                      ),
+                      child: SizedBox(
+                        width: itemSize,
+                        height: itemSize,
+                      ),
+                    );
+                  }
+
+                  final resolved = _resolveImagePath(images[realIndex]);
+                  final selected = realIndex == safeSelectedIndex;
+
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      right: localIndex == 3 ? 0 : gap,
+                    ),
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() => _selectedImageIndex = realIndex);
+                      },
+                      child: Container(
+                        width: itemSize,
+                        height: itemSize,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: selected ? scheme.primary : scheme.outline,
+                            width: selected ? 2 : 1,
+                          ),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(9),
+                          child: _buildImage(resolved),
+                        ),
                       ),
                     ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(9),
-                      child: _buildImage(resolved),
-                    ),
-                  ),
-                );
-              },
-            ),
+                  );
+                }),
+              );
+            },
           ),
         ],
       ],

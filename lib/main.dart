@@ -28,6 +28,7 @@ import 'services/database_service.dart';
 import 'services/auth_service.dart';
 import 'services/protected_route.dart';
 import 'services/theme_service.dart';
+import 'terms_page.dart';
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -129,6 +130,7 @@ class _MyAppState extends State<MyApp> {
           protection: RouteProtection.authenticated,
           child: const SettingsPage(),
         ),
+        '/terms': (context) => const TermsPage(),
         '/cart': (context) => ProtectedRoute(
           protection: RouteProtection.authenticated,
           child: const CartPage(),
@@ -557,6 +559,28 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
+  Future<void> _openSignupMenu(BuildContext context) async {
+    final value = await showMenu<String>(
+      context: context,
+      position: const RelativeRect.fromLTRB(999, 80, 8, 0),
+      items: const [
+        PopupMenuItem(value: 'buyer', child: Text('Buy Products')),
+        PopupMenuItem(value: 'seller', child: Text('Become Seller')),
+        PopupMenuItem(value: 'rider', child: Text('Become Rider')),
+      ],
+    );
+
+    if (value == null || !context.mounted) return;
+
+    final route = switch (value) {
+      'seller' => '/seller-registration',
+      'rider' => '/rider-registration',
+      _ => '/signup',
+    };
+
+    Navigator.pushNamed(context, route);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -583,31 +607,26 @@ class _MyHomePageState extends State<MyHomePage> {
           ],
         ),
         actions: [
-          IconButton(
-            tooltip: 'Create Account',
-            color: Colors.white,
-            onPressed: () {
-              showMenu<String>(
-                context: context,
-                position: const RelativeRect.fromLTRB(999, 80, 8, 0),
-                items: const [
-                  PopupMenuItem(value: 'buyer', child: Text('Buy Products')),
-                  PopupMenuItem(value: 'seller', child: Text('Become Seller')),
-                  PopupMenuItem(value: 'rider', child: Text('Become Rider')),
-                ],
-              ).then((value) {
-                if (value == null || !context.mounted) return;
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final showText = MediaQuery.sizeOf(context).width >= 700;
 
-                final route = switch (value) {
-                  'seller' => '/seller-registration',
-                  'rider' => '/rider-registration',
-                  _ => '/signup',
-                };
+              final button = showText
+                  ? TextButton.icon(
+                      onPressed: () => _openSignupMenu(context),
+                      icon: const Icon(Icons.person_add, size: 18),
+                      label: const Text('Sign Up'),
+                      style: TextButton.styleFrom(foregroundColor: Colors.white),
+                    )
+                  : IconButton(
+                      tooltip: 'Sign Up',
+                      color: Colors.white,
+                      onPressed: () => _openSignupMenu(context),
+                      icon: const Icon(Icons.person_add),
+                    );
 
-                Navigator.pushNamed(context, route);
-              });
+              return button;
             },
-            icon: const Icon(Icons.person_add),
           ),
 
           _navSearchFocusNode.hasFocus

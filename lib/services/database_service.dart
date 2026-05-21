@@ -2058,6 +2058,65 @@ class DatabaseService {
     }
   }
 
+    static Future<List<Map<String, dynamic>>> getAdminMarketFlags({
+    String status = 'open',
+    int limit = 100,
+    int offset = 0,
+  }) async {
+    try {
+      final response = await _supabase.rpc(
+        'get_admin_market_flags',
+        params: {
+          'p_status': status,
+          'p_limit': limit,
+          'p_offset': offset,
+        },
+      );
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      _logDbError('Failed to fetch admin market flags', e);
+      return [];
+    }
+  }
+
+  static Future<int> runUnfairMarketScan() async {
+    try {
+      final response = await _supabase.rpc('run_unfair_market_scan');
+
+      if (response is int) return response;
+      if (response is num) return response.toInt();
+      return int.tryParse(response?.toString() ?? '') ?? 0;
+    } catch (e) {
+      _logDbError('Failed to run unfair market scan', e);
+      return 0;
+    }
+  }
+
+  static Future<bool> applyMarketFlagAction({
+    required String flagId,
+    required String actionType,
+    required String reason,
+    String? actionUntil,
+  }) async {
+    try {
+      await _supabase.rpc(
+        'admin_apply_market_flag_action',
+        params: {
+          'p_flag_id': flagId,
+          'p_action_type': actionType,
+          'p_reason': reason,
+          'p_action_until': actionUntil,
+        },
+      );
+
+      return true;
+    } catch (e) {
+      _logDbError('Failed to apply market flag action', e);
+      return false;
+    }
+  }
+
   static Future<bool> reportStore({
     required String storeId,
     required String reason,
@@ -2101,6 +2160,105 @@ class DatabaseService {
     } catch (e) {
       _logDbError('Failed to report product', e);
       return false;
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getTermsVersions() async {
+    try {
+      final response = await _supabase.rpc('get_terms_versions');
+
+      debugPrint('TERMS DEBUG versions raw: $response');
+
+      if (response == null) return [];
+
+      if (response is List) {
+        return response
+            .whereType<Map>()
+            .map((row) => Map<String, dynamic>.from(row))
+            .toList();
+      }
+
+      return [];
+    } catch (e) {
+      _logDbError('Failed to get terms versions', e);
+      return [];
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getTermsVersion([int? version]) async {
+    try {
+      final response = await _supabase.rpc(
+        'get_terms_version',
+        params: {
+          'p_version_number': version,
+        },
+      );
+
+      debugPrint('TERMS DEBUG selected raw: $response');
+
+      if (response == null) return [];
+
+      if (response is List) {
+        return response
+            .whereType<Map>()
+            .map((row) => Map<String, dynamic>.from(row))
+            .toList();
+      }
+
+      return [];
+    } catch (e) {
+      _logDbError('Failed to get terms version', e);
+      return [];
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> compareAdjacentTermsVersions({
+    required int fromVersion,
+    required int toVersion,
+  }) async {
+    try {
+      final response = await _supabase.rpc(
+        'compare_adjacent_terms_versions',
+        params: {
+          'p_from_version': fromVersion,
+          'p_to_version': toVersion,
+        },
+      );
+
+      if (response == null) return [];
+
+      if (response is List) {
+        return response
+            .whereType<Map>()
+            .map((row) => Map<String, dynamic>.from(row))
+            .toList();
+      }
+
+      return [];
+    } catch (e) {
+      _logDbError('Failed to compare terms versions', e);
+      return [];
+    }
+  }
+
+  static Future<int?> createTermsVersion({
+    required String summary,
+    required List<Map<String, dynamic>> sections,
+  }) async {
+    try {
+      final response = await _supabase.rpc(
+        'create_terms_version',
+        params: {
+          'p_summary': summary,
+          'p_sections': sections,
+        },
+      );
+
+      if (response is int) return response;
+      return int.tryParse(response?.toString() ?? '');
+    } catch (e) {
+      _logDbError('Failed to create terms version', e);
+      return null;
     }
   }
 
@@ -2371,6 +2529,27 @@ class DatabaseService {
     }
   }
   
+  static Future<List<Map<String, dynamic>>> getSellerMarketFlags({
+    String status = 'open',
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    try {
+      final response = await _supabase.rpc(
+        'get_seller_market_flags',
+        params: {
+          'p_status': status,
+          'p_limit': limit,
+          'p_offset': offset,
+        },
+      );
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      _logDbError('Failed to fetch seller market flags', e);
+      return [];
+    }
+  }
 
   // Get product image URL from bucket
   static String getProductImageUrl(String fileName) {
@@ -3421,6 +3600,43 @@ class DatabaseService {
       );
     } catch (e) {
       _logDbError('Failed to send application email', e);
+    }
+  }
+  static Future<bool> isEmailAlreadyUsed(String email) async {
+  try {
+    final normalized = email.trim().toLowerCase();
+
+    final existing = await _supabase
+        .from('account')
+        .select('account_id')
+        .ilike('email', normalized)
+        .maybeSingle();
+
+    return existing != null;
+  } catch (e) {
+    _logDbError('Failed to check existing email', e);
+    return false;
+  }
+}
+
+  static Future<bool> isPhoneAlreadyUsed(String phone) async {
+    try {
+      final normalized = normalizePhilippinePhone(phone);
+
+      if (normalized == null || normalized.isEmpty) {
+        return false;
+      }
+
+      final existing = await _supabase
+          .from('account')
+          .select('account_id')
+          .eq('phone_number', normalized)
+          .maybeSingle();
+
+      return existing != null;
+    } catch (e) {
+      _logDbError('Failed to check existing phone', e);
+      return false;
     }
   }
 }

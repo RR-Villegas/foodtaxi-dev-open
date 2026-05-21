@@ -98,6 +98,20 @@ class _SellerDashboardState extends State<SellerDashboard> {
     'All',
   ];
 
+  List<Map<String, dynamic>> _marketFlags = [];
+  String _marketFlagFilter = 'open';
+  int _marketFlagsPage = 0;
+
+  static const int _marketFlagsPerPage = 5;
+  static const List<String> _marketFlagFilters = [
+    'open',
+    'reviewing',
+    'resolved',
+    'dismissed',
+    'All',
+  ];
+  
+
   Future<void> _logout() async {
     await AuthService.clearLoginSession();
     if (!mounted) return;
@@ -185,10 +199,16 @@ class _SellerDashboardState extends State<SellerDashboard> {
       final storeReviews = storeId == null
           ? <Map<String, dynamic>>[]
           : await DatabaseService.getStoreReviews(storeId);
-
       final productReviews = storeId == null
           ? <Map<String, dynamic>>[]
           : await DatabaseService.getProductReviewsForStore(storeId);
+      final marketFlags = storeId == null
+          ? <Map<String, dynamic>>[]
+          : await DatabaseService.getSellerMarketFlags(
+              status: _marketFlagFilter,
+              limit: 100,
+              offset: 0,
+            );
       _subscribeToDashboard(accountId: accountId, storeId: storeId);
 
       if (mounted) {
@@ -201,6 +221,7 @@ class _SellerDashboardState extends State<SellerDashboard> {
           _productDiscounts = productDiscounts;
           _storeReviews = storeReviews;
           _productReviews = productReviews;
+          _marketFlags = marketFlags;
           _isLoading = false;
         });
       }
@@ -319,6 +340,7 @@ class _SellerDashboardState extends State<SellerDashboard> {
       _salesPage = 0;
     });
   }
+  
 
   Widget _profileMenuHeader() {
     final account = _account;
@@ -679,6 +701,8 @@ class _SellerDashboardState extends State<SellerDashboard> {
 
   Future<void> _openProductForm([Map<String, dynamic>? product]) async {
     final storeId = _store?['store_id']?.toString();
+    final isEditing = product != null;
+
     if (storeId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Seller store not found')),
@@ -697,7 +721,20 @@ class _SellerDashboardState extends State<SellerDashboard> {
       ),
     );
 
+    if (!mounted) return;
+
     if (saved == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isEditing
+                ? 'Product updated successfully'
+                : 'Product added successfully',
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+
       await _loadDashboard();
     }
   }
@@ -1162,6 +1199,10 @@ class _SellerDashboardState extends State<SellerDashboard> {
             _store?['store_name']?.toString() ?? 'Seller Overview',
             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
+          if (_marketFlags.where((flag) => flag['status'] == 'open').isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _marketFlagsSummaryCard(),
+          ],
           const SizedBox(height: 4),
           Text(
             'Sales, orders, and fulfillment history',
@@ -1283,6 +1324,246 @@ class _SellerDashboardState extends State<SellerDashboard> {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _marketFlagsSummaryCard() {
+    final openFlags = _marketFlags
+        .where((flag) => flag['status']?.toString() == 'open')
+        .toList();
+
+    final highFlags = openFlags.where((flag) {
+      final severity = flag['severity']?.toString();
+      return severity == 'high' || severity == 'critical';
+    }).length;
+
+    final scheme = Theme.of(context).colorScheme;
+
+    return Card(
+      color: highFlags > 0
+          ? scheme.errorContainer
+          : scheme.secondaryContainer,
+      child: ListTile(
+        leading: Icon(
+          Icons.policy_outlined,
+          color: highFlags > 0
+              ? scheme.onErrorContainer
+              : scheme.onSecondaryContainer,
+        ),
+        title: Text(
+          highFlags > 0
+              ? 'Market integrity issues need attention'
+              : 'Marketplace notice',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: highFlags > 0
+                ? scheme.onErrorContainer
+                : scheme.onSecondaryContainer,
+          ),
+        ),
+        subtitle: Text(
+          '${openFlags.length} open flag${openFlags.length == 1 ? '' : 's'} found. Review pricing, discounts, cancellations, or duplicate listings.',
+          style: TextStyle(
+            color: highFlags > 0
+                ? scheme.onErrorContainer
+                : scheme.onSecondaryContainer,
+          ),
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => setState(() => _currentIndex = 6),
+      ),
+    );
+  }
+
+  String _flagTitle(String type) {
+    switch (type) {
+      case 'price_spike':
+        return 'Price spike detected';
+      case 'fake_discount_baseline':
+        return 'Discount may be misleading';
+      case 'high_cancellation_rate':
+        return 'High cancellation rate';
+      case 'duplicate_listing_spam':
+        return 'Duplicate listing warning';
+      default:
+        return 'Market integrity flag';
+    }
+  }
+
+  String _flagAdvice(String type) {
+    switch (type) {
+      case 'price_spike':
+        return 'Review your recent price changes. Adjust the price if the increase was unintentional.';
+      case 'fake_discount_baseline':
+        return 'Your sale price appears higher than the recent lowest price. Lower the sale price or remove the discount.';
+      case 'high_cancellation_rate':
+        return 'Keep stock accurate and avoid accepting orders you cannot fulfill.';
+      case 'duplicate_listing_spam':
+        return 'Merge duplicate listings or hide repeated products.';
+      default:
+        return 'Review this issue and make sure your listing follows marketplace rules.';
+    }
+  }
+
+  Color _flagColor(String severity) {
+    switch (severity) {
+      case 'critical':
+      case 'high':
+        return Colors.red;
+      case 'medium':
+        return Colors.orange;
+      default:
+        return Colors.blueGrey;
+    }
+  }
+
+  Widget _buildMarketFlagsTab() {
+    final visible = _marketFlags.where((flag) {
+      if (_marketFlagFilter == 'All') return true;
+      return flag['status']?.toString() == _marketFlagFilter;
+    }).toList();
+
+    final pageItems = _pageSlice(
+      visible,
+      _marketFlagsPage,
+      _marketFlagsPerPage,
+    );
+
+    return RefreshIndicator(
+      onRefresh: _loadDashboard,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Text(
+            'Market Integrity',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Automatic checks for pricing, discounts, cancellations, and duplicate listings.',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: _marketFlagFilters.map((filter) {
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(filter),
+                    selected: _marketFlagFilter == filter,
+                    onSelected: (_) async {
+                      setState(() {
+                        _marketFlagFilter = filter;
+                        _marketFlagsPage = 0;
+                      });
+
+                      final flags = await DatabaseService.getSellerMarketFlags(
+                        status: filter,
+                        limit: 100,
+                        offset: 0,
+                      );
+
+                      if (!mounted) return;
+                      setState(() => _marketFlags = flags);
+                    },
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (visible.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 100),
+              child: Center(child: Text('No market flags for this filter')),
+            )
+          else
+            ...pageItems.map(_marketFlagCard),
+          _smallPager(
+            page: _marketFlagsPage,
+            totalItems: visible.length,
+            perPage: _marketFlagsPerPage,
+            onPageChanged: (page) {
+              setState(() => _marketFlagsPage = page);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _marketFlagCard(Map<String, dynamic> flag) {
+    final type = flag['flag_type']?.toString() ?? '';
+    final severity = flag['severity']?.toString() ?? 'medium';
+    final status = flag['status']?.toString() ?? 'open';
+    final productName = flag['product_name']?.toString() ?? '';
+    final reason = flag['reason']?.toString() ?? '';
+    final evidence = flag['evidence'];
+    final color = _flagColor(severity);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ExpansionTile(
+        leading: CircleAvatar(
+          backgroundColor: color.withAlpha(35),
+          child: Icon(Icons.policy_outlined, color: color),
+        ),
+        title: Text(
+          _flagTitle(type),
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (productName.isNotEmpty) Text(productName),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                Chip(
+                  label: Text(severity.toUpperCase()),
+                  backgroundColor: color.withAlpha(35),
+                  labelStyle: TextStyle(color: color),
+                ),
+                Chip(label: Text(status)),
+              ],
+            ),
+          ],
+        ),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(reason),
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              _flagAdvice(type),
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          if (evidence != null) ...[
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SelectableText(
+                evidence.toString(),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -3265,18 +3546,20 @@ class _SellerDashboardState extends State<SellerDashboard> {
         ],
       ),
       body: _isLoading
-        ? const Center(child: CircularProgressIndicator())
-        : _currentIndex == 0
-            ? _buildOverviewTab()
-            : _currentIndex == 1
-                ? _buildProductsTab()
-                : _currentIndex == 2
-                    ? _buildOrdersTab()
-                    : _currentIndex == 3
-                        ? _buildSalesTab()
-                        : _currentIndex == 4
-                            ? _buildCouponsTab()
-                            : _buildReviewsTab(),
+    ? const Center(child: CircularProgressIndicator())
+    : _currentIndex == 0
+        ? _buildOverviewTab()
+        : _currentIndex == 1
+            ? _buildProductsTab()
+            : _currentIndex == 2
+                ? _buildOrdersTab()
+                : _currentIndex == 3
+                    ? _buildSalesTab()
+                    : _currentIndex == 4
+                        ? _buildCouponsTab()
+                        : _currentIndex == 5
+                            ? _buildReviewsTab()
+                            : _buildMarketFlagsTab(),
       bottomNavigationBar: LayoutBuilder(
         builder: (context, constraints) {
           final isMobile = MediaQuery.of(context).size.width < 700;
@@ -3317,6 +3600,11 @@ class _SellerDashboardState extends State<SellerDashboard> {
                   icon: Icon(Icons.reviews_outlined),
                   selectedIcon: Icon(Icons.reviews),
                   label: 'Reviews',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.policy_outlined),
+                  selectedIcon: Icon(Icons.policy),
+                  label: 'Flags',
                 ),
               ],
             );
@@ -3365,6 +3653,12 @@ class _SellerDashboardState extends State<SellerDashboard> {
                     Icons.reviews_outlined,
                     Icons.reviews,
                     'Reviews',
+                  ),
+                  _sellerNavItem(
+                    6,
+                    Icons.policy_outlined,
+                    Icons.policy,
+                    'Flags',
                   ),
                 ],
               ),

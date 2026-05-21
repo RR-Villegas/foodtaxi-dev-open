@@ -208,49 +208,109 @@ class _SellerPageState extends State<SellerPage> {
   Future<void> _reportStore() async {
     if (!await _requireLogin('report this shop')) return;
     if (!mounted) return;
+
+    String reason = 'Misleading shop information';
     var isOrderRelated = false;
-    final reasonController = TextEditingController();
     final detailsController = TextEditingController();
+
     final saved = await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: const Text('Report Shop'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: reasonController,
-                decoration: const InputDecoration(labelText: 'Reason'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: detailsController,
-                decoration: const InputDecoration(labelText: 'Details'),
-                minLines: 2,
-                maxLines: 4,
-              ),
-              CheckboxListTile(
-                value: isOrderRelated,
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Related to a delivered order'),
-                subtitle: !_canReviewStore
-                    ? const Text('Available after you receive an order from this shop')
-                    : null,
-                onChanged: !_canReviewStore
-                    ? null
-                    : (value) => setDialogState(() => isOrderRelated = value ?? false),
-              ),
-            ],
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  initialValue: reason,
+                  decoration: const InputDecoration(
+                    labelText: 'Reason',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'Misleading shop information',
+                      child: Text('Misleading shop information'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Fake or deceptive discounts',
+                      child: Text('Fake or deceptive discounts'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Suspicious pricing behavior',
+                      child: Text('Suspicious pricing behavior'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Seller is not fulfilling orders properly',
+                      child: Text('Seller is not fulfilling orders properly'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Offensive or inappropriate shop content',
+                      child: Text('Offensive or inappropriate shop content'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Spam or duplicate shop',
+                      child: Text('Spam or duplicate shop'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Other',
+                      child: Text('Other'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setDialogState(() => reason = value);
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: detailsController,
+                  decoration: const InputDecoration(
+                    labelText: 'Details',
+                    hintText: 'Explain what admin should check.',
+                    border: OutlineInputBorder(),
+                  ),
+                  minLines: 3,
+                  maxLines: 5,
+                ),
+                const SizedBox(height: 8),
+                CheckboxListTile(
+                  value: isOrderRelated,
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Related to my order'),
+                  subtitle: !_canReviewStore
+                      ? const Text(
+                          'Only available after you receive an order from this shop',
+                        )
+                      : null,
+                  onChanged: !_canReviewStore
+                      ? null
+                      : (value) {
+                          setDialogState(() {
+                            isOrderRelated = value ?? false;
+                          });
+                        },
+                ),
+                Text(
+                  'Reports are reviewed by admin. False or abusive reports may be ignored.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
               child: const Text('Cancel'),
             ),
-            FilledButton(
+            FilledButton.icon(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Submit'),
+              icon: const Icon(Icons.flag_outlined),
+              label: const Text('Submit Report'),
             ),
           ],
         ),
@@ -258,20 +318,42 @@ class _SellerPageState extends State<SellerPage> {
     );
 
     if (saved == true) {
-      final ok = reasonController.text.trim().isNotEmpty &&
-          await DatabaseService.reportStore(
-            storeId: widget.storeId,
-            reason: reasonController.text,
-            details: detailsController.text,
-            isOrderRelated: isOrderRelated,
+      final details = detailsController.text.trim();
+
+      if (details.length < 10) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please add at least 10 characters of details.'),
+              backgroundColor: Colors.orange,
+            ),
           );
+        }
+        detailsController.dispose();
+        return;
+      }
+
+      final ok = await DatabaseService.reportStore(
+        storeId: widget.storeId,
+        reason: reason,
+        details: details,
+        isOrderRelated: isOrderRelated,
+      );
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(ok ? 'Shop report submitted' : 'Shop report could not be submitted')),
+          SnackBar(
+            content: Text(
+              ok
+                  ? 'Shop report submitted for admin review'
+                  : 'Shop report could not be submitted',
+            ),
+            backgroundColor: ok ? Colors.green : Colors.red,
+          ),
         );
       }
     }
-    reasonController.dispose();
+
     detailsController.dispose();
   }
 
