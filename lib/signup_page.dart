@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:dropdown_search/dropdown_search.dart';
 
@@ -8,6 +9,7 @@ import 'services/database_service.dart';
 import 'services/input_validator.dart';
 import 'services/location_service.dart';
 import 'utils/password_validator.dart';
+import 'widgets/house_number_input.dart';
 
 class SignupPage extends StatefulWidget {
   const SignupPage({super.key});
@@ -33,6 +35,7 @@ class _SignupPageState extends State<SignupPage> {
   final _barangayController = TextEditingController();
   final _streetController = TextEditingController();
   final _houseNumberController = TextEditingController();
+  final _houseNumberSuffixController = TextEditingController();
   final _zipCodeController = TextEditingController();
 
   final _supabase = Supabase.instance.client;
@@ -176,7 +179,9 @@ class _SignupPageState extends State<SignupPage> {
         _municipalityController.text = existingData.municipality ?? '';
         _barangayController.text = existingData.barangay ?? '';
         _streetController.text = existingData.street ?? '';
-        _houseNumberController.text = existingData.houseNumber ?? '';
+        final houseNumber = HouseNumberInput.split(existingData.houseNumber);
+        _houseNumberController.text = houseNumber.number;
+        _houseNumberSuffixController.text = houseNumber.suffix;
         _zipCodeController.text = existingData.zipCode ?? '';
       });
     }
@@ -290,6 +295,14 @@ class _SignupPageState extends State<SignupPage> {
   bool _validateStep3() {
     setState(() => _step3Error = null);
 
+    if (HouseNumberInput.hasSuffixWithoutNumber(
+      _houseNumberController.text,
+      _houseNumberSuffixController.text,
+    )) {
+      setState(() => _step3Error = 'Enter a house number before its suffix');
+      return false;
+    }
+
     if (_provinceController.text.isEmpty) {
       setState(() => _step3Error = 'Province is required');
       return false;
@@ -390,7 +403,10 @@ class _SignupPageState extends State<SignupPage> {
     _signupData.municipality = _municipalityController.text.trim();
     _signupData.barangay = _barangayController.text.trim();
     _signupData.street = _streetController.text.trim();
-    _signupData.houseNumber = _houseNumberController.text.trim();
+    _signupData.houseNumber = HouseNumberInput.combine(
+      _houseNumberController.text,
+      _houseNumberSuffixController.text,
+    );
     _signupData.zipCode = _zipCodeController.text.trim();
 
     setState(() => _isLoading = true);
@@ -560,6 +576,7 @@ class _SignupPageState extends State<SignupPage> {
     _barangayController.dispose();
     _streetController.dispose();
     _houseNumberController.dispose();
+    _houseNumberSuffixController.dispose();
     _zipCodeController.dispose();
     super.dispose();
   }
@@ -864,6 +881,7 @@ class _SignupPageState extends State<SignupPage> {
             ),
           ),
           keyboardType: TextInputType.phone,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         ),
       ],
     );
@@ -972,11 +990,22 @@ class _SignupPageState extends State<SignupPage> {
           ),
         ),
         const SizedBox(height: 16),
-        TextField(
-          controller: _houseNumberController,
-          decoration: InputDecoration(
+        HouseNumberInput(
+          numberController: _houseNumberController,
+          suffixController: _houseNumberSuffixController,
+          numberDecoration: InputDecoration(
             labelText: 'House Number',
-            hintText: 'Enter your house number',
+            hintText: 'Number',
+            filled: true,
+            fillColor: const Color(0xFFF1F7F1),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide.none,
+            ),
+          ),
+          suffixDecoration: InputDecoration(
+            labelText: 'Suffix',
+            hintText: 'Optional',
             filled: true,
             fillColor: const Color(0xFFF1F7F1),
             border: OutlineInputBorder(

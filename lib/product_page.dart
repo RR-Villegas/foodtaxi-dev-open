@@ -1103,7 +1103,11 @@ class _ProductPageState extends State<ProductPage> {
     final activeVariants = variants is List
         ? variants
             .whereType<Map>()
-            .where((variant) => variant['is_active'] != false)
+            .where(
+              (variant) =>
+                  variant['is_active'] != false &&
+                  variant['is_deleted'] != true,
+            )
             .map((variant) => Map<String, dynamic>.from(variant))
             .toList()
         : <Map<String, dynamic>>[];
@@ -1221,8 +1225,10 @@ class _ProductPageState extends State<ProductPage> {
                             ),
                           ],
                           const SizedBox(height: 12),
-                          const Text(
-                            'Size',
+                          Text(
+                            activeVariants.isEmpty
+                                ? 'Size'
+                                : 'Choose a size · ${activeVariants.length + 1} options',
                             style: TextStyle(fontWeight: FontWeight.w600),
                           ),
                           const SizedBox(height: 8),

@@ -30,6 +30,8 @@ class _RadioPageState extends State<RadioPage> {
   DateTime? _songProgressStartedAt;
   double _songPlayedAtSync = 0;
   double _songDurationAtSync = 0;
+  String? _completionRefreshSongId;
+  bool _isRefreshingRadioStatus = false;
 
   RealtimeChannel? _radioChannel;
 
@@ -46,9 +48,7 @@ class _RadioPageState extends State<RadioPage> {
 
   double _volume = 0.5;
 
-  static final Uri _radioUrl = Uri.parse(
-    'https://gensokyoradio.net/playing/',
-  );
+  static final Uri _radioUrl = Uri.parse('https://gensokyoradio.net/playing/');
 
   static const String _streamUrl = 'https://stream.gensokyoradio.net/1/';
 
@@ -87,11 +87,9 @@ class _RadioPageState extends State<RadioPage> {
           _audioLoading = false;
         });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(error),
-          ),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error)));
       },
     );
 
@@ -135,11 +133,9 @@ class _RadioPageState extends State<RadioPage> {
         _audioLoading = false;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not play stream here. $e'),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not play stream here. $e')));
     }
   }
 
@@ -159,40 +155,65 @@ class _RadioPageState extends State<RadioPage> {
 
     if (_songDurationAtSync <= 0) return;
 
-    _songProgressTimer = Timer.periodic(
-      const Duration(seconds: 1),
-      (_) {
-        if (!mounted) return;
+    _songProgressTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
 
-        final played = _visualPlayedSeconds();
+      final played = _visualPlayedSeconds();
 
-        if (played >= _songDurationAtSync) {
-          _songProgressTimer?.cancel();
+      if (played >= _songDurationAtSync) {
+        _songProgressTimer?.cancel();
+        final songId = _lastSongId;
+        if (songId != null && _completionRefreshSongId != songId) {
+          _completionRefreshSongId = songId;
+          _loadRadioStatus(silent: true, forceRefresh: true);
         }
+      }
 
-        setState(() {});
-      },
-    );
+      setState(() {});
+    });
   }
 
   void _scheduleNextMetadataUpdate() {
     _metadataTimer?.cancel();
 
-    final remaining = _radioNumber('remaining');
+    final remaining = _radioNumber('remaining')?.toDouble();
+    final intermission = _isIntermissionStatus(_radioStatus);
+    final completionRefreshPending =
+        _lastSongId != null && _completionRefreshSongId == _lastSongId;
 
-    // Gensokyo gives remaining seconds. Add a small delay so the API has time
-    // to swap to the next song before we ask again.
-    final secondsUntilRefresh = remaining == null
-        ? 20
-        : (remaining + 3).clamp(8, 900).round();
+    // Retry briefly during intermission or while the station still reports a
+    // completed track; otherwise refresh just after the reported end time.
+    final secondsUntilRefresh = intermission || completionRefreshPending
+        ? 5
+        : remaining != null
+        ? (remaining.clamp(0, 900) + 2).round().clamp(2, 902)
+        : _songDurationAtSync > 0
+        ? ((_songDurationAtSync - _songPlayedAtSync).clamp(0, 900) + 2)
+              .round()
+              .clamp(2, 902)
+        : 5;
 
-    _metadataTimer = Timer(
-      Duration(seconds: secondsUntilRefresh),
-      () {
-        if (!mounted) return;
-        _loadRadioStatus(silent: true);
-      },
-    );
+    _metadataTimer = Timer(Duration(seconds: secondsUntilRefresh), () {
+      if (!mounted) return;
+      _loadRadioStatus(silent: true, forceRefresh: true);
+    });
+  }
+
+  bool _isIntermissionStatus(Map<String, dynamic>? status) {
+    if (status == null) return true;
+
+    final title = status['title']?.toString().toLowerCase() ?? '';
+    final artist = status['artist']?.toString().toLowerCase() ?? '';
+    if (title.contains('intermission') || artist.contains('intermission')) {
+      return true;
+    }
+
+    final songId = status['songId']?.toString().trim();
+    if (songId == null || songId.isEmpty || songId == '0') return true;
+
+    final duration = num.tryParse(status['duration']?.toString() ?? '') ?? 0;
+    final remaining = num.tryParse(status['remaining']?.toString() ?? '') ?? 0;
+    return duration <= 0 && remaining <= 0;
   }
 
   Future<void> _loadSavedVolume() async {
@@ -217,39 +238,56 @@ class _RadioPageState extends State<RadioPage> {
     await prefs.setDouble(_volumePreferenceKey, normalized);
   }
 
-  Future<void> _loadRadioStatus({bool silent = false}) async {
+  Future<void> _loadRadioStatus({
+    bool silent = false,
+    bool forceRefresh = false,
+  }) async {
+    if (_isRefreshingRadioStatus) return;
+    _isRefreshingRadioStatus = true;
+
     if (mounted && !silent) {
       setState(() => _radioLoading = true);
     }
 
-    final status = await DatabaseService.getGensokyoRadioStatus();
-
-    if (!mounted) return;
-
-    final newSongId = status?['songId']?.toString();
-    final oldSongId = _lastSongId;
-
-    setState(() {
-      _radioStatus = status;
-      _radioLoading = false;
-      _lastSongId = newSongId;
-    });
-
-    if (silent &&
-        oldSongId != null &&
-        newSongId != null &&
-        oldSongId != newSongId) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Now playing: ${_statusText('title', 'New song')}',
-          ),
-          duration: const Duration(seconds: 2),
-        ),
+    try {
+      final status = await DatabaseService.getGensokyoRadioStatus(
+        forceRefresh: forceRefresh,
       );
+
+      if (!mounted) return;
+
+      final newSongId = status?['songId']?.toString();
+      final oldSongId = _lastSongId;
+
+      setState(() {
+        _radioStatus = status;
+        _radioLoading = false;
+        _lastSongId = newSongId;
+        if (newSongId != oldSongId) {
+          _completionRefreshSongId = null;
+        }
+      });
+
+      if (silent &&
+          oldSongId != null &&
+          newSongId != null &&
+          oldSongId != newSongId) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Now playing: ${_statusText('title', 'New song')}'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+      _scheduleNextMetadataUpdate();
+      _syncSongProgressFromStatus();
+    } finally {
+      _isRefreshingRadioStatus = false;
     }
-    _scheduleNextMetadataUpdate();
-    _syncSongProgressFromStatus();
+  }
+
+  Future<void> _refreshRadioStatus() {
+    return _loadRadioStatus(forceRefresh: true);
   }
 
   Future<void> _openRadioExternal() async {
@@ -261,9 +299,7 @@ class _RadioPageState extends State<RadioPage> {
 
     if (!opened && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not open Gensokyo Radio.'),
-        ),
+        const SnackBar(content: Text('Could not open Gensokyo Radio.')),
       );
     }
   }
@@ -316,9 +352,7 @@ class _RadioPageState extends State<RadioPage> {
       await _loadInitialMessages();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Message could not be sent.'),
-        ),
+        const SnackBar(content: Text('Message could not be sent.')),
       );
     }
   }
@@ -339,9 +373,7 @@ class _RadioPageState extends State<RadioPage> {
 
   Widget _lockedView(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Gensokyo Radio'),
-      ),
+      appBar: AppBar(title: const Text('Gensokyo Radio')),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -355,10 +387,7 @@ class _RadioPageState extends State<RadioPage> {
                   const SizedBox(height: 20),
                   const Text(
                     'Members Only',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
                   const Text(
@@ -410,7 +439,9 @@ class _RadioPageState extends State<RadioPage> {
     }
 
     final elapsed = DateTime.now().difference(startedAt).inMilliseconds / 1000;
-    return (_songPlayedAtSync + elapsed).clamp(0, _songDurationAtSync).toDouble();
+    return (_songPlayedAtSync + elapsed)
+        .clamp(0, _songDurationAtSync)
+        .toDouble();
   }
 
   String _statusText(String key, String fallback) {
@@ -449,10 +480,7 @@ class _RadioPageState extends State<RadioPage> {
     }
   }
 
-  Widget _albumArt({
-    required double size,
-    required Color fallbackColor,
-  }) {
+  Widget _albumArt({required double size, required Color fallbackColor}) {
     final bytes = _artBytes();
 
     return ClipRRect(
@@ -463,10 +491,7 @@ class _RadioPageState extends State<RadioPage> {
         child: bytes == null
             ? ColoredBox(
                 color: fallbackColor,
-                child: Icon(
-                  Icons.radio,
-                  size: size * 0.42,
-                ),
+                child: Icon(Icons.radio, size: size * 0.42),
               )
             : Image.memory(
                 bytes,
@@ -475,10 +500,7 @@ class _RadioPageState extends State<RadioPage> {
                 errorBuilder: (_, __, ___) {
                   return ColoredBox(
                     color: fallbackColor,
-                    child: Icon(
-                      Icons.radio,
-                      size: size * 0.42,
-                    ),
+                    child: Icon(Icons.radio, size: size * 0.42),
                   );
                 },
               ),
@@ -511,8 +533,8 @@ class _RadioPageState extends State<RadioPage> {
     final icon = _volume == 0
         ? Icons.volume_off
         : _volume < 0.5
-            ? Icons.volume_down
-            : Icons.volume_up;
+        ? Icons.volume_down
+        : Icons.volume_up;
 
     if (compact) {
       return Row(
@@ -546,17 +568,9 @@ class _RadioPageState extends State<RadioPage> {
         Icon(icon),
         SizedBox(
           width: 160,
-          child: Slider(
-            value: _volume,
-            min: 0,
-            max: 1,
-            onChanged: _setVolume,
-          ),
+          child: Slider(value: _volume, min: 0, max: 1, onChanged: _setVolume),
         ),
-        SizedBox(
-          width: 42,
-          child: Text(label),
-        ),
+        SizedBox(width: 42, child: Text(label)),
       ],
     );
   }
@@ -572,23 +586,20 @@ class _RadioPageState extends State<RadioPage> {
     final value = (played / duration).clamp(0.0, 1.0).toDouble();
 
     return Column(
-      crossAxisAlignment:
-          compact ? CrossAxisAlignment.stretch : CrossAxisAlignment.start,
+      crossAxisAlignment: compact
+          ? CrossAxisAlignment.stretch
+          : CrossAxisAlignment.start,
       children: [
         SliderTheme(
           data: SliderTheme.of(context).copyWith(
             thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
             disabledThumbColor: Theme.of(context).colorScheme.primary,
             disabledActiveTrackColor: Theme.of(context).colorScheme.primary,
-            disabledInactiveTrackColor:
-                Theme.of(context).colorScheme.primary.withValues(alpha: 0.25),
+            disabledInactiveTrackColor: Theme.of(
+              context,
+            ).colorScheme.primary.withValues(alpha: 0.25),
           ),
-          child: Slider(
-            value: value,
-            min: 0,
-            max: 1,
-            onChanged: null,
-          ),
+          child: Slider(value: value, min: 0, max: 1, onChanged: null),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -610,9 +621,7 @@ class _RadioPageState extends State<RadioPage> {
     );
   }
 
-  Widget _radioPanel({
-    required bool compact,
-  }) {
+  Widget _radioPanel({required bool compact}) {
     final scheme = Theme.of(context).colorScheme;
 
     final title = _statusText('title', 'Gensokyo Radio');
@@ -626,10 +635,7 @@ class _RadioPageState extends State<RadioPage> {
       child: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [
-              scheme.primaryContainer,
-              scheme.tertiaryContainer,
-            ],
+            colors: [scheme.primaryContainer, scheme.tertiaryContainer],
           ),
         ),
         padding: EdgeInsets.all(compact ? 12 : 20),
@@ -639,10 +645,7 @@ class _RadioPageState extends State<RadioPage> {
                 children: [
                   Row(
                     children: [
-                      _albumArt(
-                        size: 70,
-                        fallbackColor: scheme.surface,
-                      ),
+                      _albumArt(size: 70, fallbackColor: scheme.surface),
                       const SizedBox(width: 12),
                       Expanded(
                         child: _radioLoading
@@ -670,7 +673,7 @@ class _RadioPageState extends State<RadioPage> {
                       ),
                       IconButton(
                         tooltip: 'Refresh',
-                        onPressed: _loadRadioStatus,
+                        onPressed: _refreshRadioStatus,
                         icon: const Icon(Icons.refresh),
                       ),
                       IconButton.filled(
@@ -680,7 +683,9 @@ class _RadioPageState extends State<RadioPage> {
                             ? const SizedBox(
                                 width: 16,
                                 height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : Icon(_playing ? Icons.stop : Icons.play_arrow),
                       ),
@@ -700,9 +705,7 @@ class _RadioPageState extends State<RadioPage> {
                       : (constraints.maxWidth * 0.38).clamp(220.0, 340.0);
 
                   final details = _radioLoading
-                      ? const Center(
-                          child: CircularProgressIndicator(),
-                        )
+                      ? const Center(child: CircularProgressIndicator())
                       : Column(
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: useColumn
@@ -729,9 +732,7 @@ class _RadioPageState extends State<RadioPage> {
                               textAlign: useColumn
                                   ? TextAlign.center
                                   : TextAlign.start,
-                              style: TextStyle(
-                                fontSize: useColumn ? 18 : 22,
-                              ),
+                              style: TextStyle(fontSize: useColumn ? 18 : 22),
                             ),
                             if (album != null) ...[
                               const SizedBox(height: 8),
@@ -745,20 +746,20 @@ class _RadioPageState extends State<RadioPage> {
                               ),
                             ],
                             if (circle != null) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  circle,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  textAlign: useColumn
-                                      ? TextAlign.center
-                                      : TextAlign.start,
-                                ),
-                              ],
-                              const SizedBox(height: 16),
-                              _songProgressBar(compact: useColumn),
-                              const SizedBox(height: 20),
-                              Wrap(
+                              const SizedBox(height: 4),
+                              Text(
+                                circle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: useColumn
+                                    ? TextAlign.center
+                                    : TextAlign.start,
+                              ),
+                            ],
+                            const SizedBox(height: 16),
+                            _songProgressBar(compact: useColumn),
+                            const SizedBox(height: 20),
+                            Wrap(
                               spacing: 12,
                               runSpacing: 8,
                               alignment: useColumn
@@ -769,7 +770,7 @@ class _RadioPageState extends State<RadioPage> {
                                 _playButton(compact: false),
                                 _volumeControl(compact: false),
                                 OutlinedButton.icon(
-                                  onPressed: _loadRadioStatus,
+                                  onPressed: _refreshRadioStatus,
                                   icon: const Icon(Icons.refresh),
                                   label: const Text('Refresh'),
                                 ),
@@ -801,14 +802,9 @@ class _RadioPageState extends State<RadioPage> {
 
                   return Row(
                     children: [
-                      _albumArt(
-                        size: artSize,
-                        fallbackColor: scheme.surface,
-                      ),
+                      _albumArt(size: artSize, fallbackColor: scheme.surface),
                       const SizedBox(width: 24),
-                      Expanded(
-                        child: details,
-                      ),
+                      Expanded(child: details),
                     ],
                   );
                 },
@@ -834,7 +830,9 @@ class _RadioPageState extends State<RadioPage> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Could not detect this user role. Refresh and try again.'),
+          content: Text(
+            'Could not detect this user role. Refresh and try again.',
+          ),
         ),
       );
       return;
@@ -844,9 +842,7 @@ class _RadioPageState extends State<RadioPage> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Admin profiles cannot be viewed.'),
-        ),
+        const SnackBar(content: Text('Admin profiles cannot be viewed.')),
       );
       return;
     }
@@ -857,9 +853,7 @@ class _RadioPageState extends State<RadioPage> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => RiderProfilePage(
-            riderAccountId: accountId,
-          ),
+          builder: (_) => RiderProfilePage(riderAccountId: accountId),
         ),
       );
       return;
@@ -874,18 +868,14 @@ class _RadioPageState extends State<RadioPage> {
 
       if (storeId == null || storeId.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Seller storefront not found.'),
-          ),
+          const SnackBar(content: Text('Seller storefront not found.')),
         );
         return;
       }
 
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (_) => SellerPage(storeId: storeId),
-        ),
+        MaterialPageRoute(builder: (_) => SellerPage(storeId: storeId)),
       );
       return;
     }
@@ -893,10 +883,8 @@ class _RadioPageState extends State<RadioPage> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => BuyerProfilePage(
-          buyerAccountId: accountId,
-          allowReport: false,
-        ),
+        builder: (_) =>
+            BuyerProfilePage(buyerAccountId: accountId, allowReport: false),
       ),
     );
   }
@@ -935,10 +923,7 @@ class _RadioPageState extends State<RadioPage> {
       borderRadius: BorderRadius.circular(16),
       onTap: canOpenProfile ? () => _openAccountProfileFromChat(item) : null,
       child: Container(
-        margin: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 6,
-        ),
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: scheme.surfaceContainerHighest,
@@ -965,9 +950,7 @@ class _RadioPageState extends State<RadioPage> {
                           displayName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ),
                       if (canOpenProfile)
@@ -991,15 +974,11 @@ class _RadioPageState extends State<RadioPage> {
 
   Widget _chatBody() {
     if (_chatLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
 
     if (_messages.isEmpty) {
-      return const Center(
-        child: Text('No messages yet.'),
-      );
+      return const Center(child: Text('No messages yet.'));
     }
 
     return ListView.builder(
@@ -1042,10 +1021,7 @@ class _RadioPageState extends State<RadioPage> {
             const SingleActivator(LogicalKeyboardKey.enter): () {
               _sendMessage();
             },
-            const SingleActivator(
-              LogicalKeyboardKey.enter,
-              shift: true,
-            ): () {
+            const SingleActivator(LogicalKeyboardKey.enter, shift: true): () {
               final controller = _messageController;
               final text = controller.text;
               final selection = controller.selection;
@@ -1102,9 +1078,7 @@ class _RadioPageState extends State<RadioPage> {
       children: [
         _radioPanel(compact: true),
         _chatHeader(),
-        Expanded(
-          child: _chatBody(),
-        ),
+        Expanded(child: _chatBody()),
         _chatInput(),
       ],
     );
@@ -1113,19 +1087,14 @@ class _RadioPageState extends State<RadioPage> {
   Widget _desktopLayout() {
     return Row(
       children: [
-        Expanded(
-          flex: 6,
-          child: _radioPanel(compact: false),
-        ),
+        Expanded(flex: 6, child: _radioPanel(compact: false)),
         Expanded(
           flex: 4,
           child: Column(
             children: [
               const SizedBox(height: 4),
               _chatHeader(),
-              Expanded(
-                child: _chatBody(),
-              ),
+              Expanded(child: _chatBody()),
               _chatInput(),
             ],
           ),
@@ -1149,7 +1118,7 @@ class _RadioPageState extends State<RadioPage> {
         actions: [
           IconButton(
             tooltip: 'Refresh',
-            onPressed: _loadRadioStatus,
+            onPressed: _refreshRadioStatus,
             icon: const Icon(Icons.refresh),
           ),
           IconButton(

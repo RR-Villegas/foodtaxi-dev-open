@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter/services.dart';
 
 import 'models/address_model.dart';
 import 'services/auth_service.dart';
@@ -324,6 +325,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     hintText: '09xxxxxxxxx or +639xxxxxxxxx',
                   ),
                   keyboardType: TextInputType.phone,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 ),
                 const SizedBox(height: 12),
                 Text('Email: ${_account?['email'] ?? ''}'),

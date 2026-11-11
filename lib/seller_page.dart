@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'services/database_service.dart';
+import 'widgets/product_card.dart';
 
 class SellerPage extends StatefulWidget {
   final String storeId;
@@ -45,8 +46,9 @@ class _SellerPageState extends State<SellerPage> {
     setState(() {
       _store = store;
       _products = products.where((item) => item['is_active'] != false).toList();
-      _trendingProducts =
-          trending.where((item) => item['is_active'] != false).toList();
+      _trendingProducts = trending
+          .where((item) => item['is_active'] != false)
+          .toList();
       _reviews = reviews;
       _canReviewStore = canReview;
       _myReview = myReview;
@@ -82,7 +84,8 @@ class _SellerPageState extends State<SellerPage> {
   }
 
   String _ownerImageUrl() {
-    final imagePath = _ownerAccount?['profile_image_url']?.toString().trim() ?? '';
+    final imagePath =
+        _ownerAccount?['profile_image_url']?.toString().trim() ?? '';
     if (imagePath.isEmpty) return '';
     return DatabaseService.getProfileImageUrl(imagePath);
   }
@@ -96,17 +99,18 @@ class _SellerPageState extends State<SellerPage> {
   String _storeLocation() {
     final store = _store;
     if (store == null) return '';
-    final parts = [
-      store['house_number'],
-      store['street'],
-      store['barangay'],
-      store['city'],
-      store['province'],
-      store['zip_code'],
-    ]
-        .map((part) => part?.toString().trim() ?? '')
-        .where((part) => part.isNotEmpty)
-        .toList();
+    final parts =
+        [
+              store['house_number'],
+              store['street'],
+              store['barangay'],
+              store['city'],
+              store['province'],
+              store['zip_code'],
+            ]
+            .map((part) => part?.toString().trim() ?? '')
+            .where((part) => part.isNotEmpty)
+            .toList();
     return parts.join(', ');
   }
 
@@ -114,7 +118,8 @@ class _SellerPageState extends State<SellerPage> {
     if (_reviews.isEmpty) return 0;
     final total = _reviews.fold<double>(
       0,
-      (sum, review) => sum + (double.tryParse(review['rating']?.toString() ?? '') ?? 0),
+      (sum, review) =>
+          sum + (double.tryParse(review['rating']?.toString() ?? '') ?? 0),
     );
     return total / _reviews.length;
   }
@@ -125,9 +130,7 @@ class _SellerPageState extends State<SellerPage> {
     if (!mounted) return false;
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
-    messenger.showSnackBar(
-      SnackBar(content: Text('Please log in to $action')),
-    );
+    messenger.showSnackBar(SnackBar(content: Text('Please log in to $action')));
     navigator.pushNamed('/login');
     return false;
   }
@@ -137,7 +140,9 @@ class _SellerPageState extends State<SellerPage> {
     if (!mounted) return;
     if (!_canReviewStore) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You can review this shop after a delivered order')),
+        const SnackBar(
+          content: Text('You can review this shop after a delivered order'),
+        ),
       );
       return;
     }
@@ -197,7 +202,11 @@ class _SellerPageState extends State<SellerPage> {
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(ok ? 'Shop review saved' : 'Shop review could not be saved')),
+          SnackBar(
+            content: Text(
+              ok ? 'Shop review saved' : 'Shop review could not be saved',
+            ),
+          ),
         );
       }
       if (ok) _loadSeller();
@@ -253,10 +262,7 @@ class _SellerPageState extends State<SellerPage> {
                       value: 'Spam or duplicate shop',
                       child: Text('Spam or duplicate shop'),
                     ),
-                    DropdownMenuItem(
-                      value: 'Other',
-                      child: Text('Other'),
-                    ),
+                    DropdownMenuItem(value: 'Other', child: Text('Other')),
                   ],
                   onChanged: (value) {
                     if (value == null) return;
@@ -357,152 +363,46 @@ class _SellerPageState extends State<SellerPage> {
     detailsController.dispose();
   }
 
-  int _stock(Map<String, dynamic> product) {
-    return int.tryParse(product['stock_quantity']?.toString() ?? '') ?? 0;
-  }
-
-  Widget _image(dynamic imageValue) {
-    final path = imageValue?.toString().trim() ?? '';
-    if (path.isEmpty) {
-      return Image.asset('assets/images/burger.jpg', fit: BoxFit.cover);
-    }
-    return Image.network(
-      path.startsWith('http') ? path : DatabaseService.getProductImageUrl(path),
-      fit: BoxFit.cover,
-      errorBuilder: (context, error, stackTrace) =>
-          Image.asset('assets/images/burger.jpg', fit: BoxFit.cover),
-    );
-  }
-
-  Widget _stars(double rating) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(5, (index) {
-        final filled = rating >= index + 1;
-        final half = !filled && rating > index && rating < index + 1;
-        return Icon(
-          filled
-              ? Icons.star
-              : half
-                  ? Icons.star_half
-                  : Icons.star_border,
-          size: 14,
-          color: Colors.amber,
-        );
-      }),
-    );
-  }
-
   Widget _productTile(Map<String, dynamic> product, {bool compact = false}) {
     final productId = product['product_id']?.toString();
-    final rating = _rating(product);
-    final reviewCount = _reviewCount(product);
+    Future<void> openProduct() async {
+      if (productId == null) return;
+      await DatabaseService.trackProductClick(
+        productId: productId,
+        storeId: widget.storeId,
+      );
+      if (!mounted) return;
+      Navigator.pushNamed(context, '/product/$productId');
+    }
+
     return SizedBox(
-      width: compact ? 168 : null,
-      child: Card(
-        clipBehavior: Clip.antiAlias,
-        margin: compact ? const EdgeInsets.only(right: 12) : EdgeInsets.zero,
-        child: InkWell(
-          onTap: productId == null
-              ? null
-              : () async {
-                  final navigator = Navigator.of(context);
-                  await DatabaseService.trackProductClick(
-                    productId: productId,
-                    storeId: widget.storeId,
-                  );
-                  if (!navigator.mounted) return;
-                  navigator.pushNamed('/product/$productId');
-                },
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              AspectRatio(
-                aspectRatio: 1,
-                child: _image(product['main_image_url']),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        DatabaseService.displayProductName(product['name']),
-                        maxLines: compact ? 1 : 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        DatabaseService.displayProductPrice(product),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 2,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          _stars(rating),
-                          Text(
-                            '($reviewCount)',
-                            style: const TextStyle(
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (!compact) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          '${_stock(product)} in stock',
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                      ],
-                      const Spacer(),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 34,
-                        child: FilledButton(
-                          onPressed: productId == null
-                              ? null
-                              : () {
-                                  Navigator.pushNamed(
-                                    context,
-                                    '/product/$productId',
-                                  );
-                                },
-                          child: const Text('Buy'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+      width: compact ? 174 : null,
+      height: 294,
+      child: ProductCard(
+        product: product,
+        onTap: productId == null ? null : openProduct,
+        onAction: productId == null ? null : openProduct,
+        actionLabel: 'View item',
+        showStock: !compact,
       ),
     );
   }
 
   Widget _sectionTitle(String title, IconData icon) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 22, 16, 10),
+      padding: const EdgeInsets.fromLTRB(20, 28, 20, 14),
       child: Row(
         children: [
-          Icon(icon, color: Theme.of(context).colorScheme.primary),
-          const SizedBox(width: 8),
-          Text(
-            title,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          Expanded(
+            child: Text(
+              title,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.3,
+              ),
+            ),
           ),
+          Icon(icon, color: Theme.of(context).colorScheme.primary),
         ],
       ),
     );
@@ -510,94 +410,273 @@ class _SellerPageState extends State<SellerPage> {
 
   Widget _horizontalSection(List<Map<String, dynamic>> products) {
     return SizedBox(
-      height: 292,
+      height: 310,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 20),
         itemCount: products.length,
-        itemBuilder: (context, index) => _productTile(
-          products[index],
-          compact: true,
+        itemBuilder: (context, index) => Padding(
+          padding: const EdgeInsets.only(right: 14, bottom: 12),
+          child: _productTile(products[index], compact: true),
         ),
       ),
     );
   }
 
-  Widget _productRow(Map<String, dynamic> product) {
-    final productId = product['product_id']?.toString();
-    final rating = _rating(product);
-    final reviewCount = _reviewCount(product);
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: productId == null
-            ? null
-            : () async {
-                final navigator = Navigator.of(context);
-                await DatabaseService.trackProductClick(
-                  productId: productId,
-                  storeId: widget.storeId,
-                );
-                if (!navigator.mounted) return;
-                navigator.pushNamed('/product/$productId');
-              },
-        child: SizedBox(
-          height: 126,
-          child: Row(
-            children: [
-              AspectRatio(
-                aspectRatio: 1,
-                child: _image(product['main_image_url']),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        DatabaseService.displayProductName(product['name']),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        DatabaseService.displayProductPrice(product),
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          _stars(rating),
-                          const SizedBox(width: 4),
-                          Text('($reviewCount)'),
+  Widget _storeHeader({
+    required String storeName,
+    required String description,
+    required String ownerImageUrl,
+    required String? bannerUrl,
+    required String location,
+    required bool isOpen,
+    required int productCount,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(26),
+            child: SizedBox(
+              height: 230,
+              width: double.infinity,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  ColoredBox(
+                    color: scheme.primaryContainer,
+                    child: bannerUrl == null
+                        ? null
+                        : Image.network(
+                            bannerUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                const SizedBox.shrink(),
+                          ),
+                  ),
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.black.withAlpha(20),
+                          Colors.black.withAlpha(45),
+                          Colors.black.withAlpha(205),
                         ],
                       ),
-                      const Spacer(),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: FilledButton(
-                          onPressed: productId == null
-                              ? null
-                              : () {
-                                  Navigator.pushNamed(
-                                    context,
-                                    '/product/$productId',
-                                  );
-                                },
-                          child: const Text('Buy'),
+                    ),
+                  ),
+                  Positioned(
+                    top: 16,
+                    right: 16,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: isOpen
+                            ? const Color(0xFFE2F6E8)
+                            : scheme.surface,
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.circle,
+                              size: 9,
+                              color: isOpen
+                                  ? const Color(0xFF21814A)
+                                  : scheme.onSurfaceVariant,
+                            ),
+                            const SizedBox(width: 7),
+                            Text(
+                              isOpen ? 'Open now' : 'Currently closed',
+                              style: TextStyle(
+                                color: isOpen
+                                    ? const Color(0xFF176B3A)
+                                    : scheme.onSurface,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 20,
+                    right: 20,
+                    bottom: 20,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        CircleAvatar(
+                          radius: 30,
+                          backgroundColor: scheme.surface,
+                          backgroundImage: ownerImageUrl.isNotEmpty
+                              ? NetworkImage(ownerImageUrl)
+                              : null,
+                          child: ownerImageUrl.isEmpty
+                              ? Icon(Icons.storefront, color: scheme.primary)
+                              : null,
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                storeName,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 25,
+                                  fontWeight: FontWeight.w800,
+                                  height: 1.1,
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              Text(
+                                'by ${_ownerName()}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 16, 4, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  spacing: 18,
+                  runSpacing: 8,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.star_rounded,
+                          color: Color(0xFFF2A900),
+                          size: 20,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _reviews.isEmpty
+                              ? 'New shop'
+                              : '${_storeRating.toStringAsFixed(1)} (${_reviews.length} reviews)',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.shopping_bag_outlined,
+                          color: scheme.onSurfaceVariant,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 6),
+                        Text('$productCount items'),
+                      ],
+                    ),
+                  ],
+                ),
+                if (location.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.location_on_outlined,
+                        color: scheme.onSurfaceVariant,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          location,
+                          style: TextStyle(color: scheme.onSurfaceVariant),
                         ),
                       ),
                     ],
                   ),
+                ],
+                if (description.trim().isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    description.trim(),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: scheme.onSurfaceVariant,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _reviewStore,
+                      icon: const Icon(Icons.rate_review_outlined, size: 18),
+                      label: Text(
+                        _myReview == null ? 'Review shop' : 'Edit review',
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _reportStore,
+                      icon: const Icon(Icons.flag_outlined, size: 18),
+                      label: const Text('Report'),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _allProductsGrid(List<Map<String, dynamic>> products) {
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
+      sliver: SliverGrid(
+        delegate: SliverChildBuilderDelegate(
+          (context, index) => _productTile(products[index]),
+          childCount: products.length,
+        ),
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 220,
+          mainAxisSpacing: 14,
+          crossAxisSpacing: 12,
+          mainAxisExtent: 294,
         ),
       ),
     );
@@ -649,8 +728,9 @@ class _SellerPageState extends State<SellerPage> {
     final bannerUrl = _storeBannerUrl();
     final location = _storeLocation();
     final isOpen = _store?['is_open'] != false;
-    final activeProducts =
-        _products.where((item) => item['is_active'] != false).toList();
+    final activeProducts = _products
+        .where((item) => item['is_active'] != false)
+        .toList();
     final newProducts = activeProducts.take(8).toList();
     final bestSellers = [...activeProducts]
       ..sort((a, b) {
@@ -662,21 +742,19 @@ class _SellerPageState extends State<SellerPage> {
     final totalPages = activeProducts.isEmpty
         ? 1
         : (activeProducts.length + _allProductsPageSize - 1) ~/
-            _allProductsPageSize;
+              _allProductsPageSize;
     final currentPage = _allProductsPage < 0
         ? 0
         : _allProductsPage >= totalPages
-            ? totalPages - 1
-            : _allProductsPage;
+        ? totalPages - 1
+        : _allProductsPage;
     final pagedProducts = activeProducts
         .skip(currentPage * _allProductsPageSize)
         .take(_allProductsPageSize)
         .toList();
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(storeName),
-      ),
+      appBar: AppBar(title: const Text('Shop')),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -684,157 +762,14 @@ class _SellerPageState extends State<SellerPage> {
               child: CustomScrollView(
                 slivers: [
                   SliverToBoxAdapter(
-                    child: Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primaryContainer,
-                        image: bannerUrl == null
-                            ? null
-                            : DecorationImage(
-                                image: NetworkImage(bannerUrl),
-                                fit: BoxFit.cover,
-                              ),
-                      ),
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.fromLTRB(20, 22, 20, 24),
-                        decoration: BoxDecoration(
-                          gradient: bannerUrl == null
-                              ? null
-                              : LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [
-                                    Colors.black.withAlpha(105),
-                                    Colors.black.withAlpha(65),
-                                    Colors.black.withAlpha(125),
-                                  ],
-                                ),
-                        ),
-                        child: DefaultTextStyle.merge(
-                          style: TextStyle(
-                            color: bannerUrl == null
-                                ? Theme.of(context).colorScheme.onPrimaryContainer
-                                : Colors.white,
-                            shadows: bannerUrl == null
-                                ? null
-                                : const [
-                                    Shadow(
-                                      blurRadius: 6,
-                                      color: Colors.black,
-                                      offset: Offset(0, 1),
-                                    ),
-                                  ],
-                          ),
-                          child: IconTheme.merge(
-                            data: IconThemeData(
-                              color: bannerUrl == null
-                                  ? Theme.of(context).colorScheme.onPrimaryContainer
-                                  : Colors.white,
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 30,
-                                      backgroundImage: ownerImageUrl.isNotEmpty
-                                          ? NetworkImage(ownerImageUrl)
-                                          : null,
-                                      child: ownerImageUrl.isEmpty
-                                          ? const Icon(Icons.storefront)
-                                          : null,
-                                    ),
-                                    const SizedBox(width: 14),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            storeName,
-                                            style: const TextStyle(
-                                              fontSize: 26,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            _ownerName(),
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Chip(
-                                      avatar: Icon(
-                                        isOpen
-                                            ? Icons.check_circle_outline
-                                            : Icons.pause_circle_outline,
-                                      ),
-                                      label: Text(isOpen ? 'Open' : 'Closed'),
-                                    ),
-                                  ],
-                                ),
-                                if (location.isNotEmpty) ...[
-                                  const SizedBox(height: 12),
-                                  Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Icon(Icons.place_outlined, size: 18),
-                                      const SizedBox(width: 6),
-                                      Expanded(child: Text(location)),
-                                    ],
-                                  ),
-                                ],
-                                if (description.isNotEmpty) ...[
-                                  const SizedBox(height: 10),
-                                  Text(description),
-                                ],
-                                const SizedBox(height: 16),
-                                Wrap(
-                                  spacing: 10,
-                                  runSpacing: 8,
-                                  children: [
-                                    Chip(
-                                      avatar: const Icon(Icons.inventory_2_outlined),
-                                      label: Text('${activeProducts.length} products'),
-                                    ),
-                                    Chip(
-                                      avatar: const Icon(Icons.star_border),
-                                      label: Text(
-                                        '${_storeRating.toStringAsFixed(1)} (${_reviews.length})',
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                                Wrap(
-                                  spacing: 10,
-                                  runSpacing: 8,
-                                  children: [
-                                    OutlinedButton.icon(
-                                      onPressed: _reviewStore,
-                                      icon: const Icon(Icons.rate_review_outlined),
-                                      label: Text(
-                                        _myReview == null ? 'Review Shop' : 'Edit Review',
-                                      ),
-                                    ),
-                                    OutlinedButton.icon(
-                                      onPressed: _reportStore,
-                                      icon: const Icon(Icons.flag_outlined),
-                                      label: const Text('Report Shop'),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
+                    child: _storeHeader(
+                      storeName: storeName,
+                      description: description,
+                      ownerImageUrl: ownerImageUrl,
+                      bannerUrl: bannerUrl,
+                      location: location,
+                      isOpen: isOpen,
+                      productCount: activeProducts.length,
                     ),
                   ),
                   if (activeProducts.isEmpty)
@@ -846,10 +781,16 @@ class _SellerPageState extends State<SellerPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _sectionTitle('New Products', Icons.fiber_new_outlined),
+                          _sectionTitle(
+                            'New Products',
+                            Icons.fiber_new_outlined,
+                          ),
                           _horizontalSection(newProducts),
                           if (_trendingProducts.isNotEmpty) ...[
-                            _sectionTitle('Trending', Icons.trending_up_outlined),
+                            _sectionTitle(
+                              'Trending',
+                              Icons.trending_up_outlined,
+                            ),
                             _horizontalSection(_trendingProducts),
                           ],
                           _sectionTitle(
@@ -857,7 +798,10 @@ class _SellerPageState extends State<SellerPage> {
                             Icons.local_fire_department_outlined,
                           ),
                           _horizontalSection(bestSellerProducts),
-                          _sectionTitle('All Products', Icons.storefront_outlined),
+                          _sectionTitle(
+                            'All Products',
+                            Icons.storefront_outlined,
+                          ),
                           _allProductsPager(
                             currentPage: currentPage,
                             totalPages: totalPages,
@@ -866,20 +810,7 @@ class _SellerPageState extends State<SellerPage> {
                         ],
                       ),
                     ),
-                    SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) => Padding(
-                          padding: EdgeInsets.fromLTRB(
-                            16,
-                            index == 0 ? 0 : 10,
-                            16,
-                            index == pagedProducts.length - 1 ? 24 : 0,
-                          ),
-                          child: _productRow(pagedProducts[index]),
-                        ),
-                        childCount: pagedProducts.length,
-                      ),
-                    ),
+                    _allProductsGrid(pagedProducts),
                   ],
                 ],
               ),

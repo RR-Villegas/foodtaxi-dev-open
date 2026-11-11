@@ -9,6 +9,11 @@ import 'location_service.dart';
 
 class DatabaseService {
   static final _supabase = Supabase.instance.client;
+  static const _productCacheTtl = Duration(seconds: 30);
+  static List<Map<String, dynamic>>? _productCache;
+  static DateTime? _productCacheAt;
+  static List<Map<String, dynamic>>? _trendingCache;
+  static DateTime? _trendingCacheAt;
   static String? _cachedPublicIpHash;
   static const List<String> allowedApplicationDocumentExtensions = [
     'pdf',
@@ -29,6 +34,27 @@ class DatabaseService {
   static String money(dynamic value) {
     final amount = _toDouble(value);
     return 'PHP ${amount.toStringAsFixed(2)}';
+  }
+
+  static Future<List<Map<String, dynamic>>> fetchAdminAuditEvents({
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    try {
+      final response = await _supabase.rpc(
+        'admin_get_audit_events',
+        params: {'p_limit': limit, 'p_offset': offset},
+      );
+      if (response is! List) {
+        throw const FormatException('Unexpected audit event response.');
+      }
+      return response
+          .map((event) => Map<String, dynamic>.from(event as Map))
+          .toList();
+    } catch (e) {
+      _logDbError('Failed to fetch admin audit events', e);
+      rethrow;
+    }
   }
 
   static Future<void> deleteOldNotifications() async {
@@ -83,19 +109,25 @@ class DatabaseService {
     return prices.where((price) => price >= 0).toList();
   }
 
-  static String displayProductPrice(Map<String, dynamic> product) {
-    final prices = _productOptionPrices(product);
-    if (prices.isEmpty) return money(0);
+  static int productOptionCount(Map<String, dynamic> product) {
+    return _productOptionPrices(product).length;
+  }
+
+  static String displayProductPriceRange(Map<String, dynamic> product) {
     final discount = activeProductDiscount(product);
-    final basePrice = discountedPrice(_toDouble(product['price']), discount);
-    final variants = product['product_variant'];
-    final hasVariants = variants is List &&
-    variants.whereType<Map>().any(
-          (variant) =>
-              variant['is_active'] != false &&
-              variant['is_deleted'] != true,
-        );
-    return hasVariants ? '${money(basePrice)}*' : money(basePrice);
+    final prices = _productOptionPrices(product)
+        .map((price) => discountedPrice(price, discount))
+        .toList()
+      ..sort();
+    if (prices.isEmpty) return money(0);
+    if (prices.first == prices.last) return money(prices.first);
+    return '${money(prices.first)}–${prices.last.toStringAsFixed(2)}';
+  }
+
+  static String displayProductPrice(Map<String, dynamic> product) {
+    final priceRange = displayProductPriceRange(product);
+    final optionCount = productOptionCount(product);
+    return optionCount > 1 ? '$priceRange · $optionCount options' : priceRange;
   }
 
   static String _stableHash(String value) {
@@ -933,11 +965,16 @@ class DatabaseService {
     }
   }
 
-  static Future<Map<String, dynamic>?> getGensokyoRadioStatus() async {
+  static Future<Map<String, dynamic>?> getGensokyoRadioStatus({
+    bool forceRefresh = false,
+  }) async {
     try {
       final response = await _supabase.functions.invoke(
         'gensokyo-radio',
         method: HttpMethod.get,
+        queryParameters: forceRefresh
+            ? {'refresh': DateTime.now().millisecondsSinceEpoch.toString()}
+            : null,
       );
 
       final data = response.data;
@@ -1385,6 +1422,12 @@ class DatabaseService {
     int limit = 12,
   }) async {
     try {
+      if (storeId == null &&
+          _trendingCache != null &&
+          _trendingCacheAt != null &&
+          DateTime.now().difference(_trendingCacheAt!) < _productCacheTtl) {
+        return List<Map<String, dynamic>>.from(_trendingCache!.take(limit));
+      }
       final clicks = await _supabase.rpc(
         'get_trending_product_clicks',
         params: {
@@ -1423,6 +1466,10 @@ class DatabaseService {
         final bId = b['product_id']?.toString() ?? '';
         return (counts[bId] ?? 0).compareTo(counts[aId] ?? 0);
       });
+      if (storeId == null) {
+        _trendingCache = products;
+        _trendingCacheAt = DateTime.now();
+      }
       return products;
     } catch (e) {
       _logDbError('Failed to fetch trending products', e);
@@ -2631,6 +2678,11 @@ class DatabaseService {
   // Fetch all products
   static Future<List<Map<String, dynamic>>> fetchProducts() async {
     try {
+      if (_productCache != null &&
+          _productCacheAt != null &&
+          DateTime.now().difference(_productCacheAt!) < _productCacheTtl) {
+        return List<Map<String, dynamic>>.from(_productCache!);
+      }
       final response = await _supabase
           .from('product')
           .select('''
@@ -2641,7 +2693,12 @@ class DatabaseService {
           .eq('is_active', true)
           .order('product_id', ascending: false);
 
-      return _withProductRatings(List<Map<String, dynamic>>.from(response));
+      final products = await _withProductRatings(
+        List<Map<String, dynamic>>.from(response),
+      );
+      _productCache = products;
+      _productCacheAt = DateTime.now();
+      return products;
     } catch (e) {
       _logDbError('Failed to fetch products', e);
       return [];
@@ -2799,7 +2856,8 @@ class DatabaseService {
       var request = _supabase
           .from('product')
           .select('*, store(store_id, store_name), product_variant(*)')
-          .eq('is_active', true);
+          .eq('is_active', true)
+          .limit(100);
 
       final trimmedQuery = query.trim();
       if (trimmedQuery.isNotEmpty) {

@@ -26,22 +26,27 @@ import 'application_status_page.dart';
 import 'reset_password_page.dart';
 import 'services/database_service.dart';
 import 'services/auth_service.dart';
+import 'services/local_storage_service.dart';
 import 'services/protected_route.dart';
 import 'services/theme_service.dart';
 import 'terms_page.dart';
 import 'pages/radio_pages.dart';
+import 'widgets/product_card.dart';
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final launchedFromPasswordRecovery = AuthService.isPasswordRecoveryUri(Uri.base);
+  final launchedFromPasswordRecovery = AuthService.isPasswordRecoveryUri(
+    Uri.base,
+  );
 
   await Supabase.initialize(
     url: 'https://zsctswdvoknmdsimqrvr.supabase.co',
     anonKey:
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpzY3Rzd2R2b2tubWRzaW1xcnZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0MDkyMjgsImV4cCI6MjA5MTk4NTIyOH0.9AMczePav5ftvCbhhYWxBaquUFK1Nrmgx1FbUZKpci8',
   );
+  await LocalStorageService.removePersistedPasswords();
   await ThemeService.load();
   if (launchedFromPasswordRecovery) {
     AuthService.startPasswordRecoverySession();
@@ -53,10 +58,7 @@ void main() async {
 class MyApp extends StatefulWidget {
   final bool launchedFromPasswordRecovery;
 
-  const MyApp({
-    super.key,
-    this.launchedFromPasswordRecovery = false,
-  });
+  const MyApp({super.key, this.launchedFromPasswordRecovery = false});
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -78,8 +80,9 @@ class _MyAppState extends State<MyApp> {
         );
       });
     }
-    _authSubscription =
-        Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((
+      data,
+    ) {
       if (data.event != AuthChangeEvent.passwordRecovery) return;
       AuthService.startPasswordRecoverySession();
       appNavigatorKey.currentState?.pushNamedAndRemoveUntil(
@@ -102,7 +105,7 @@ class _MyAppState extends State<MyApp> {
       builder: (context, themeId, child) {
         final isPasswordRecovery =
             AuthService.isPasswordRecoverySession ||
-                AuthService.isPasswordRecoveryUri(Uri.base);
+            AuthService.isPasswordRecoveryUri(Uri.base);
         return MaterialApp(
           navigatorKey: appNavigatorKey,
           title: 'FoodTaxi Omega',
@@ -111,92 +114,93 @@ class _MyAppState extends State<MyApp> {
           debugShowCheckedModeBanner: false,
           initialRoute: isPasswordRecovery ? '/reset-password' : '/',
           routes: {
-        '/': (context) => const MyHomePage(title: 'FoodTaxi Omega'),
-        '/login': (context) => const LoginPage(),
-        '/signup': (context) => const SignupPage(),
-        '/reset-password': (context) => const ResetPasswordPage(),
-        '/profile': (context) => ProtectedRoute(
-          protection: RouteProtection.authenticated,
-          child: const ProfilePage(),
-        ),
-        '/addresses': (context) => ProtectedRoute(
-          protection: RouteProtection.authenticated,
-          child: const AddressPage(),
-        ),
-        '/notifications': (context) => ProtectedRoute(
-          protection: RouteProtection.authenticated,
-          child: const NotificationsPage(),
-        ),
-        '/settings': (context) => ProtectedRoute(
-          protection: RouteProtection.authenticated,
-          child: const SettingsPage(),
-        ),
-        '/terms': (context) => const TermsPage(),
-        '/cart': (context) => ProtectedRoute(
-          protection: RouteProtection.authenticated,
-          child: const CartPage(),
-        ),
-        '/my-orders': (context) => ProtectedRoute(
-          protection: RouteProtection.buyerOnly,
-          child: const MyOrdersPage(),
-        ),
-        '/order-receipt': (context) {
-          final order = ModalRoute.of(context)?.settings.arguments;
-          return ProtectedRoute(
-            protection: RouteProtection.buyerOnly,
-            child: OrderReceiptPage(
-              order: order is Map<String, dynamic>
-                  ? order
-                  : <String, dynamic>{},
+            '/': (context) => const MyHomePage(title: 'FoodTaxi Omega'),
+            '/login': (context) => const LoginPage(),
+            '/signup': (context) => const SignupPage(),
+            '/reset-password': (context) => const ResetPasswordPage(),
+            '/profile': (context) => ProtectedRoute(
+              protection: RouteProtection.authenticated,
+              child: const ProfilePage(),
             ),
-          );
-        },
-        '/search': (context) => const SearchPage(),
-        '/buyer-dashboard': (context) => ProtectedRoute(
-          protection: RouteProtection.buyerOnly,
-          child: const BuyerDashboard(),
-        ),
-        '/seller-dashboard': (context) => ProtectedRoute(
-          protection: RouteProtection.sellerOnly,
-          child: const SellerDashboard(),
-        ),
-        '/rider-dashboard': (context) => ProtectedRoute(
-          protection: RouteProtection.riderOnly,
-          child: RiderDashboard(),
-        ),
-        '/admin-dashboard': (context) => ProtectedRoute(
-          protection: RouteProtection.adminOnly,
-          child: const AdminDashboard(),
-        ),
-        '/checkout': (context) => ProtectedRoute(
-          protection: RouteProtection.buyerOnly,
-          child: const CheckoutPage(),
-        ),
-        '/radio': (context) => ProtectedRoute(
-          protection: RouteProtection.authenticated,
-          child: const RadioPage(),
-        ),
-        '/seller-registration': (context) => const SellerRegistrationPage(),
-        '/rider-registration': (context) => const RiderRegistrationPage(),
-        '/application-status': (context) {
-          final role =
-              ModalRoute.of(context)?.settings.arguments?.toString() ?? 'seller';
-          return ApplicationStatusPage(role: role);
-        },
+            '/addresses': (context) => ProtectedRoute(
+              protection: RouteProtection.authenticated,
+              child: const AddressPage(),
+            ),
+            '/notifications': (context) => ProtectedRoute(
+              protection: RouteProtection.authenticated,
+              child: const NotificationsPage(),
+            ),
+            '/settings': (context) => ProtectedRoute(
+              protection: RouteProtection.authenticated,
+              child: const SettingsPage(),
+            ),
+            '/terms': (context) => const TermsPage(),
+            '/cart': (context) => ProtectedRoute(
+              protection: RouteProtection.authenticated,
+              child: const CartPage(),
+            ),
+            '/my-orders': (context) => ProtectedRoute(
+              protection: RouteProtection.buyerOnly,
+              child: const MyOrdersPage(),
+            ),
+            '/order-receipt': (context) {
+              final order = ModalRoute.of(context)?.settings.arguments;
+              return ProtectedRoute(
+                protection: RouteProtection.buyerOnly,
+                child: OrderReceiptPage(
+                  order: order is Map<String, dynamic>
+                      ? order
+                      : <String, dynamic>{},
+                ),
+              );
+            },
+            '/search': (context) => const SearchPage(),
+            '/buyer-dashboard': (context) => ProtectedRoute(
+              protection: RouteProtection.buyerOnly,
+              child: const BuyerDashboard(),
+            ),
+            '/seller-dashboard': (context) => ProtectedRoute(
+              protection: RouteProtection.sellerOnly,
+              child: const SellerDashboard(),
+            ),
+            '/rider-dashboard': (context) => ProtectedRoute(
+              protection: RouteProtection.riderOnly,
+              child: RiderDashboard(),
+            ),
+            '/admin-dashboard': (context) => ProtectedRoute(
+              protection: RouteProtection.adminOnly,
+              child: const AdminDashboard(),
+            ),
+            '/checkout': (context) => ProtectedRoute(
+              protection: RouteProtection.buyerOnly,
+              child: const CheckoutPage(),
+            ),
+            '/radio': (context) => ProtectedRoute(
+              protection: RouteProtection.authenticated,
+              child: const RadioPage(),
+            ),
+            '/seller-registration': (context) => const SellerRegistrationPage(),
+            '/rider-registration': (context) => const RiderRegistrationPage(),
+            '/application-status': (context) {
+              final role =
+                  ModalRoute.of(context)?.settings.arguments?.toString() ??
+                  'seller';
+              return ApplicationStatusPage(role: role);
+            },
           },
           onGenerateRoute: (settings) {
-        if (settings.name?.startsWith('/product/') ?? false) {
-          final productId = settings.name!.split('/').last;
-          return MaterialPageRoute(
-            builder: (context) => ProductPage(productId: productId),
-          );
-        }
-        if (settings.name?.startsWith('/seller/') ?? false) {
-          final storeId = settings.name!.split('/').last;
-          return MaterialPageRoute(
-            builder: (context) => SellerPage(storeId: storeId),
-          );
-        }
+            if (settings.name?.startsWith('/product/') ?? false) {
+              final productId = settings.name!.split('/').last;
+              return MaterialPageRoute(
+                builder: (context) => ProductPage(productId: productId),
+              );
+            }
+            if (settings.name?.startsWith('/seller/') ?? false) {
+              final storeId = settings.name!.split('/').last;
+              return MaterialPageRoute(
+                builder: (context) => SellerPage(storeId: storeId),
+              );
+            }
             return null;
           },
         );
@@ -210,11 +214,11 @@ class AppScrollBehavior extends MaterialScrollBehavior {
 
   @override
   Set<PointerDeviceKind> get dragDevices => {
-        PointerDeviceKind.touch,
-        PointerDeviceKind.mouse,
-        PointerDeviceKind.stylus,
-        PointerDeviceKind.trackpad,
-      };
+    PointerDeviceKind.touch,
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.stylus,
+    PointerDeviceKind.trackpad,
+  };
 }
 
 class MyHomePage extends StatefulWidget {
@@ -389,18 +393,6 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  double _rating(Map<String, dynamic> product) {
-    final value = product['average_rating'];
-    if (value is num) return value.toDouble();
-    return double.tryParse(value?.toString() ?? '') ?? 0;
-  }
-
-  int _reviewCount(Map<String, dynamic> product) {
-    final value = product['review_count'];
-    if (value is int) return value;
-    return int.tryParse(value?.toString() ?? '') ?? 0;
-  }
-
   Widget heroSection() {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -433,17 +425,15 @@ class _MyHomePageState extends State<MyHomePage> {
           );
 
     final titleColor = Colors.white;
-    final subtitleColor =
-        isFlandre ? const Color(0xFFFFD9E2) : Colors.white.withAlpha(230);
-    final bodyColor =
-        isFlandre ? const Color(0xFFFFEAF0) : Colors.white.withAlpha(215);
+    final subtitleColor = isFlandre
+        ? const Color(0xFFFFD9E2)
+        : Colors.white.withAlpha(230);
+    final bodyColor = isFlandre
+        ? const Color(0xFFFFEAF0)
+        : Colors.white.withAlpha(215);
 
     final textShadow = const [
-      Shadow(
-        blurRadius: 8,
-        color: Colors.black,
-        offset: Offset(0, 2),
-      ),
+      Shadow(blurRadius: 8, color: Colors.black, offset: Offset(0, 2)),
     ];
 
     return Container(
@@ -455,10 +445,7 @@ class _MyHomePageState extends State<MyHomePage> {
           Positioned.fill(
             child: Opacity(
               opacity: isFlandre ? 0.18 : (isDark ? 0.12 : 0.07),
-              child: Image.asset(
-                'assets/images/tacos.jpg',
-                fit: BoxFit.cover,
-              ),
+              child: Image.asset('assets/images/tacos.jpg', fit: BoxFit.cover),
             ),
           ),
           Container(
@@ -518,7 +505,7 @@ class _MyHomePageState extends State<MyHomePage> {
     final scheme = Theme.of(context).colorScheme;
 
     return SizedBox(
-      height: 42,
+      height: 46,
       width: double.infinity,
       child: TextField(
         controller: controller,
@@ -527,7 +514,7 @@ class _MyHomePageState extends State<MyHomePage> {
         decoration: InputDecoration(
           hintText: hintText,
           filled: true,
-          fillColor: scheme.surface,
+          fillColor: scheme.surfaceContainerHighest,
           prefixIcon: Icon(Icons.search, color: scheme.primary),
           suffixIcon: IconButton(
             tooltip: 'Filters',
@@ -542,25 +529,6 @@ class _MyHomePageState extends State<MyHomePage> {
         ),
         onSubmitted: (_) => _openSearch(),
       ),
-    );
-  }
-
-  Widget _stars(double rating) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(5, (index) {
-        final filled = rating >= index + 1;
-        final half = !filled && rating > index && rating < index + 1;
-        return Icon(
-          filled
-              ? Icons.star
-              : half
-                  ? Icons.star_half
-                  : Icons.star_border,
-          size: 14,
-          color: Colors.amber,
-        );
-      }),
     );
   }
 
@@ -590,7 +558,6 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.primary,
         titleSpacing: 12,
         title: Row(
           children: [
@@ -599,6 +566,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 child: Text(
                   'FoodTaxi Omega',
                   overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontWeight: FontWeight.w800),
                 ),
               ),
               const SizedBox(width: 12),
@@ -621,11 +589,9 @@ class _MyHomePageState extends State<MyHomePage> {
                       onPressed: () => _openSignupMenu(context),
                       icon: const Icon(Icons.person_add, size: 18),
                       label: const Text('Sign Up'),
-                      style: TextButton.styleFrom(foregroundColor: Colors.white),
                     )
                   : IconButton(
                       tooltip: 'Sign Up',
-                      color: Colors.white,
                       onPressed: () => _openSignupMenu(context),
                       icon: const Icon(Icons.person_add),
                     );
@@ -637,7 +603,6 @@ class _MyHomePageState extends State<MyHomePage> {
           _navSearchFocusNode.hasFocus
               ? IconButton(
                   tooltip: 'Sign In',
-                  color: Colors.white,
                   onPressed: () => Navigator.pushNamed(context, '/login'),
                   icon: const Icon(Icons.login),
                 )
@@ -645,7 +610,6 @@ class _MyHomePageState extends State<MyHomePage> {
                   onPressed: () => Navigator.pushNamed(context, '/login'),
                   icon: const Icon(Icons.login, size: 18),
                   label: const Text('Sign In'),
-                  style: TextButton.styleFrom(foregroundColor: Colors.white),
                 ),
 
           const SizedBox(width: 8),
@@ -663,25 +627,25 @@ class _MyHomePageState extends State<MyHomePage> {
                     child: CircularProgressIndicator(),
                   )
                 : foodCategories.isEmpty
-                    ? const Padding(
-                        padding: EdgeInsets.all(20),
-                        child: Text('No products available'),
-                      )
-                    : Column(
-                        children: foodCategories.entries.map<Widget>((entry) {
-                          final categoryKey = entry.key;
-                          final categoryValue = entry.value;
+                ? const Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Text('No products available'),
+                  )
+                : Column(
+                    children: foodCategories.entries.map<Widget>((entry) {
+                      final categoryKey = entry.key;
+                      final categoryValue = entry.value;
 
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 10),
-                              sectionTitle(categoryKey),
-                              horizontalFoodList(categoryValue),
-                            ],
-                          );
-                        }).toList(),
-                      ),
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 10),
+                          sectionTitle(categoryKey),
+                          horizontalFoodList(categoryValue),
+                        ],
+                      );
+                    }).toList(),
+                  ),
 
             const SizedBox(height: 20),
           ],
@@ -703,82 +667,6 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  double _productBasePrice(Map<String, dynamic> product) {
-  final value = product['price'];
-  if (value is num) return value.toDouble();
-  return double.tryParse(value?.toString() ?? '') ?? 0;
-}
-
-String _discountLabel(Map<String, dynamic> discount) {
-  final type = discount['discount_type']?.toString();
-
-  if (type == 'amount') {
-    return '-${DatabaseService.money(discount['discount_value'])}';
-  }
-
-  return '-${discount['discount_value']}%';
-}
-
-  Widget _discountAwarePrice(Map<String, dynamic> product) {
-    final scheme = Theme.of(context).colorScheme;
-    final discount = DatabaseService.activeProductDiscount(product);
-    final basePrice = _productBasePrice(product);
-    final discountedPrice = DatabaseService.discountedPrice(basePrice, discount);
-
-    if (discount == null || discountedPrice >= basePrice) {
-      return Text(
-        DatabaseService.displayProductPrice(product),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          color: scheme.primary,
-          fontWeight: FontWeight.bold,
-        ),
-      );
-    }
-
-    return Row(
-      children: [
-        Flexible(
-          child: Text(
-            DatabaseService.money(discountedPrice),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: scheme.tertiary,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-        const SizedBox(width: 5),
-        Flexible(
-          child: Text(
-            _discountLabel(discount),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: scheme.secondary,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  String? _resolveProductImageUrl(dynamic imageValue) {
-    final value = imageValue?.toString().trim();
-
-    if (value == null || value.isEmpty) return null;
-
-    if (value.startsWith('http') || value.startsWith('assets/')) {
-      return value;
-    }
-
-    return DatabaseService.getProductImageUrl(value);
-  }
-
   Widget horizontalFoodList(List<Map<String, dynamic>> items) {
     return SizedBox(
       height: 306,
@@ -788,118 +676,28 @@ String _discountLabel(Map<String, dynamic> discount) {
         itemCount: items.length,
         itemBuilder: (context, index) {
           final item = items[index];
-          final imageUrl = _resolveProductImageUrl(item['main_image_url']);
           final productId = item['product_id']?.toString();
-          final rating = _rating(item);
-          final reviewCount = _reviewCount(item);
 
-          return GestureDetector(
-            onTap: productId != null
-                ? () async {
-                    await DatabaseService.trackProductClick(
-                      productId: productId,
-                      storeId: item['store_id']?.toString(),
-                    );
-                    if (!context.mounted) return;
-                    Navigator.pushNamed(context, '/product/$productId');
-                  }
-                : null,
-            child: Container(
-              width: 170,
-              margin: const EdgeInsets.only(right: 12, bottom: 12),
-              child: Card(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                elevation: 3,
-                child: Column(
-                  children: [
-                    AspectRatio(
-                      aspectRatio: 1,
-                      child: ClipRRect(
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(16),
-                        ),
-                        child: imageUrl != null
-                            ? imageUrl.startsWith('assets/')
-                                ? Image.asset(
-                                    imageUrl,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) =>
-                                        Image.asset(
-                                      'assets/images/burger.jpg',
-                                      fit: BoxFit.cover,
-                                    ),
-                                  )
-                                : Image.network(
-                                    imageUrl,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) =>
-                                        Image.asset(
-                                      'assets/images/burger.jpg',
-                                      fit: BoxFit.cover,
-                                    ),
-                                  )
-                            : Image.asset(
-                                'assets/images/burger.jpg',
-                                fit: BoxFit.cover,
-                              ),
-                      ),
-                    ),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.all(6),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              DatabaseService.displayProductName(item['name']),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            _discountAwarePrice(item),
-                            const SizedBox(height: 2),
-                            Row(
-                              children: [
-                                _stars(rating),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '($reviewCount)',
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              ],
-                            ),
-                            const Spacer(),
-                            SizedBox(
-                              width: double.infinity,
-                              height: 34,
-                              child: FilledButton(
-                                onPressed: productId != null
-                                    ? () async {
-                                        await DatabaseService.trackProductClick(
-                                          productId: productId,
-                                          storeId: item['store_id']?.toString(),
-                                        );
-                                        if (!context.mounted) return;
-                                        Navigator.pushNamed(
-                                          context,
-                                          '/product/$productId',
-                                        );
-                                      }
-                                    : null,
-                                child: const Text('Buy'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+          Future<void> openProduct() async {
+            if (productId == null) return;
+            await DatabaseService.trackProductClick(
+              productId: productId,
+              storeId: item['store_id']?.toString(),
+            );
+            if (!context.mounted) return;
+            Navigator.pushNamed(context, '/product/$productId');
+          }
+
+          return Padding(
+            padding: const EdgeInsets.only(right: 12, bottom: 12),
+            child: SizedBox(
+              width: 174,
+              height: 294,
+              child: ProductCard(
+                product: item,
+                onTap: productId == null ? null : openProduct,
+                onAction: productId == null ? null : openProduct,
+                actionLabel: 'Buy',
               ),
             ),
           );

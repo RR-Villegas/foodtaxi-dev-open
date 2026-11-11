@@ -674,7 +674,6 @@ class _EditProductPageState extends State<EditProductPage> {
             onPressed: _isSaving || _isUploading ? null : _save,
             child: Text(
               _isSaving ? 'Saving...' : 'Save',
-              style: const TextStyle(color: Colors.white),
             ),
           ),
         ],

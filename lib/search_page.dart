@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'services/database_service.dart';
+import 'widgets/product_card.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
@@ -42,6 +44,7 @@ class _SearchPageState extends State<SearchPage> {
   bool _isLoading = false;
   String _category = 'All';
   String _sort = 'New';
+  Timer? _searchDebounce;
 
   @override
   void initState() {
@@ -85,6 +88,7 @@ class _SearchPageState extends State<SearchPage> {
     _queryController.dispose();
     _sellerController.dispose();
     _sellerFocusNode.dispose();
+    _searchDebounce?.cancel();
     super.dispose();
   }
 
@@ -103,48 +107,9 @@ class _SearchPageState extends State<SearchPage> {
     });
   }
 
-  Widget _image(dynamic imageValue) {
-    final path = imageValue?.toString() ?? '';
-    if (path.isEmpty) {
-      return Image.asset('assets/images/burger.jpg', fit: BoxFit.cover);
-    }
-    return Image.network(
-      DatabaseService.getProductImageUrl(path),
-      fit: BoxFit.cover,
-      errorBuilder: (_, _, _) =>
-          Image.asset('assets/images/burger.jpg', fit: BoxFit.cover),
-    );
-  }
-
-  double _rating(Map<String, dynamic> product) {
-    final value = product['average_rating'];
-    if (value is num) return value.toDouble();
-    return double.tryParse(value?.toString() ?? '') ?? 0;
-  }
-
-  int _reviewCount(Map<String, dynamic> product) {
-    final value = product['review_count'];
-    if (value is int) return value;
-    return int.tryParse(value?.toString() ?? '') ?? 0;
-  }
-
-  Widget _stars(double rating) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(5, (index) {
-        final filled = rating >= index + 1;
-        final half = !filled && rating > index && rating < index + 1;
-        return Icon(
-          filled
-              ? Icons.star
-              : half
-                  ? Icons.star_half
-                  : Icons.star_border,
-          size: 15,
-          color: Colors.amber,
-        );
-      }),
-    );
+  void _scheduleSearch() {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 350), _search);
   }
 
   Widget _productRow(Map<String, dynamic> product) {
@@ -154,89 +119,23 @@ class _SearchPageState extends State<SearchPage> {
         ? store['store_name']?.toString() ?? 'Seller'
         : 'Seller';
     final storeId = store is Map ? store['store_id']?.toString() : null;
-    final rating = _rating(product);
-    final reviewCount = _reviewCount(product);
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: productId == null
-            ? null
-            : () async {
-                await DatabaseService.trackProductClick(
-                  productId: productId,
-                  storeId: storeId,
-                );
-                if (mounted) {
-                  Navigator.pushNamed(context, '/product/$productId');
-                }
-              },
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: SizedBox(
-                  width: 88,
-                  height: 88,
-                  child: _image(product['main_image_url']),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      DatabaseService.displayProductName(product['name']),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    InkWell(
-                      onTap: storeId == null
-                          ? null
-                          : () => Navigator.pushNamed(context, '/seller/$storeId'),
-                      child: Text(
-                        seller,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.black54),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 4,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Text(
-                          DatabaseService.displayProductPrice(product),
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.primary,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        _stars(rating),
-                        Text(
-                          '($reviewCount)',
-                          style: const TextStyle(color: Colors.black54),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    return ProductCard(
+      product: product,
+      layout: ProductCardLayout.list,
+      storeName: seller,
+      onTap: productId == null
+          ? null
+          : () async {
+              await DatabaseService.trackProductClick(
+                productId: productId,
+                storeId: storeId,
+              );
+              if (!mounted) return;
+              Navigator.pushNamed(context, '/product/$productId');
+            },
+      onStoreTap: storeId == null
+          ? null
+          : () => Navigator.pushNamed(context, '/seller/$storeId'),
     );
   }
 
@@ -304,10 +203,12 @@ class _SearchPageState extends State<SearchPage> {
                     filled: true,
                   ),
                   items: _categories
-                      .map((item) => DropdownMenuItem(
-                            value: item,
-                            child: Text(item, overflow: TextOverflow.ellipsis),
-                          ))
+                      .map(
+                        (item) => DropdownMenuItem(
+                          value: item,
+                          child: Text(item, overflow: TextOverflow.ellipsis),
+                        ),
+                      )
                       .toList(),
                   onChanged: (value) {
                     if (value == null) return;
@@ -326,10 +227,12 @@ class _SearchPageState extends State<SearchPage> {
                     filled: true,
                   ),
                   items: _sorts
-                      .map((item) => DropdownMenuItem(
-                            value: item,
-                            child: Text(item, overflow: TextOverflow.ellipsis),
-                          ))
+                      .map(
+                        (item) => DropdownMenuItem(
+                          value: item,
+                          child: Text(item, overflow: TextOverflow.ellipsis),
+                        ),
+                      )
                       .toList(),
                   onChanged: (value) {
                     if (value == null) return;
@@ -364,7 +267,6 @@ class _SearchPageState extends State<SearchPage> {
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
       appBar: AppBar(
         title: TextField(
@@ -379,6 +281,7 @@ class _SearchPageState extends State<SearchPage> {
             fillColor: Theme.of(context).colorScheme.surface,
           ),
           onSubmitted: (_) => _search(),
+          onChanged: (_) => _scheduleSearch(),
         ),
         actions: [
           IconButton(
@@ -395,13 +298,17 @@ class _SearchPageState extends State<SearchPage> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _products.isEmpty
-                    ? const Center(child: Text('No products found'))
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(12),
-                        itemCount: _products.length,
-                        itemBuilder: (context, index) =>
-                            _productRow(_products[index]),
-                      ),
+                ? const Center(child: Text('No products found'))
+                : ListView.builder(
+                    cacheExtent: 720,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 8,
+                    ),
+                    itemCount: _products.length,
+                    itemBuilder: (context, index) =>
+                        _productRow(_products[index]),
+                  ),
           ),
         ],
       ),

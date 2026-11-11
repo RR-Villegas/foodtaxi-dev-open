@@ -6,6 +6,7 @@ import 'services/auth_service.dart';
 import 'services/database_service.dart';
 import 'widgets/adaptive_menu_item.dart';
 import 'widgets/notification_bell.dart';
+import 'widgets/role_sidebar.dart';
 import 'dart:async';
 
 class SellerDashboard extends StatefulWidget {
@@ -3579,6 +3580,17 @@ class _SellerDashboardState extends State<SellerDashboard> {
   @override
   Widget build(BuildContext context) {
     final storeName = _store?['store_name']?.toString() ?? 'Seller Dashboard';
+    final selectedTab = _isLoading
+        ? const Center(child: CircularProgressIndicator())
+        : switch (_currentIndex) {
+            0 => _buildOverviewTab(),
+            1 => _buildProductsTab(),
+            2 => _buildOrdersTab(),
+            3 => _buildSalesTab(),
+            4 => _buildCouponsTab(),
+            5 => _buildReviewsTab(),
+            _ => _buildMarketFlagsTab(),
+          };
 
     return Scaffold(
       appBar: AppBar(
@@ -3624,24 +3636,66 @@ class _SellerDashboardState extends State<SellerDashboard> {
           ),
         ],
       ),
-      body: _isLoading
-    ? const Center(child: CircularProgressIndicator())
-    : _currentIndex == 0
-        ? _buildOverviewTab()
-        : _currentIndex == 1
-            ? _buildProductsTab()
-            : _currentIndex == 2
-                ? _buildOrdersTab()
-                : _currentIndex == 3
-                    ? _buildSalesTab()
-                    : _currentIndex == 4
-                        ? _buildCouponsTab()
-                        : _currentIndex == 5
-                            ? _buildReviewsTab()
-                            : _buildMarketFlagsTab(),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = constraints.maxWidth >= 1000;
+          return Row(
+            children: [
+              if (isWide)
+                RoleSidebar(
+                  selectedIndex: _currentIndex,
+                  onDestinationSelected: (index) {
+                    setState(() => _currentIndex = index);
+                  },
+                  destinations: const [
+                    RoleSidebarDestination(
+                      label: 'Overview',
+                      icon: Icons.dashboard_outlined,
+                      selectedIcon: Icons.dashboard,
+                    ),
+                    RoleSidebarDestination(
+                      label: 'Products',
+                      icon: Icons.inventory_2_outlined,
+                      selectedIcon: Icons.inventory_2,
+                    ),
+                    RoleSidebarDestination(
+                      label: 'Orders',
+                      icon: Icons.receipt_long_outlined,
+                      selectedIcon: Icons.receipt_long,
+                    ),
+                    RoleSidebarDestination(
+                      label: 'Sales',
+                      icon: Icons.bar_chart_outlined,
+                      selectedIcon: Icons.bar_chart,
+                    ),
+                    RoleSidebarDestination(
+                      label: 'Offers',
+                      icon: Icons.local_offer_outlined,
+                      selectedIcon: Icons.local_offer,
+                    ),
+                    RoleSidebarDestination(
+                      label: 'Reviews',
+                      icon: Icons.reviews_outlined,
+                      selectedIcon: Icons.reviews,
+                    ),
+                    RoleSidebarDestination(
+                      label: 'Flags',
+                      icon: Icons.policy_outlined,
+                      selectedIcon: Icons.policy,
+                    ),
+                  ],
+                ),
+              Expanded(child: selectedTab),
+            ],
+          );
+        },
+      ),
       bottomNavigationBar: LayoutBuilder(
         builder: (context, constraints) {
-          final isMobile = MediaQuery.of(context).size.width < 700;
+          final width = MediaQuery.of(context).size.width;
+          final isWide = width >= 1000;
+          final isMobile = width < 700;
+          if (isWide) return const SizedBox.shrink();
 
           if (!isMobile) {
             return NavigationBar(

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/application_data.dart';
 import '../models/user_model.dart';
@@ -12,6 +14,28 @@ class LocalStorageService {
   static const String _userEmailKey = 'user_email';
   static const String _accountTypeKey = 'account_type';
   static const String _lastLoginKey = 'last_login_timestamp';
+
+  static Future<void> removePersistedPasswords() async {
+    final prefs = await SharedPreferences.getInstance();
+    for (final key in [
+      _signupDataKey,
+      _sellerApplicationDataKey,
+      _riderApplicationDataKey,
+    ]) {
+      final storedData = prefs.getString(key);
+      if (storedData == null) continue;
+
+      try {
+        final decoded = jsonDecode(storedData);
+        if (decoded is Map<String, dynamic> &&
+            decoded.remove('password') != null) {
+          await prefs.setString(key, jsonEncode(decoded));
+        }
+      } on FormatException {
+        await prefs.remove(key);
+      }
+    }
+  }
 
   // ============== Signup Data Management ==============
 

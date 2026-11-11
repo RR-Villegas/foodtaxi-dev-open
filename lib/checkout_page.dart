@@ -776,9 +776,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
                     height: 56,
                     child: ElevatedButton(
                       onPressed: _placeOrder,
-                      style: ElevatedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                      ),
                       child: Text(
                         'Place Order - ₱${_total.toStringAsFixed(2)}',
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),

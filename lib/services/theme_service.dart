@@ -34,7 +34,6 @@ class FoodTaxiTheme {
   final Gradient? appBarGradient;
   final Gradient? navBarGradient;
   final Gradient? heroGradient;
-  
 
   const FoodTaxiTheme({
     required this.id,
@@ -98,36 +97,42 @@ class FoodTaxiTheme {
       primary: primary ?? baseScheme.primary,
       onPrimary: onPrimary ?? _contrastColor(primary ?? baseScheme.primary),
       primaryContainer: primaryContainer ?? baseScheme.primaryContainer,
-      onPrimaryContainer: onPrimaryContainer ??
+      onPrimaryContainer:
+          onPrimaryContainer ??
           _contrastColor(primaryContainer ?? baseScheme.primaryContainer),
       secondary: secondary ?? baseScheme.secondary,
       onSecondary:
           onSecondary ?? _contrastColor(secondary ?? baseScheme.secondary),
       secondaryContainer: secondaryContainer ?? baseScheme.secondaryContainer,
-      onSecondaryContainer: onSecondaryContainer ??
+      onSecondaryContainer:
+          onSecondaryContainer ??
           _contrastColor(secondaryContainer ?? baseScheme.secondaryContainer),
       tertiary: tertiary ?? baseScheme.tertiary,
       onTertiary: onTertiary ?? _contrastColor(tertiary ?? baseScheme.tertiary),
       tertiaryContainer: tertiaryContainer ?? baseScheme.tertiaryContainer,
-      onTertiaryContainer: onTertiaryContainer ??
+      onTertiaryContainer:
+          onTertiaryContainer ??
           _contrastColor(tertiaryContainer ?? baseScheme.tertiaryContainer),
       surface: surface ?? scaffold ?? baseScheme.surface,
       onSurface:
-          onSurface ?? _contrastColor(surface ?? scaffold ?? baseScheme.surface),
+          onSurface ??
+          _contrastColor(surface ?? scaffold ?? baseScheme.surface),
       surfaceContainerHighest:
           surfaceVariant ?? baseScheme.surfaceContainerHighest,
-      onSurfaceVariant: onSurfaceVariant ??
-          _mutedContrastColor(surfaceVariant ?? baseScheme.surfaceContainerHighest),
+      onSurfaceVariant:
+          onSurfaceVariant ??
+          _mutedContrastColor(
+            surfaceVariant ?? baseScheme.surfaceContainerHighest,
+          ),
       outline: outline ?? baseScheme.outline,
     );
 
     final background = scaffold ?? scheme.surface;
-    final appBarColor = appBar ?? scheme.primary;
+    final appBarColor = appBar ?? scheme.surface;
     final navigationColor = navBar ?? scheme.surface;
 
-    final selectedNavIconColor = selectedIcon ?? _contrastColor(navigationColor);
-    final unselectedNavIconColor =
-        unselectedIcon ?? _mutedContrastColor(navigationColor);
+    final selectedNavIconColor = selectedIcon ?? scheme.primary;
+    final unselectedNavIconColor = unselectedIcon ?? scheme.onSurfaceVariant;
 
     return ThemeData(
       useMaterial3: true,
@@ -138,27 +143,30 @@ class FoodTaxiTheme {
       appBarTheme: AppBarTheme(
         backgroundColor: appBarColor,
         foregroundColor: _contrastColor(appBarColor),
-        iconTheme: IconThemeData(
+        surfaceTintColor: Colors.transparent,
+        scrolledUnderElevation: 1,
+        shadowColor: scheme.shadow.withAlpha(24),
+        iconTheme: IconThemeData(color: _contrastColor(appBarColor)),
+        actionsIconTheme: IconThemeData(color: _contrastColor(appBarColor)),
+        titleTextStyle: TextStyle(
           color: _contrastColor(appBarColor),
-        ),
-        actionsIconTheme: IconThemeData(
-          color: _contrastColor(appBarColor),
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
         ),
         elevation: 0,
         centerTitle: false,
       ),
 
-      iconTheme: IconThemeData(
-        color: scheme.onSurface,
-      ),
+      iconTheme: IconThemeData(color: scheme.onSurface),
 
       cardTheme: CardThemeData(
-        color: brightness == Brightness.dark
-            ? surface ?? const Color(0xFF252526)
-            : scheme.surface,
+        color: scheme.surface,
+        surfaceTintColor: Colors.transparent,
+        shadowColor: scheme.shadow.withAlpha(20),
         elevation: brightness == Brightness.dark ? 0 : 1,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: scheme.outlineVariant.withAlpha(110)),
         ),
       ),
 
@@ -194,18 +202,17 @@ class FoodTaxiTheme {
       ),
 
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(
-          foregroundColor: scheme.primary,
-        ),
+        style: TextButton.styleFrom(foregroundColor: scheme.primary),
       ),
 
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: scheme.primary,
-          side: BorderSide(color: scheme.primary),
+          side: BorderSide(color: scheme.outline),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(16),
           ),
+          minimumSize: const Size(64, 48),
         ),
       ),
 
@@ -214,8 +221,9 @@ class FoodTaxiTheme {
           backgroundColor: scheme.primary,
           foregroundColor: scheme.onPrimary,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(16),
           ),
+          minimumSize: const Size(64, 48),
         ),
       ),
 
@@ -258,12 +266,10 @@ class FoodTaxiTheme {
           backgroundColor: scheme.primary,
           foregroundColor: scheme.onPrimary,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(16),
           ),
-          padding: const EdgeInsets.symmetric(
-            horizontal: 20,
-            vertical: 14,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          minimumSize: const Size(64, 48),
         ),
       ),
 
@@ -271,26 +277,51 @@ class FoodTaxiTheme {
         filled: true,
         fillColor: brightness == Brightness.dark
             ? scheme.surfaceContainerHighest
-            : Colors.white,
+            : scheme.surface,
         labelStyle: TextStyle(color: scheme.onSurfaceVariant),
         hintStyle: TextStyle(color: scheme.onSurfaceVariant.withAlpha(170)),
         prefixIconColor: scheme.primary,
         suffixIconColor: scheme.primary,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide.none,
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: scheme.outline),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: scheme.outline.withAlpha(70)),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: scheme.outlineVariant),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(
-            color: scheme.primary,
-            width: 2,
-          ),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: scheme.primary, width: 2),
         ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: scheme.error),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: scheme.error, width: 2),
+        ),
+      ),
+
+      dialogTheme: DialogThemeData(
+        backgroundColor: scheme.surface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      ),
+
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: scheme.surface,
+        surfaceTintColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+      ),
+
+      dividerTheme: DividerThemeData(
+        color: scheme.outlineVariant.withAlpha(150),
+        thickness: 1,
+        space: 1,
       ),
     );
   }
@@ -304,12 +335,12 @@ class ThemeService {
     FoodTaxiTheme(
       id: 'default',
       name: 'Default',
-      seed: Color(0xFF2D8F4E),
+      seed: Color(0xFF176B45),
 
-      primary: Color(0xFF2D8F4E),
+      primary: Color(0xFF176B45),
       onPrimary: Color(0xFFFFFFFF),
-      primaryContainer: Color(0xFFD8F3DF),
-      onPrimaryContainer: Color(0xFF073B18),
+      primaryContainer: Color(0xFFDCEFE3),
+      onPrimaryContainer: Color(0xFF123D29),
 
       // sale badge orange
       secondary: Color(0xFFE85D04),
@@ -323,10 +354,16 @@ class ThemeService {
       tertiaryContainer: Color(0xFFD6ECFF),
       onTertiaryContainer: Color(0xFF002B4D),
 
-      appBar: Color(0xFF2D8F4E),
+      scaffold: Color(0xFFF6F8F6),
+      surface: Color(0xFFFFFFFF),
+      surfaceVariant: Color(0xFFEEF3EF),
+      onSurface: Color(0xFF1E2B23),
+      onSurfaceVariant: Color(0xFF5C6B61),
+      outline: Color(0xFFD7E1D9),
+      appBar: Color(0xFFFFFFFF),
       navBar: Color(0xFFFFFFFF),
-      selectedIcon: Color(0xFF2D8F4E),
-      unselectedIcon: Color(0xFF555555),
+      selectedIcon: Color(0xFF176B45),
+      unselectedIcon: Color(0xFF68766D),
     ),
 
     FoodTaxiTheme(
@@ -550,21 +587,13 @@ class ThemeService {
       appBarGradient: LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [
-          Color(0xFF050505),
-          Color(0xFF2B1A2E),
-          Color(0xFF76283C),
-        ],
+        colors: [Color(0xFF050505), Color(0xFF2B1A2E), Color(0xFF76283C)],
       ),
 
       navBarGradient: LinearGradient(
         begin: Alignment.centerLeft,
         end: Alignment.centerRight,
-        colors: [
-          Color(0xFF0B0509),
-          Color(0xFF2B1A2E),
-          Color(0xFF12070D),
-        ],
+        colors: [Color(0xFF0B0509), Color(0xFF2B1A2E), Color(0xFF12070D)],
       ),
 
       heroGradient: LinearGradient(

@@ -3,6 +3,7 @@ import 'services/auth_service.dart';
 import 'services/database_service.dart';
 import 'widgets/adaptive_menu_item.dart';
 import 'widgets/notification_bell.dart';
+import 'widgets/role_sidebar.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -20,7 +21,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
   DateTime _salesAnchorDate = DateTime.now();
   int _currentIndex = 0;
   int _recentOrdersPage = 0;
+  int _auditLogPage = 0;
+  bool _isLoadingAuditLogs = false;
+  bool _auditLogHasNextPage = false;
+  String? _auditLogError;
+  List<Map<String, dynamic>> _auditLogs = [];
   static const int _recentOrdersPerPage = 5;
+  static const int _auditLogsPerPage = 50;
   List<Map<String, dynamic>> _sellerApplications = [];
   List<Map<String, dynamic>> _riderApplications = [];
   List<Map<String, dynamic>> _orders = [];
@@ -173,8 +180,38 @@ class _AdminDashboardState extends State<AdminDashboard> {
       _loadMarketFlags();
     } else if (index == 7) {
       _loadTermsEditor();
+    } else if (index == 8) {
+      _loadAuditLogs();
     } else {
       _loadAdminOrders();
+    }
+  }
+
+  Future<void> _loadAuditLogs({int page = 0}) async {
+    setState(() {
+      _isLoadingAuditLogs = true;
+      _auditLogError = null;
+    });
+
+    try {
+      final events = await DatabaseService.fetchAdminAuditEvents(
+        limit: _auditLogsPerPage + 1,
+        offset: page * _auditLogsPerPage,
+      );
+      if (!mounted) return;
+      setState(() {
+        _auditLogs = events.take(_auditLogsPerPage).toList();
+        _auditLogHasNextPage = events.length > _auditLogsPerPage;
+        _auditLogPage = page;
+        _isLoadingAuditLogs = false;
+      });
+    } catch (error) {
+      debugPrint('Failed to load admin audit logs: $error');
+      if (!mounted) return;
+      setState(() {
+        _isLoadingAuditLogs = false;
+        _auditLogError = 'Unable to load audit logs. Check access and retry.';
+      });
     }
   }
 
@@ -1466,6 +1503,161 @@ class _AdminDashboardState extends State<AdminDashboard> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildAuditLogsTab() {
+    final theme = Theme.of(context);
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'System audit log',
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Metadata-only records of changes to important data.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Refresh logs',
+                onPressed: _isLoadingAuditLogs
+                    ? null
+                    : () => _loadAuditLogs(page: _auditLogPage),
+                icon: const Icon(Icons.refresh),
+              ),
+            ],
+          ),
+        ),
+        if (_auditLogError != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Card(
+              color: theme.colorScheme.errorContainer,
+              child: ListTile(
+                leading: Icon(
+                  Icons.error_outline,
+                  color: theme.colorScheme.onErrorContainer,
+                ),
+                title: Text(
+                  _auditLogError!,
+                  style: TextStyle(color: theme.colorScheme.onErrorContainer),
+                ),
+                trailing: TextButton(
+                  onPressed: () => _loadAuditLogs(page: _auditLogPage),
+                  child: const Text('Retry'),
+                ),
+              ),
+            ),
+          ),
+        Expanded(
+          child: _isLoadingAuditLogs && _auditLogs.isEmpty
+              ? const Center(child: CircularProgressIndicator())
+              : _auditLogs.isEmpty
+              ? const Center(child: Text('No audit events recorded yet.'))
+              : RefreshIndicator(
+                  onRefresh: () => _loadAuditLogs(page: _auditLogPage),
+                  child: ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                    itemCount: _auditLogs.length,
+                    itemBuilder: (context, index) {
+                      final event = _auditLogs[index];
+                      final timestamp = DateTime.tryParse(
+                        event['occurred_at']?.toString() ?? '',
+                      );
+                      final primaryKey =
+                          event['row_primary_key']?.toString() ?? '{}';
+                      final actorId = event['actor_id']?.toString();
+                      final operation =
+                          event['operation']?.toString() ?? 'UNKNOWN';
+                      final isDelete = operation == 'DELETE';
+                      final operationColor = isDelete
+                          ? theme.colorScheme.error
+                          : operation == 'INSERT'
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.tertiary;
+                      final actorLabel = actorId == null
+                          ? 'System'
+                          : '${actorId.substring(0, actorId.length > 12 ? 12 : actorId.length)}…';
+
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: operationColor.withAlpha(24),
+                            child: Icon(
+                              isDelete
+                                  ? Icons.delete_outline
+                                  : operation == 'INSERT'
+                                  ? Icons.add
+                                  : Icons.edit_outlined,
+                              color: operationColor,
+                            ),
+                          ),
+                          title: Text(
+                            '$operation  ${event['table_schema']}.${event['table_name']}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          subtitle: Text(
+                            '${timestamp?.toLocal().toString().split('.').first ?? 'Unknown time'}'
+                            '\nActor: $actorLabel'
+                            '\nKey: $primaryKey',
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          isThreeLine: true,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+        ),
+        if (_auditLogs.isNotEmpty || _auditLogPage > 0)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Page ${_auditLogPage + 1} · ${_auditLogs.length} events',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: _auditLogPage == 0 || _isLoadingAuditLogs
+                      ? null
+                      : () => _loadAuditLogs(page: _auditLogPage - 1),
+                  icon: const Icon(Icons.chevron_left),
+                  label: const Text('Previous'),
+                ),
+                TextButton.icon(
+                  onPressed: !_auditLogHasNextPage || _isLoadingAuditLogs
+                      ? null
+                      : () => _loadAuditLogs(page: _auditLogPage + 1),
+                  icon: const Icon(Icons.chevron_right),
+                  label: const Text('Next'),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 
@@ -3329,15 +3521,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
   @override
   Widget build(BuildContext context) {
     final tabs = [
-    _buildDashboardTab(),
-    _buildSalesReportTab(),
-    _buildSellerApplicationsTab(),
-    _buildRiderApplicationsTab(),
-    _buildCouponsTab(),
-    _buildReportsTab(),
-    _buildMarketFlagsTab(),
-    _buildTermsAdminTab(),
-  ];
+      _buildDashboardTab(),
+      _buildSalesReportTab(),
+      _buildSellerApplicationsTab(),
+      _buildRiderApplicationsTab(),
+      _buildCouponsTab(),
+      _buildReportsTab(),
+      _buildMarketFlagsTab(),
+      _buildTermsAdminTab(),
+      _buildAuditLogsTab(),
+    ];
 
     return Scaffold(
       appBar: AppBar(
@@ -3347,7 +3540,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         actions: [
           const NotificationBell(),
           IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
+            icon: const Icon(Icons.refresh),
             onPressed: () {
               if (_currentIndex == 2) {
                 _loadSellerApplications();
@@ -3361,13 +3554,15 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 _loadMarketFlags();
               } else if (_currentIndex == 7) {
                 _loadTermsEditor();
+              } else if (_currentIndex == 8) {
+                _loadAuditLogs(page: _auditLogPage);
               } else {
                 _loadAdminOrders();
               }
             },
           ),
           PopupMenuButton<String>(
-            icon: const Icon(Icons.menu, color: Colors.white),
+            icon: const Icon(Icons.menu),
             onSelected: _handleMenu,
             itemBuilder: (context) => [
               PopupMenuItem(
@@ -3392,10 +3587,74 @@ class _AdminDashboardState extends State<AdminDashboard> {
           ),
         ],
       ),
-      body: tabs[_currentIndex],
-        bottomNavigationBar: LayoutBuilder(
+      body: LayoutBuilder(
         builder: (context, constraints) {
-          final isMobile = MediaQuery.of(context).size.width < 700;
+          final isWide = constraints.maxWidth >= 1000;
+          return Row(
+            children: [
+              if (isWide)
+                RoleSidebar(
+                  selectedIndex: _currentIndex,
+                  onDestinationSelected: _setAdminTab,
+                  destinations: const [
+                    RoleSidebarDestination(
+                      label: 'Dashboard',
+                      icon: Icons.dashboard_outlined,
+                      selectedIcon: Icons.dashboard,
+                    ),
+                    RoleSidebarDestination(
+                      label: 'Sales',
+                      icon: Icons.analytics_outlined,
+                      selectedIcon: Icons.analytics,
+                    ),
+                    RoleSidebarDestination(
+                      label: 'Sellers',
+                      icon: Icons.people_outline,
+                      selectedIcon: Icons.people,
+                    ),
+                    RoleSidebarDestination(
+                      label: 'Riders',
+                      icon: Icons.delivery_dining_outlined,
+                      selectedIcon: Icons.delivery_dining,
+                    ),
+                    RoleSidebarDestination(
+                      label: 'Coupons',
+                      icon: Icons.local_offer_outlined,
+                      selectedIcon: Icons.local_offer,
+                    ),
+                    RoleSidebarDestination(
+                      label: 'Reports',
+                      icon: Icons.report_outlined,
+                      selectedIcon: Icons.report,
+                    ),
+                    RoleSidebarDestination(
+                      label: 'Flags',
+                      icon: Icons.policy_outlined,
+                      selectedIcon: Icons.policy,
+                    ),
+                    RoleSidebarDestination(
+                      label: 'Terms',
+                      icon: Icons.description_outlined,
+                      selectedIcon: Icons.description,
+                    ),
+                    RoleSidebarDestination(
+                      label: 'System logs',
+                      icon: Icons.receipt_long_outlined,
+                      selectedIcon: Icons.receipt_long,
+                    ),
+                  ],
+                ),
+              Expanded(child: tabs[_currentIndex]),
+            ],
+          );
+        },
+      ),
+      bottomNavigationBar: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = MediaQuery.of(context).size.width;
+          final isWide = width >= 1000;
+          final isMobile = width < 700;
+          if (isWide) return const SizedBox.shrink();
 
           if (!isMobile) {
             return NavigationBar(
@@ -3417,6 +3676,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   icon: Icon(Icons.description_outlined),
                   selectedIcon: Icon(Icons.description),
                   label: 'Terms',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.receipt_long_outlined),
+                  selectedIcon: Icon(Icons.receipt_long),
+                  label: 'Logs',
                 ),
               ],
             );
@@ -3447,6 +3711,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     Icons.description_outlined,
                     Icons.description,
                     'Terms',
+                  ),
+                  _adminNavItem(
+                    8,
+                    Icons.receipt_long_outlined,
+                    Icons.receipt_long,
+                    'Logs',
                   ),
                 ],
               ),

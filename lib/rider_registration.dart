@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
@@ -11,6 +12,7 @@ import 'services/location_service.dart';
 import 'services/local_storage_service.dart';
 import 'utils/password_validator.dart';
 import 'package:dropdown_search/dropdown_search.dart';
+import 'widgets/house_number_input.dart';
 
 class RiderRegistrationPage extends StatefulWidget {
   const RiderRegistrationPage({super.key});
@@ -38,6 +40,7 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
   final _plateController = TextEditingController();
   final _streetController = TextEditingController();
   final _houseNumberController = TextEditingController();
+  final _houseNumberSuffixController = TextEditingController();
   final _zipCodeController = TextEditingController();
   final List<PickedDocument> _riderDocuments = [];
   List<Map<String, dynamic>> _provinces = [];
@@ -55,6 +58,11 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
   bool _acceptedTerms = false;
   PasswordStrength _passwordStrength = PasswordStrength.weak;
   String? _passwordCharError;
+
+  String get _houseNumber => HouseNumberInput.combine(
+    _houseNumberController.text,
+    _houseNumberSuffixController.text,
+  );
 
   @override
   void initState() {
@@ -89,6 +97,7 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
     _plateController.dispose();
     _streetController.dispose();
     _houseNumberController.dispose();
+    _houseNumberSuffixController.dispose();
     _zipCodeController.dispose();
     super.dispose();
   }
@@ -260,6 +269,13 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
 
   bool _validateStep3() {
     setState(() => _step3Error = null);
+    if (HouseNumberInput.hasSuffixWithoutNumber(
+      _houseNumberController.text,
+      _houseNumberSuffixController.text,
+    )) {
+      setState(() => _step3Error = 'Enter a house number before its suffix');
+      return false;
+    }
     final street = _streetController.text.trim();
     if (_selectedProvinceName == null) {
       setState(() => _step3Error = 'Province is required');
@@ -281,7 +297,7 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
       setState(() => _step3Error = 'Street contains invalid characters');
       return false;
     }
-    final houseNumber = _houseNumberController.text.trim();
+    final houseNumber = _houseNumber;
     if (houseNumber.isNotEmpty &&
         InputValidator.containsSQLInjectionPatterns(houseNumber)) {
       setState(() => _step3Error = 'House number contains invalid characters');
@@ -442,7 +458,7 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
       final currentUser = _supabase.auth.currentUser;
       final submittedWhileLoggedIn = currentUser != null;
       final point = await LocationService.geocodeAddress(
-        houseNumber: _houseNumberController.text,
+        houseNumber: _houseNumber,
         street: _streetController.text,
         barangay: _selectedBarangayName,
         city: _selectedCityName,
@@ -469,7 +485,7 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
         city: _selectedCityName,
         barangay: _selectedBarangayName,
         street: _streetController.text.trim(),
-        houseNumber: _houseNumberController.text.trim(),
+        houseNumber: _houseNumber,
         zipCode: resolvedZipCode.isNotEmpty ? resolvedZipCode : null,
         documents: submittedWhileLoggedIn ? const [] : _pendingRiderDocuments(),
       );
@@ -805,6 +821,7 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
           'Phone Number *',
           Icons.phone,
           keyboardType: TextInputType.phone,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           prefixText: '+63 ',
           hintText: '9123456789',
         ),
@@ -1023,7 +1040,19 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
                   ),
         const SizedBox(height: 16),
         _field(_streetController, 'Street *', Icons.location_on_outlined),
-        _field(_houseNumberController, 'House Number', Icons.home),
+        HouseNumberInput(
+          numberController: _houseNumberController,
+          suffixController: _houseNumberSuffixController,
+          numberDecoration: const InputDecoration(
+            labelText: 'House Number',
+            hintText: 'Number',
+            prefixIcon: Icon(Icons.home),
+          ),
+          suffixDecoration: const InputDecoration(
+            labelText: 'Suffix',
+            hintText: 'Optional',
+          ),
+        ),
         _field(
           _zipCodeController,
           'Zip Code',
@@ -1044,12 +1073,14 @@ class _RiderRegistrationPageState extends State<RiderRegistrationPage> {
     String? prefixText,
     String? hintText,
     bool readOnly = false,
+    List<TextInputFormatter>? inputFormatters,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
         obscureText: obscureText,
         readOnly: readOnly,
         decoration: _decoration(label, icon).copyWith(

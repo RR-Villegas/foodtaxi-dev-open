@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
@@ -11,6 +12,7 @@ import 'services/location_service.dart';
 import 'services/input_validator.dart';
 import 'utils/password_validator.dart';
 import 'package:dropdown_search/dropdown_search.dart';
+import 'widgets/house_number_input.dart';
 
 class SellerRegistrationPage extends StatefulWidget {
   const SellerRegistrationPage({super.key});
@@ -48,7 +50,13 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
   // Step 3: Location
   final _streetController = TextEditingController();
   final _houseNumberController = TextEditingController();
+  final _houseNumberSuffixController = TextEditingController();
   final _zipCodeController = TextEditingController();
+
+  String get _houseNumber => HouseNumberInput.combine(
+    _houseNumberController.text,
+    _houseNumberSuffixController.text,
+  );
 
   // Location data
   List<Map<String, dynamic>> _provinces = [];
@@ -97,6 +105,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
     _contactPhoneController.dispose();
     _streetController.dispose();
     _houseNumberController.dispose();
+    _houseNumberSuffixController.dispose();
     _zipCodeController.dispose();
     super.dispose();
   }
@@ -447,6 +456,14 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
   bool _validateStep3() {
     setState(() => _step3Error = null);
 
+    if (HouseNumberInput.hasSuffixWithoutNumber(
+      _houseNumberController.text,
+      _houseNumberSuffixController.text,
+    )) {
+      setState(() => _step3Error = 'Enter a house number before its suffix');
+      return false;
+    }
+
     final street = _streetController.text.trim();
 
     if (_selectedProvinceName == null) {
@@ -476,7 +493,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
     }
 
     // Optional fields - validate if provided
-    final houseNumber = _houseNumberController.text.trim();
+    final houseNumber = _houseNumber;
     if (houseNumber.isNotEmpty &&
         InputValidator.containsSQLInjectionPatterns(houseNumber)) {
       setState(() => _step3Error = 'House number contains invalid characters');
@@ -554,7 +571,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
       final currentUser = _supabase.auth.currentUser;
       final submittedWhileLoggedIn = currentUser != null;
       final point = await LocationService.geocodeAddress(
-        houseNumber: _houseNumberController.text,
+        houseNumber: _houseNumber,
         street: _streetController.text,
         barangay: _selectedBarangayName,
         city: _selectedCityName,
@@ -581,9 +598,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
         street: _streetController.text.isNotEmpty
             ? _streetController.text.trim()
             : null,
-        houseNumber: _houseNumberController.text.isNotEmpty
-            ? _houseNumberController.text.trim()
-            : null,
+        houseNumber: _houseNumber.isNotEmpty ? _houseNumber : null,
         zipCode: resolvedZipCode.isNotEmpty
             ? resolvedZipCode
             : null,
@@ -1184,6 +1199,7 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
             ),
           ),
           keyboardType: TextInputType.phone,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         ),
         const SizedBox(height: 16),
         _documentUploadSection(
@@ -1389,11 +1405,18 @@ class _SellerRegistrationPageState extends State<SellerRegistrationPage> {
         // =========================
         // HOUSE NUMBER
         // =========================
-        TextField(
-          controller: _houseNumberController,
-          decoration: InputDecoration(
+        HouseNumberInput(
+          numberController: _houseNumberController,
+          suffixController: _houseNumberSuffixController,
+          numberDecoration: InputDecoration(
             labelText: 'House Number',
+            hintText: 'Number',
             prefixIcon: const Icon(Icons.home),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+          suffixDecoration: InputDecoration(
+            labelText: 'Suffix',
+            hintText: 'Optional',
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           ),
         ),

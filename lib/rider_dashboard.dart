@@ -6,6 +6,7 @@ import 'services/auth_service.dart';
 import 'services/database_service.dart';
 import 'widgets/adaptive_menu_item.dart';
 import 'widgets/notification_bell.dart';
+import 'widgets/role_sidebar.dart';
 
 class RiderDashboard extends StatefulWidget {
   const RiderDashboard({super.key});
@@ -959,6 +960,13 @@ class _RiderDashboardState extends State<RiderDashboard> {
 
   @override
   Widget build(BuildContext context) {
+    final selectedTab = _isLoading
+        ? const Center(child: CircularProgressIndicator())
+        : switch (_currentIndex) {
+            0 => _buildOverviewTab(),
+            1 => _buildDeliveriesTab(),
+            _ => _buildHistoryTab(),
+          };
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
@@ -1003,35 +1011,69 @@ class _RiderDashboardState extends State<RiderDashboard> {
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _currentIndex == 0
-              ? _buildOverviewTab()
-              : _currentIndex == 1
-                  ? _buildDeliveriesTab()
-                  : _buildHistoryTab(),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (index) {
-          setState(() => _currentIndex = index);
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = constraints.maxWidth >= 1000;
+          return Row(
+            children: [
+              if (isWide)
+                RoleSidebar(
+                  selectedIndex: _currentIndex,
+                  onDestinationSelected: (index) {
+                    setState(() => _currentIndex = index);
+                  },
+                  destinations: const [
+                    RoleSidebarDestination(
+                      label: 'Overview',
+                      icon: Icons.dashboard_outlined,
+                      selectedIcon: Icons.dashboard,
+                    ),
+                    RoleSidebarDestination(
+                      label: 'Deliveries',
+                      icon: Icons.local_shipping_outlined,
+                      selectedIcon: Icons.delivery_dining,
+                    ),
+                    RoleSidebarDestination(
+                      label: 'History',
+                      icon: Icons.history_outlined,
+                      selectedIcon: Icons.history,
+                    ),
+                  ],
+                ),
+              Expanded(child: selectedTab),
+            ],
+          );
         },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard),
-            label: 'Overview',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.local_shipping_outlined),
-            selectedIcon: Icon(Icons.delivery_dining),
-            label: 'Deliveries',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.history_outlined),
-            selectedIcon: Icon(Icons.history),
-            label: 'History',
-          ),
-        ],
+      ),
+      bottomNavigationBar: LayoutBuilder(
+        builder: (context, constraints) {
+          if (MediaQuery.of(context).size.width >= 1000) {
+            return const SizedBox.shrink();
+          }
+          return NavigationBar(
+            selectedIndex: _currentIndex,
+            onDestinationSelected: (index) {
+              setState(() => _currentIndex = index);
+            },
+            destinations: const [
+              NavigationDestination(
+                icon: Icon(Icons.dashboard_outlined),
+                selectedIcon: Icon(Icons.dashboard),
+                label: 'Overview',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.local_shipping_outlined),
+                selectedIcon: Icon(Icons.delivery_dining),
+                label: 'Deliveries',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.history_outlined),
+                selectedIcon: Icon(Icons.history),
+                label: 'History',
+              ),
+            ],
+          );
+        },
       ),
     );
   }

@@ -43,7 +43,6 @@ class UserSignupData {
   Map<String, dynamic> toJson() {
     return {
       'email': email,
-      'password': password,
       'firstName': firstName,
       'surname': surname,
       'phoneNumber': phoneNumber,
@@ -62,7 +61,6 @@ class UserSignupData {
   factory UserSignupData.fromJson(Map<String, dynamic> json) {
     return UserSignupData(
       email: json['email'],
-      password: json['password'],
       firstName: json['firstName'],
       surname: json['surname'],
       phoneNumber: json['phoneNumber'],

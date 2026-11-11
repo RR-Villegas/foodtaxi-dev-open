@@ -5,6 +5,7 @@ import 'models/address_model.dart';
 import 'services/database_service.dart';
 import 'services/input_validator.dart';
 import 'services/location_service.dart';
+import 'widgets/house_number_input.dart';
 
 class AddressPage extends StatefulWidget {
   const AddressPage({super.key});
@@ -60,7 +61,13 @@ class _AddressPageState extends State<AddressPage> {
 
   Future<void> _openAddressForm([Address? address]) async {
     final streetController = TextEditingController(text: address?.street ?? '');
-    final houseController = TextEditingController(text: address?.houseNumber ?? '');
+    final initialHouseNumber = HouseNumberInput.split(address?.houseNumber);
+    final houseController = TextEditingController(
+      text: initialHouseNumber.number,
+    );
+    final houseSuffixController = TextEditingController(
+      text: initialHouseNumber.suffix,
+    );
     final zipController = TextEditingController(text: address?.zipCode ?? '');
     var provinces = await LocationService.fetchProvinces();
     var cities = <Map<String, dynamic>>[];
@@ -154,9 +161,17 @@ class _AddressPageState extends State<AddressPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(
-                  controller: houseController,
-                  decoration: const InputDecoration(labelText: 'House Number'),
+                HouseNumberInput(
+                  numberController: houseController,
+                  suffixController: houseSuffixController,
+                  numberDecoration: const InputDecoration(
+                    labelText: 'House Number',
+                    hintText: 'Number',
+                  ),
+                  suffixDecoration: const InputDecoration(
+                    labelText: 'Suffix',
+                    hintText: 'Optional',
+                  ),
                 ),
                 TextField(
                   controller: streetController,
@@ -264,7 +279,23 @@ class _AddressPageState extends State<AddressPage> {
                 }
 
                 String? savedAddressId = address?.addressId;
-                final houseNumber = _cleanAddressText(houseController.text);
+                if (HouseNumberInput.hasSuffixWithoutNumber(
+                  houseController.text,
+                  houseSuffixController.text,
+                )) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Enter a house number before its suffix'),
+                    ),
+                  );
+                  return;
+                }
+                final houseNumber = _cleanAddressText(
+                  HouseNumberInput.combine(
+                    houseController.text,
+                    houseSuffixController.text,
+                  ),
+                );
                 final street = _cleanAddressText(streetController.text);
                 final manualZipCode = zipController.text.trim();
                 final point = await LocationService.geocodeAddress(
@@ -335,6 +366,7 @@ class _AddressPageState extends State<AddressPage> {
 
     streetController.dispose();
     houseController.dispose();
+    houseSuffixController.dispose();
     zipController.dispose();
   }
 

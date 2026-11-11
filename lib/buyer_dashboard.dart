@@ -6,6 +6,7 @@ import 'cart_model.dart';
 import 'widgets/adaptive_menu_item.dart';
 import 'services/theme_service.dart';
 import 'widgets/notification_bell.dart';
+import 'widgets/product_card.dart';
 
 class BuyerDashboard extends StatefulWidget {
   const BuyerDashboard({super.key});
@@ -29,7 +30,7 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
   bool _hasError = false;
   bool _isLoggingOut = false;
 
-@override
+  @override
   void dispose() {
     _productsChannel?.unsubscribe();
     _navSearchFocusNode.dispose();
@@ -57,7 +58,7 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
     'Specialty Foods & International Cuisine': '🌍 Specialty',
   };
 
-@override
+  @override
   void initState() {
     super.initState();
     _fetchProfile();
@@ -129,7 +130,9 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
       if (accountId != null) {
         final response = await _supabase
             .from('account')
-            .select('firstname, surname, email, phone_number, profile_image_url')
+            .select(
+              'firstname, surname, email, phone_number, profile_image_url',
+            )
             .eq('account_id', accountId)
             .maybeSingle();
         if (response != null) {
@@ -187,9 +190,10 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
       }
       for (var product in _products) {
         final category = product['category']?.toString().trim();
-        final displayName = categoryNames[
-              category == null || category.isEmpty ? 'Other' : category
-            ] ??
+        final displayName =
+            categoryNames[category == null || category.isEmpty
+                ? 'Other'
+                : category] ??
             '📦 Other';
 
         if (!grouped.containsKey(displayName)) {
@@ -219,127 +223,9 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
         alignment: Alignment.centerLeft,
         child: Text(
           title,
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
         ),
       ),
-    );
-  }
-
-  double _rating(Map<String, dynamic> product) {
-    final value = product['average_rating'];
-    if (value is num) return value.toDouble();
-    return double.tryParse(value?.toString() ?? '') ?? 0;
-  }
-
-  int _reviewCount(Map<String, dynamic> product) {
-    final value = product['review_count'];
-    if (value is int) return value;
-    return int.tryParse(value?.toString() ?? '') ?? 0;
-  }
-
-  Widget _productImage(dynamic imageValue) {
-    final path = imageValue?.toString().trim() ?? '';
-
-    if (path.isEmpty) {
-      return Image.asset(
-        'assets/images/burger.jpg',
-        fit: BoxFit.cover,
-      );
-    }
-
-    return Image.network(
-      DatabaseService.getProductImageUrl(path),
-      fit: BoxFit.cover,
-      errorBuilder: (context, error, stackTrace) => Image.asset(
-        'assets/images/burger.jpg',
-        fit: BoxFit.cover,
-      ),
-    );
-  }
-
-  Widget _stars(double rating) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(5, (index) {
-        final filled = rating >= index + 1;
-        final half = !filled && rating > index && rating < index + 1;
-        return Icon(
-          filled
-              ? Icons.star
-              : half
-                  ? Icons.star_half
-                  : Icons.star_border,
-          size: 14,
-          color: Colors.amber,
-        );
-      }),
-    );
-  }
-
-  double _productBasePrice(Map<String, dynamic> product) {
-    final value = product['price'];
-    if (value is num) return value.toDouble();
-    return double.tryParse(value?.toString() ?? '') ?? 0;
-  }
-
-  String _discountLabel(Map<String, dynamic> discount) {
-    final type = discount['discount_type']?.toString();
-
-    if (type == 'amount') {
-      return '-${DatabaseService.money(discount['discount_value'])}';
-    }
-
-    return '-${discount['discount_value']}%';
-  }
-
-  Widget _discountAwarePrice(Map<String, dynamic> product) {
-    final scheme = Theme.of(context).colorScheme;
-    final discount = DatabaseService.activeProductDiscount(product);
-    final basePrice = _productBasePrice(product);
-    final discountedPrice = DatabaseService.discountedPrice(basePrice, discount);
-
-    if (discount == null || discountedPrice >= basePrice) {
-      return Text(
-        DatabaseService.displayProductPrice(product),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          color: scheme.primary,
-          fontWeight: FontWeight.bold,
-        ),
-      );
-    }
-
-    return Row(
-      children: [
-        Flexible(
-          child: Text(
-            DatabaseService.money(discountedPrice),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: scheme.tertiary,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-        const SizedBox(width: 5),
-        Flexible(
-          child: Text(
-            _discountLabel(discount),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: scheme.secondary,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-      ],
     );
   }
 
@@ -353,91 +239,27 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
         itemBuilder: (context, index) {
           final item = items[index];
           final productId = item['product_id']?.toString();
-          final rating = _rating(item);
-          final reviewCount = _reviewCount(item);
 
-          return GestureDetector(
-            onTap: productId != null
-                ? () async {
-                    await DatabaseService.trackProductClick(
-                      productId: productId,
-                      storeId: item['store_id']?.toString(),
-                    );
-                    if (!context.mounted) return;
-                    Navigator.pushNamed(context, '/product/$productId');
-                  }
-                : null,
-            child: Container(
-              width: 170,
-              margin: const EdgeInsets.only(right: 12, bottom: 12),
-              child: Card(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                elevation: 3,
-                child: Column(
-                  children: [
-                    AspectRatio(
-                      aspectRatio: 1,
-                      child: ClipRRect(
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(16),
-                        ),
-                        child: _productImage(item['main_image_url']),
-                      ),
-                    ),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.all(6),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                            DatabaseService.displayProductName(item['name']),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                            const SizedBox(height: 2),
-                            _discountAwarePrice(item),
-                            const SizedBox(height: 2),
-                            Row(
-                            children: [
-                              _stars(rating),
-                              const SizedBox(width: 4),
-                              Text(
-                                '($reviewCount)',
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                            ],
-                          ),
-                            const Spacer(),
-                            SizedBox(
-                            width: double.infinity,
-                            height: 34,
-                            child: FilledButton(
-                              onPressed: productId != null
-                                  ? () async {
-                                      await DatabaseService.trackProductClick(
-                                        productId: productId,
-                                        storeId: item['store_id']?.toString(),
-                                      );
-                                      if (!context.mounted) return;
-                                      Navigator.pushNamed(
-                                        context,
-                                        '/product/$productId',
-                                      );
-                                    }
-                                  : null,
-                              child: const Text('Buy'),
-                            ),
-                          ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+          Future<void> openProduct() async {
+            if (productId == null) return;
+            await DatabaseService.trackProductClick(
+              productId: productId,
+              storeId: item['store_id']?.toString(),
+            );
+            if (!context.mounted) return;
+            Navigator.pushNamed(context, '/product/$productId');
+          }
+
+          return Padding(
+            padding: const EdgeInsets.only(right: 12, bottom: 12),
+            child: SizedBox(
+              width: 174,
+              height: 294,
+              child: ProductCard(
+                product: item,
+                onTap: productId == null ? null : openProduct,
+                onAction: productId == null ? null : openProduct,
+                actionLabel: 'Buy',
               ),
             ),
           );
@@ -456,7 +278,7 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
       },
     );
   }
-  
+
   Widget _centerSearchBar({
     required TextEditingController controller,
     String hintText = 'Search products',
@@ -535,15 +357,15 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
           );
 
     final titleColor = Colors.white;
-    final subtitleColor = isFlandre ? const Color(0xFFFFD9E2) : Colors.white.withAlpha(230);
-    final bodyColor = isFlandre ? const Color(0xFFFFEAF0) : Colors.white.withAlpha(215);
+    final subtitleColor = isFlandre
+        ? const Color(0xFFFFD9E2)
+        : Colors.white.withAlpha(230);
+    final bodyColor = isFlandre
+        ? const Color(0xFFFFEAF0)
+        : Colors.white.withAlpha(215);
 
     final textShadow = const [
-      Shadow(
-        blurRadius: 8,
-        color: Colors.black,
-        offset: Offset(0, 2),
-      ),
+      Shadow(blurRadius: 8, color: Colors.black, offset: Offset(0, 2)),
     ];
 
     return Container(
@@ -555,10 +377,7 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
           Positioned.fill(
             child: Opacity(
               opacity: isFlandre ? 0.18 : (isDark ? 0.12 : 0.07),
-              child: Image.asset(
-                'assets/images/tacos.jpg',
-                fit: BoxFit.cover,
-              ),
+              child: Image.asset('assets/images/tacos.jpg', fit: BoxFit.cover),
             ),
           ),
 
@@ -615,17 +434,14 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-  appBar: AppBar(
+      appBar: AppBar(
         automaticallyImplyLeading: false,
         titleSpacing: 12,
         title: Row(
           children: [
             if (!_navSearchFocusNode.hasFocus) ...[
               const Flexible(
-                child: Text(
-                  'FoodTaxi Omega',
-                  overflow: TextOverflow.ellipsis,
-                ),
+                child: Text('FoodTaxi Omega', overflow: TextOverflow.ellipsis),
               ),
               const SizedBox(width: 16),
             ],
@@ -644,10 +460,7 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
             child: ValueListenableBuilder<int>(
               valueListenable: CartModel.itemCountNotifier,
               builder: (context, count, child) {
-                return Badge(
-                  label: Text('$count'),
-                  child: child,
-                );
+                return Badge(label: Text('$count'), child: child);
               },
               child: IconButton(
                 icon: const Icon(Icons.shopping_cart),
@@ -680,47 +493,57 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
               PopupMenuItem<String>(
                 enabled: false,
                 child: _userProfile != null
-                  ? SizedBox(
-                      width: 220,
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            backgroundImage:
-                                (_userProfile!['profile_image_url']?.toString() ?? '').isNotEmpty
-                                    ? NetworkImage(
-                                        DatabaseService.getProfileImageUrl(
-                                          _userProfile!['profile_image_url'].toString(),
-                                        ),
-                                      )
-                                    : null,
-                            child: (_userProfile!['profile_image_url']?.toString() ?? '').isEmpty
-                                ? const Icon(Icons.person)
-                                : null,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${_userProfile!['firstname'] ?? ''} ${_userProfile!['surname'] ?? ''}',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                                Text(
-                                  _userProfile!['email'] ?? '',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              ],
+                    ? SizedBox(
+                        width: 220,
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              backgroundImage:
+                                  (_userProfile!['profile_image_url']
+                                              ?.toString() ??
+                                          '')
+                                      .isNotEmpty
+                                  ? NetworkImage(
+                                      DatabaseService.getProfileImageUrl(
+                                        _userProfile!['profile_image_url']
+                                            .toString(),
+                                      ),
+                                    )
+                                  : null,
+                              child:
+                                  (_userProfile!['profile_image_url']
+                                              ?.toString() ??
+                                          '')
+                                      .isEmpty
+                                  ? const Icon(Icons.person)
+                                  : null,
                             ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : const Text('Profile'),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${_userProfile!['firstname'] ?? ''} ${_userProfile!['surname'] ?? ''}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  Text(
+                                    _userProfile!['email'] ?? '',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : const Text('Profile'),
               ),
               const PopupMenuDivider(),
               const PopupMenuItem<String>(
@@ -729,15 +552,24 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
               ),
               const PopupMenuItem<String>(
                 value: 'orders',
-                child: AdaptiveMenuItem(icon: Icons.receipt, title: 'My Orders'),
+                child: AdaptiveMenuItem(
+                  icon: Icons.receipt,
+                  title: 'My Orders',
+                ),
               ),
               const PopupMenuItem<String>(
                 value: 'location',
-                child: AdaptiveMenuItem(icon: Icons.location_on, title: 'My Location'),
+                child: AdaptiveMenuItem(
+                  icon: Icons.location_on,
+                  title: 'My Location',
+                ),
               ),
               const PopupMenuItem<String>(
                 value: 'settings',
-                child: AdaptiveMenuItem(icon: Icons.settings, title: 'Settings'),
+                child: AdaptiveMenuItem(
+                  icon: Icons.settings,
+                  title: 'Settings',
+                ),
               ),
               const PopupMenuDivider(),
               const PopupMenuItem<String>(
@@ -752,25 +584,25 @@ class _BuyerDashboardState extends State<BuyerDashboard> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _hasError
-              ? const Center(child: Text("Error loading products"))
-              : SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      heroSection(),
+          ? const Center(child: Text("Error loading products"))
+          : SingleChildScrollView(
+              child: Column(
+                children: [
+                  heroSection(),
 
-                      ..._groupedProducts.entries.map((entry) {
-                        return Column(
-                          children: [
-                            sectionTitle(entry.key),
-                            horizontalList(entry.value),
-                          ],
-                        );
-                      }),
+                  ..._groupedProducts.entries.map((entry) {
+                    return Column(
+                      children: [
+                        sectionTitle(entry.key),
+                        horizontalList(entry.value),
+                      ],
+                    );
+                  }),
 
-                      const SizedBox(height: 20),
-                    ],
-                  ),
-                ),
+                  const SizedBox(height: 20),
+                ],
+              ),
+            ),
 
       floatingActionButton: FloatingActionButton(
         onPressed: () => Navigator.pushNamed(context, '/cart'),
